@@ -7,6 +7,7 @@ Copy-paste shell snippets for the upload flow. Tested 2026-05-01 on the builder-
 The `.docx` MUST be in `~` (or the cwd you're running `gws` from). `gws` rejects paths outside cwd.
 
 ```bash
+set -o pipefail
 cd ~ && gws drive files create \
   --json '{"name":"YOUR DOC TITLE","mimeType":"application/vnd.google-apps.document"}' \
   --upload your_doc_name.docx \
@@ -27,13 +28,26 @@ Output looks like:
 
 The file URL is `https://docs.google.com/document/d/<id>/edit`.
 
-## Why `| tail -10`?
+## Why `| tail -10`? And why `set -o pipefail` is mandatory with it
 
 `gws` writes a `Using keyring backend: keyring` line to stderr that gets interleaved with stdout. Parsing the full output as JSON fails. `tail -10` skips past the keyring line cleanly. Alternative: `grep -v "keyring backend"`.
+
+**The filter costs you the exit status.** A shell pipeline's exit code is its *last* command's, so `gws … | tail -10` reports `tail`'s status — 0 — even when `gws` failed with a 403 or 404. Without `set -o pipefail` the upload looks like it worked, and a script keyed on `$?` proceeds as if the Doc exists.
+
+`gws` also signals failure a **second** way that no amount of `pipefail` catches: it prints a JSON error body to **stdout**. A bad `fileId` gives exit 1 *and* this on stdout:
+
+```json
+{ "error": { "code": 404, "message": "Requested entity was not found.", "reason": "unknown" } }
+```
+
+That parses as valid JSON. Any caller that reads stdout without checking the exit code — or that checks the exit code but not for an `error` key — gets the error object handed back as if it were a result.
+
+**So: `set -o pipefail` before every piped `gws` call, check for an `error` key even on exit 0, and for writes verify by re-reading the resource.** Exit codes are weak evidence that a write landed.
 
 ## Trash an old draft (when iterating)
 
 ```bash
+set -o pipefail
 gws drive files update \
   --params '{"fileId":"<old_draft_id>"}' \
   --json '{"trashed":true}' 2>&1 | tail -5
@@ -41,9 +55,12 @@ gws drive files update \
 
 This moves the file to Drive's trash (recoverable for 30 days). Don't use a hard-delete API call — soft-trash is the safer default.
 
+⚠️ **`2>&1 | tail` is doubly deceptive here.** It merges the error text into the stream *and* hands you `tail`'s exit code, so a failed trash prints something that looks like output and exits 0. You then tell the user you cleaned up drafts that are still sitting in their Drive. With `pipefail` the failure surfaces; either way, confirm with `gws drive files get --params '{"fileId":"<old_draft_id>","fields":"trashed"}'` before claiming the cleanup happened.
+
 ## Verify the doc owner / link
 
 ```bash
+set -o pipefail
 gws drive files get \
   --params '{"fileId":"<id>","fields":"id,name,owners,webViewLink"}' \
   --format json 2>&1 | tail -20

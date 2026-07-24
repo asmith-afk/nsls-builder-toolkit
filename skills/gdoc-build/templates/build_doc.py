@@ -3,11 +3,13 @@
 Usage:
     1. cp this file to ~/build_<short-name>.py and customize the BODY section.
     2. PYTHONPATH=/tmp/pptx_deps python3.12 ~/build_<short-name>.py
-    3. cd ~ && gws drive files create \\
+    3. set -o pipefail; cd ~ && gws drive files create \\
          --json '{"name":"<doc title>","mimeType":"application/vnd.google-apps.document"}' \\
          --upload <short-name>.docx \\
          --upload-content-type "application/vnd.openxmlformats-officedocument.wordprocessingml.document" \\
          --format json | tail -10
+       (`set -o pipefail` is required: `| tail` otherwise makes the pipeline exit 0
+        even when the upload failed, so a 403 reads as a successful upload.)
     4. Open the returned URL.
     5. rm ~/build_<short-name>.py ~/<short-name>.docx
 
@@ -237,4 +239,6 @@ add_code(doc, "git checkout main && git pull origin main")
 output_path = '/Users/k/your_doc_name.docx'   # MUST be in ~ for gws --upload
 doc.save(output_path)
 print(f"Saved {output_path}")
-print("Next: cd ~ && gws drive files create --json '{\"name\":\"...\",\"mimeType\":\"application/vnd.google-apps.document\"}' --upload your_doc_name.docx --upload-content-type 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' --format json | tail -10")
+# `set -o pipefail` is load-bearing: `| tail` makes the pipeline's exit status
+# tail's (0), so without it a failed upload reports success.
+print("Next: set -o pipefail; cd ~ && gws drive files create --json '{\"name\":\"...\",\"mimeType\":\"application/vnd.google-apps.document\"}' --upload your_doc_name.docx --upload-content-type 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' --format json | tail -10")

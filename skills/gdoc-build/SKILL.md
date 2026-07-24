@@ -32,7 +32,7 @@ The fastest path for a builder asking for a Google Doc:
 2. **Confirm install pattern.** `[ -d /tmp/pptx_deps/docx ]` — if missing, run `python3.12 -m pip install python-docx --target /tmp/pptx_deps -q`.
 3. **Copy the template.** `cp templates/build_doc.py ~/build_<short-name>.py` (must be in `~`, not `/tmp` — see gws cwd gotcha below). Customize content sections.
 4. **Build the docx.** `PYTHONPATH=/tmp/pptx_deps python3.12 ~/build_<short-name>.py` → produces `~/<short-name>.docx`.
-5. **Upload as Google Doc.** `cd ~ && gws drive files create --json '{"name":"<doc title>","mimeType":"application/vnd.google-apps.document"}' --upload <short-name>.docx --upload-content-type "application/vnd.openxmlformats-officedocument.wordprocessingml.document" --format json | tail -10`
+5. **Upload as Google Doc.** `set -o pipefail; cd ~ && gws drive files create --json '{"name":"<doc title>","mimeType":"application/vnd.google-apps.document"}' --upload <short-name>.docx --upload-content-type "application/vnd.openxmlformats-officedocument.wordprocessingml.document" --format json | tail -10` — the `pipefail` is load-bearing: without it `tail` swallows a failed upload and the command still exits 0.
 6. **Return the URL.** `https://docs.google.com/document/d/<id>/edit` — give the user that link.
 7. **Clean up local artifacts.** `rm ~/build_<short-name>.py ~/<short-name>.docx`
 
@@ -79,7 +79,8 @@ These are the wounds. Codified so we don't relive them.
 | Gotcha | Symptom | Fix |
 |---|---|---|
 | `gws --upload` rejects `/tmp/foo.docx` | Error: `resolves to '/private/tmp/foo.docx' which is outside the current directory` | `cp /tmp/foo.docx ~/foo.docx && cd ~ && gws ...` |
-| `gws` mixes stderr into stdout | JSON parse fails on `Using keyring backend: keyring` line | Pipe through `tail -10` or `grep -v "keyring"` before parsing |
+| `gws` mixes stderr into stdout | JSON parse fails on `Using keyring backend: keyring` line | Pipe through `tail -10` or `grep -v "keyring"` before parsing — **but put `set -o pipefail` first**, or the pipe hides gws failures (next row) |
+| A `gws` write "succeeds" but nothing changed | `\| tail`/`\| grep` makes the pipeline's exit status the *filter's* (always 0), so a 403/404 reads as success | `set -o pipefail` before any piped `gws` call, then verify by re-reading the resource. gws also returns a JSON `{"error":{...}}` body on **stdout** — check for an `error` key even on exit 0 |
 | `python3.14` venv broken on this machine | `pip install` succeeds but `import` fails | Use `python3.12 -m pip install --target /tmp/pptx_deps`; run with `PYTHONPATH=/tmp/pptx_deps python3.12 ...` (see MEMORY.md "Python / PPTX / DOCX Environment") |
 | Custom brand fonts disappear after upload | Lexend / HW Cigars fall back to system default in Google Docs | Use Calibri for body. Brand expression comes from colors, not fonts. |
 | Table renders without borders in Google Docs | `table.style` not set | `table.style = 'Light Grid Accent 1'` (built-in name, gives borders) |

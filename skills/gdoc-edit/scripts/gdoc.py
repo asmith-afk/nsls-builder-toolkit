@@ -44,18 +44,8 @@ rich tables with /gdoc-build.
 import argparse, json, os, re, subprocess, sys
 
 
-def gws(args, params=None, body=None):
-    """Run a gws command, return parsed JSON. Exit 2 => auth; other errors reported."""
-    cmd = ["gws"] + args
-    if params is not None:
-        cmd += ["--params", json.dumps(params)]
-    if body is not None:
-        cmd += ["--json", json.dumps(body)]
-    r = subprocess.run(cmd, capture_output=True, text=True)
-    if r.returncode == 2:
-        sys.exit("gws auth error (exit 2): run `gws auth login`. See references/setup.md.")
-    out = (r.stdout or "").strip()
-    # gws occasionally prefixes stdout with a keyring/log line; find the JSON start.
+def _parse_gws_json(out):
+    """Parse gws stdout, tolerating a leading keyring/log line. None if unparseable."""
     try:
         return json.loads(out)
     except Exception:
@@ -66,8 +56,48 @@ def gws(args, params=None, body=None):
                 try:
                     return json.loads("\n".join(lines[i:]))
                 except Exception:
-                    break
-        sys.exit("gws call failed: " + (out or r.stderr or "no output")[:400])
+                    return None
+    return None
+
+
+def gws(args, params=None, body=None):
+    """Run a gws command, return parsed JSON. Any failure exits — never returns an error object.
+
+    gws signals failure BOTH ways and you must check both: a non-zero exit code AND
+    a JSON error object on *stdout*. e.g. a bad documentId gives exit 1 with
+    `{"error": {"code": 404, ...}}` on stdout. Parsing stdout without checking either
+    one returns that error dict to the caller as though the call succeeded — so a
+    failed batchUpdate reads as a successful edit. Check the exit code first, then
+    check for an `error` key even on exit 0.
+    """
+    cmd = ["gws"] + args
+    if params is not None:
+        cmd += ["--params", json.dumps(params)]
+    if body is not None:
+        cmd += ["--json", json.dumps(body)]
+    r = subprocess.run(cmd, capture_output=True, text=True)
+    if r.returncode == 2:
+        sys.exit("gws auth error (exit 2): run `gws auth login`. See references/setup.md.")
+
+    out = (r.stdout or "").strip()
+    parsed = _parse_gws_json(out)
+
+    def _fail(prefix):
+        detail = ""
+        if isinstance(parsed, dict) and isinstance(parsed.get("error"), dict):
+            e = parsed["error"]
+            detail = f" [{e.get('code')}] {e.get('message')}"
+        sys.exit(f"{prefix} `gws {' '.join(args)}`{detail}\n"
+                 + (out or r.stderr or "no output")[:400])
+
+    if r.returncode != 0:
+        _fail(f"gws call failed (exit {r.returncode}):")
+    # Exit 0 with an error payload is possible; treat it as a failure, not a result.
+    if isinstance(parsed, dict) and "error" in parsed:
+        _fail("gws returned an error payload:")
+    if parsed is None:
+        _fail("gws returned unparseable output:")
+    return parsed
 
 
 # ---------- document structure helpers ----------

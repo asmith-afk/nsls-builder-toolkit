@@ -234,7 +234,8 @@ gws sheets spreadsheets values update --dry-run \
 # Get full document structure (JSON with content, styles, positions)
 gws docs documents get --params '{"documentId": "DOC_ID"}'
 
-# Extract plain text from a doc
+# Extract plain text from a doc (pipefail so a failed fetch doesn't look like an empty doc)
+set -o pipefail
 gws docs documents get --params '{"documentId": "DOC_ID"}' | tail -n +2 | python3 -c "
 import json, sys
 doc = json.load(sys.stdin)
@@ -332,3 +333,40 @@ gws schema drive.files.list --resolve-refs
 - `1` — API error (Google returned an error response)
 - `2` — auth error (credentials missing or expired — re-run `gws auth login`)
 - `3` — validation error (bad arguments)
+
+### Two ways gws reports failure — check both
+
+`gws` prints a `Using keyring backend: keyring` line that breaks naive JSON parsing, so almost every recipe filters it. Both common filters destroy your ability to detect failure. **Writes are where this bites**: the call reports success, nothing changed, and you tell the user it worked.
+
+**1. A piped filter replaces the exit status.** A shell pipeline exits with its *last* command's status, so `gws … | grep -v keyring | tail -5` gives you `tail`'s `0` — even on a 403.
+
+```bash
+set -o pipefail   # REQUIRED before any piped gws call
+gws drive files create … | grep -v -i keyring | tail -5
+```
+
+Proof, against a nonexistent file:
+
+```
+without pipefail: exit=0    # failure invisible
+with pipefail:    exit=1    # failure caught
+```
+
+**2. The error body is valid JSON on stdout.** `pipefail` doesn't help here. A bad `documentId` exits 1 *and* prints this to **stdout**:
+
+```json
+{ "error": { "code": 404, "message": "Requested entity was not found.", "reason": "unknown" } }
+```
+
+Any caller that parses stdout gets that dict back looking exactly like a result. In Python, check the return code *and* the payload — `returncode == 2` alone is not enough:
+
+```python
+r = subprocess.run(cmd, capture_output=True, text=True)
+if r.returncode != 0:
+    raise RuntimeError(f"gws exit {r.returncode}: {(r.stderr or r.stdout)[:300]}")
+parsed = json.loads(...)                    # tolerate the keyring line
+if isinstance(parsed, dict) and "error" in parsed:
+    raise RuntimeError(f"gws error payload: {parsed['error']}")
+```
+
+**After any write, verify by re-reading the resource.** An exit code is weak evidence that a write landed — re-read it and assert the change is actually there. See also the `--dry-run` flag, which prints the resolved body/query params without sending, for checking an unfamiliar call's shape before you run it.
