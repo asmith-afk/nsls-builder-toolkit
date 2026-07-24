@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { renderSubstep, safeUrl, computeAssessmentProgress } from "./render-substep.mjs";
+import { renderSubstep, safeUrl, computeAssessmentProgress, renderMarkdown } from "./render-substep.mjs";
 
 test("safeUrl drops javascript: and other unsafe schemes, keeps safe ones", () => {
   assert.equal(safeUrl("javascript:alert(1)"), "");
@@ -271,4 +271,196 @@ test("currency renders the $ prefix and pl-8 input", () => {
   assert.match(html, />\$<\/div>/);
   assert.match(html, /step-input w-full pl-8/);
   assert.match(html, /inputmode="decimal"/);
+});
+
+// --- Markdown rendering for the substep PROMPT (mirrors ignite-next AIPrompt) ---
+// Vendored plain-JS render module — the static transcription can't run
+// react-markdown, so it ships a small dependency-free CommonMark-subset
+// renderer for the substep PROMPT. These tests pin markdown rendering +
+// injection safety so a future edit that drops it fails loudly.
+
+test("renderMarkdown: heading (###) renders as <h3>, no literal ### survives", () => {
+  const html = renderMarkdown("### How old are you?");
+  assert.match(html, /<h3>How old are you\?<\/h3>/);
+  assert.ok(!html.includes("###"));
+});
+
+test("renderMarkdown: all heading levels 1-6", () => {
+  for (let n = 1; n <= 6; n++) {
+    const html = renderMarkdown(`${"#".repeat(n)} Heading ${n}`);
+    assert.match(html, new RegExp(`<h${n}>Heading ${n}</h${n}>`));
+  }
+});
+
+test("renderMarkdown: bold via ** and __", () => {
+  assert.match(renderMarkdown("**bold**"), /<strong>bold<\/strong>/);
+  assert.match(renderMarkdown("__bold__"), /<strong>bold<\/strong>/);
+});
+
+test("renderMarkdown: italic via * and _", () => {
+  assert.match(renderMarkdown("*x*"), /<em>x<\/em>/);
+  assert.match(renderMarkdown("_x_"), /<em>x<\/em>/);
+});
+
+test("renderMarkdown: inline code", () => {
+  assert.match(renderMarkdown("`c`"), /<code>c<\/code>/);
+});
+
+test("renderMarkdown: link renders target=_blank + rel=noopener noreferrer", () => {
+  const html = renderMarkdown("[t](https://x.com)");
+  assert.match(html, /<a href="https:\/\/x\.com" target="_blank" rel="noopener noreferrer">t<\/a>/);
+});
+
+test("renderMarkdown: link with unsafe scheme drops the href, keeps the text", () => {
+  const html = renderMarkdown("[click](javascript:alert(1))");
+  assert.ok(!html.includes("javascript:"));
+  assert.ok(html.includes("click"));
+});
+
+test("renderMarkdown: unordered list", () => {
+  const html = renderMarkdown("- a\n- b");
+  assert.match(html, /<ul><li>a<\/li><li>b<\/li><\/ul>/);
+});
+
+test("renderMarkdown: ordered list", () => {
+  const html = renderMarkdown("1. a\n2. b");
+  assert.match(html, /<ol><li>a<\/li><li>b<\/li><\/ol>/);
+});
+
+test("renderMarkdown: blank-line-separated blocks become separate <p> tags", () => {
+  const html = renderMarkdown("para one\n\npara two");
+  assert.match(html, /<p>para one<\/p>/);
+  assert.match(html, /<p>para two<\/p>/);
+});
+
+test("renderMarkdown: single newlines within a paragraph collapse to a space (soft break)", () => {
+  const html = renderMarkdown("line one\nline two");
+  assert.match(html, /<p>line one line two<\/p>/);
+});
+
+test("renderMarkdown: INJECTION — HTML in prompt is escaped, never emitted as a live tag", () => {
+  const html = renderMarkdown("<img src=x onerror=alert(1)>");
+  assert.ok(html.includes("&lt;img"));
+  assert.ok(!html.includes("<img "));
+});
+
+test("renderMarkdown: TEMPLATE VARS — {slug} tokens survive verbatim for later interpolation", () => {
+  const html = renderMarkdown("Hi {firstName}");
+  assert.ok(html.includes("{firstName}"));
+});
+
+// --- inlineMd: code spans + links are extracted before emphasis -------------
+
+test("renderMarkdown: markdown inside a code span renders VERBATIM, not as emphasis", () => {
+  const html = renderMarkdown("`**not bold**`");
+  assert.ok(html.includes("<code>**not bold**</code>"));
+  assert.ok(!html.includes("<strong>"));
+});
+
+test("renderMarkdown: underscores inside a code span are preserved, not read as italic", () => {
+  const html = renderMarkdown("`foo_bar_baz.py`");
+  assert.ok(html.includes("<code>foo_bar_baz.py</code>"));
+  assert.ok(!html.includes("<em>"));
+});
+
+test("renderMarkdown: markdown-looking characters in a link URL stay intact, not reinterpreted as emphasis", () => {
+  const html = renderMarkdown("[t](https://x.com/**a**)");
+  const hrefMatch = html.match(/href="([^"]*)"/);
+  assert.ok(hrefMatch, "expected an href attribute");
+  assert.equal(hrefMatch[1], "https://x.com/**a**");
+  assert.ok(!html.includes("<strong>"));
+  assert.match(html, /target="_blank" rel="noopener noreferrer"/);
+});
+
+test("renderMarkdown: INJECTION — quote in a link URL stays entity-encoded, no attribute breakout", () => {
+  const html = renderMarkdown('[t](https://x.com/"onmouseover=alert(1))');
+  const hrefMatch = html.match(/href="([^"]*)"/);
+  assert.ok(hrefMatch, "expected an href attribute");
+  // The href value itself must not contain a literal, un-escaped double quote —
+  // that's what would let an attacker close the attribute and inject onmouseover=.
+  assert.ok(!hrefMatch[1].includes('"'));
+  assert.ok(html.includes("&quot;onmouseover=alert(1"));
+});
+
+test("renderMarkdown: link label containing a code span fully restores the nested placeholder", () => {
+  const html = renderMarkdown("[`code`](https://example.com)");
+  assert.ok(
+    html.includes('<a href="https://example.com" target="_blank" rel="noopener noreferrer"><code>code</code></a>'),
+    `expected fully-restored nested link+code, got: ${html}`
+  );
+  // A single non-recursive restore pass leaves the inner code-span token
+  // (U+E000/U+E001) raw inside the already-restored link HTML.
+  assert.ok(!/[\uE000\uE001]/.test(html), "no PUA sentinel chars should leak into output");
+});
+
+test("renderMarkdown: authored PUA sentinel look-alikes are stripped, not treated as real stash tokens", () => {
+  // A fake "token" (OPEN + digit + CLOSE) authored directly in the source,
+  // followed by a real code span. Pre-fix, this fake token survives to the
+  // restore pass and is treated as a genuine stash reference — because it
+  // happens to match index 0 here, it duplicates the real code span's output
+  // instead of rendering as literal text.
+  const fakeToken = "\uE000" + "0" + "\uE001";
+  const html = renderMarkdown(`${fakeToken} \`x\``);
+  assert.ok(!/[\uE000\uE001]/.test(html), "authored sentinel chars must never survive to output");
+  assert.ok(!html.includes("undefined"), 'a collided/missing stash entry must never render as "undefined"');
+  // Real code span still renders, and only once (no duplication from the fake token).
+  const codeMatches = html.match(/<code>x<\/code>/g) || [];
+  assert.equal(codeMatches.length, 1, `expected exactly one real <code>x</code>, got: ${html}`);
+});
+
+test("renderMarkdown: representative heading + link still renders correctly after hardening", () => {
+  const html = renderMarkdown("### Read more\n\n[click here](https://example.com)");
+  assert.match(html, /<h3>Read more<\/h3>/);
+  assert.match(html, /<a href="https:\/\/example\.com" target="_blank" rel="noopener noreferrer">click here<\/a>/);
+});
+
+// --- promptBlock / renderSubstep integration --------------------------------
+
+test("renderSubstep: prompt heading renders as HTML, not raw ###, and keeps data-tpl", () => {
+  const html = renderSubstep({ id: "x", type: "say", prompt: "### How old are you?" }, {});
+  assert.match(html, /<h3>How old are you\?<\/h3>/);
+  assert.ok(!html.includes("###"));
+  assert.match(html, /data-tpl/);
+});
+
+// --- link URLs carrying a template token: post-interpolate scheme bypass -----
+
+test("renderMarkdown: a link whose URL is a {token} is dropped to plain text (post-interpolate scheme bypass)", () => {
+  // `{answer}` passes safeUrl as a relative path, but interpolate() could later
+  // swap it for `javascript:...`. Must NOT become an href.
+  const html = renderMarkdown("[continue]({answer})");
+  assert.ok(!html.includes("href"), "no href emitted for a token URL");
+  assert.ok(!/<a\b/.test(html), "no anchor emitted for a token URL");
+  assert.ok(html.includes("continue"), "link label is preserved as text");
+});
+
+test("renderMarkdown: a token anywhere in the URL is rejected (even with a safe-looking prefix)", () => {
+  const html = renderMarkdown("[x](https://evil.example/{answer})");
+  assert.ok(!/<a\b/.test(html) && !html.includes("href"), "token-bearing URL never becomes a link");
+});
+
+test("renderMarkdown: a normal (token-free) link still renders as an anchor", () => {
+  const html = renderMarkdown("[docs](https://nsls.org/guide)");
+  assert.match(html, /<a href="https:\/\/nsls\.org\/guide" target="_blank" rel="noopener noreferrer">docs<\/a>/);
+});
+
+test("renderSubstep: prompt is wrapped in the prose classes mirroring ignite-next AIPrompt", () => {
+  const html = renderSubstep({ id: "x", type: "say", prompt: "Hello" }, {});
+  assert.match(html, /class="prose max-w-none prose-inherit[^"]*"[^>]*data-tpl/);
+});
+
+test("renderSubstep: INJECTION via full pipeline — script/img tags in prompt never render live", () => {
+  const html = renderSubstep({ id: "x", type: "say", prompt: "<img src=x onerror=alert(1)>" }, {});
+  assert.ok(html.includes("&lt;img"));
+  assert.ok(!html.includes("<img "));
+});
+
+test("renderSubstep: TEMPLATE VARS via full pipeline — {slug} token survives for interpolate()", () => {
+  const html = renderSubstep({ id: "x", type: "say", prompt: "Hi {firstName}, welcome" }, {});
+  assert.ok(html.includes("{firstName}"));
+});
+
+test("renderSubstep: banner-multiple prompt also renders markdown", () => {
+  const html = renderSubstep({ id: "x", type: "say", fieldType: "banner-multiple", prompt: "**Nice work**", bannerTexts: [] }, {});
+  assert.match(html, /<strong>Nice work<\/strong>/);
 });

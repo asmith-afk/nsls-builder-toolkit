@@ -41,6 +41,178 @@ export function safeUrl(u) {
   return s; // bare relative filename (e.g. "intro.png")
 }
 
+// --- Markdown rendering for the substep PROMPT (mirrors ignite-next AIPrompt) --
+//
+// ignite-next's AIPrompt.tsx renders the prompt via react-markdown (CommonMark)
+// inside a Tailwind Typography `prose` wrapper:
+//   <div className="prose max-w-none prose-inherit"><Markdown>{prompt}</Markdown></div>
+// and its ChatMarkdown opens links in a new tab (target="_blank" rel="noopener
+// noreferrer"). This static transcription can't run react-markdown at build
+// time, so it ships a small, DOCUMENTED DIVERGENCE: a dependency-free
+// CommonMark-SUBSET renderer covering what authors actually put in prompts —
+// headings, bold/italic, inline code, links, and simple lists.
+//
+// SAFETY (injection-safe by construction): the raw prompt is HTML-escaped
+// FIRST via `esc`, and only THEN is markdown syntax applied to the escaped
+// text. Markdown syntax characters (# * _ ` [ ] ( )) are not in esc's
+// replacement set, so escaping never disturbs them — but any literal HTML in
+// the prompt (e.g. `<img onerror=...>`) is neutralized (`&lt;img ...`) before
+// any markdown transform runs, so it can never re-form a live tag. `{slug}`
+// template tokens are untouched by both esc and the markdown patterns below,
+// so they survive verbatim for the later interpolate() pass over the baked
+// screen HTML (see public/preview-kit/interpolate.mjs).
+//
+// SUPPORTED (the subset authors use): `#`..`######` headings (line start);
+// **bold**/__bold__; *italic*/_italic_; `inline code`; [text](url) links
+// (dropped to plain text if safeUrl() rejects the scheme); "- "/"* " unordered
+// lists; "1. " ordered lists; blank-line-separated paragraphs; single
+// newlines inside a paragraph collapse to a space (CommonMark soft break).
+//
+// OUT OF SUBSET (intentionally — not used in authored prompts): tables,
+// blockquotes, fenced code blocks, images, footnotes, nested/mixed lists,
+// raw HTML passthrough, hard breaks (trailing double-space).
+export function renderMarkdown(src) {
+  const raw = String(src ?? "").replace(/\r\n/g, "\n").trim();
+  if (!raw) return "";
+  const escaped = esc(raw); // ESCAPE FIRST — the injection-safety boundary.
+  const lines = escaped.split("\n");
+  const out = [];
+  let para = [];   // buffered soft-wrapped paragraph lines
+  let list = null; // { type: "ul"|"ol", items: string[] }
+
+  const flushPara = () => {
+    if (para.length) { out.push(`<p>${inlineMd(para.join(" "))}</p>`); para = []; }
+  };
+  const flushList = () => {
+    if (list) {
+      out.push(`<${list.type}>${list.items.map((i) => `<li>${inlineMd(i)}</li>`).join("")}</${list.type}>`);
+      list = null;
+    }
+  };
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed === "") { flushPara(); flushList(); continue; }
+
+    const heading = trimmed.match(/^(#{1,6})\s+(.*)$/);
+    if (heading) {
+      flushPara(); flushList();
+      const level = heading[1].length;
+      out.push(`<h${level}>${inlineMd(heading[2].trim())}</h${level}>`);
+      continue;
+    }
+
+    const ul = trimmed.match(/^[-*]\s+(.*)$/);
+    if (ul) {
+      flushPara();
+      if (!list || list.type !== "ul") { flushList(); list = { type: "ul", items: [] }; }
+      list.items.push(ul[1]);
+      continue;
+    }
+
+    const ol = trimmed.match(/^\d+\.\s+(.*)$/);
+    if (ol) {
+      flushPara();
+      if (!list || list.type !== "ol") { flushList(); list = { type: "ol", items: [] }; }
+      list.items.push(ol[1]);
+      continue;
+    }
+
+    flushList();
+    para.push(trimmed);
+  }
+  flushPara();
+  flushList();
+  return out.join("");
+}
+
+// Inline-level transforms, applied to already-escaped text (see renderMarkdown).
+//
+// Genuine extract-and-restore: code spans and links are pulled out FIRST and
+// replaced with placeholder tokens, so the emphasis passes below only ever
+// see plain text — they can no longer reach inside a code span's content or a
+// link's URL. Placeholders use U+E000/U+E001 (Private Use Area control
+// points) as delimiters. Any such chars in the authored text are stripped
+// up front (see inlineMd's first line) so a generated token can never
+// collide with look-alike authored content or be re-authored by an
+// attacker. Code-span content is restored VERBATIM (CommonMark rule:
+// `` `**not bold**` `` must render as literal text, not <strong>). A link's
+// visible label still gets emphasis applied to it, but its URL does not, so
+// `**`/`_`/`` ` `` inside a URL can never be reinterpreted as markup.
+// Restore runs in a loop (not a single pass) so a stashed link whose label
+// itself contains a stashed code span -- `` [`code`](url) `` -- gets fully
+// unwound rather than leaking an inner token.
+function inlineMd(text) {
+  const OPEN = "\uE000";
+  const CLOSE = "\uE001";
+  const TOKEN_RE = /\uE000(\d+)\uE001/g;
+
+  // Strip any authored occurrences of our sentinel chars FIRST, before any
+  // tokenization happens. Without this, authored text containing OPEN/CLOSE
+  // followed by digits (however unlikely) could collide with a
+  // later-generated token and get swapped for the wrong stash entry (or
+  // "undefined" if it doesn't match any real entry) during restore. These are
+  // non-printing Private-Use-Area control points with no legitimate use in
+  // authored prompt text, so dropping them is harmless.
+  text = text.replace(/[\uE000\uE001]/g, "");
+
+  const stash = [];
+  const stow = (html) => {
+    const token = `${OPEN}${stash.length}${CLOSE}`;
+    stash.push(html);
+    return token;
+  };
+  const emphasize = (s) => s
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/__([^_]+)__/g, "<strong>$1</strong>")
+    .replace(/\*([^*]+)\*/g, "<em>$1</em>")
+    .replace(/\b_([^_]+)_\b/g, "<em>$1</em>");
+
+  // 1) Code spans first, restored VERBATIM later (CommonMark: content inside
+  //    `` `...` `` is never itself markdown).
+  let work = text.replace(/`([^`]+)`/g, (_, code) => stow(`<code>${code}</code>`));
+
+  // 2) Links next — the label gets emphasis applied now (baked into the
+  //    stashed HTML), but the URL is captured as-is and never touched by the
+  //    emphasize() pass in step 3.
+  work = work.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, url) => {
+    // Reject any URL carrying a `{token}` template placeholder. safeUrl runs
+    // HERE, at render time, but a bare token like `{answer}` passes as a
+    // relative path — then the later interpolate() pass swaps it for a user
+    // answer that could be `javascript:...`, producing a live scheme the
+    // render-time check never saw. Escaping the URL doesn't neutralize a
+    // scheme, so the only safe move is to drop the link to plain text when the
+    // destination is token-controlled. (Authored prompt links with a literal
+    // `{}` in the URL are effectively nonexistent; the label is preserved.)
+    const href = url.includes("{") ? "" : safeUrl(url);
+    const labelHtml = emphasize(label);
+    return stow(href ? `<a href="${href}" target="_blank" rel="noopener noreferrer">${labelHtml}</a>` : labelHtml);
+  });
+
+  // 3) Emphasis passes run only on what's left — plain text, with code spans
+  //    and links already swapped out for opaque tokens.
+  work = emphasize(work);
+
+  // 4) Restore code spans and links verbatim, last. A single pass isn't
+  //    enough: a link label containing a code span (e.g. [`code`](url))
+  //    stashes the code span first, then stashes the link (whose HTML
+  //    contains the inner code-span token). One restore pass would replace
+  //    the outer link token but leave the inner code-span token raw in the
+  //    output. So restore in a loop until no tokens remain. Termination is
+  //    guaranteed: every restore either replaces at least one token (shrinking
+  //    the token count) or leaves the string unchanged (loop exits), and
+  //    because step 0 already stripped authored sentinel chars, every token
+  //    left in `work` is one WE generated and stashed — never an authored
+  //    look-alike. The stash.length+1 cap is just a defensive backstop.
+  let restored = work;
+  for (let i = 0; i <= stash.length; i++) {
+    const next = restored.replace(TOKEN_RE, (_, n) => stash[Number(n)]);
+    if (next === restored) break; // no tokens left (or none matched) — stable, stop
+    restored = next;
+  }
+  return restored;
+}
+
 // --- Icons (phosphor, inlined as the app renders them) ----------------------
 const ICON_ARROW_RIGHT = '<svg width="24" height="24" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224.49,136.49l-72,72a12,12,0,0,1-17-17L187,140H40a12,12,0,0,1,0-24H187L135.51,64.48a12,12,0,0,1,17-17l72,72A12,12,0,0,1,224.49,136.49Z"/></svg>';
 const ICON_PLUS_CIRCLE = '<svg width="20" height="20" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Zm48-88a8,8,0,0,1-8,8H136v32a8,8,0,0,1-16,0V136H88a8,8,0,0,1,0-16h32V88a8,8,0,0,1,16,0v32h32A8,8,0,0,1,176,128Z"/></svg>';
@@ -125,12 +297,18 @@ function promptClasses(sub) {
 
 function promptBlock(sub) {
   if (sub.fieldType === "banner-multiple") {
+    // bannerTexts are separate plain-text lines (not the markdown-bearing
+    // `prompt` field) — left esc-only + whitespace-pre-wrap, untouched.
     const lines = (sub.bannerTexts || []).map((t, i) =>
       `<div class="tp-banner-line text-base font-medium whitespace-pre-wrap transition-all duration-500 ease-in-out" style="animation-delay:${(i + 1) * 800}ms" data-tpl>${esc(t)}</div>`).join("");
-    return `<div class="mb-6 space-y-2 sm:space-y-4 max-w-md lg:max-w-lg mx-auto"><div class="text-base font-medium whitespace-pre-wrap transition-all duration-500 ease-in-out" data-tpl>${esc(sub.prompt)}</div>${lines}</div>`;
+    return `<div class="mb-6 space-y-2 sm:space-y-4 max-w-md lg:max-w-lg mx-auto"><div class="text-base font-medium prose max-w-none prose-inherit transition-all duration-500 ease-in-out" data-tpl>${renderMarkdown(sub.prompt)}</div>${lines}</div>`;
   }
   if (!sub.prompt) return "";
-  return `<p class="whitespace-pre-wrap ${promptClasses(sub)}" data-tpl>${esc(sub.prompt)}</p>`;
+  // Prose wrapper mirrors ignite-next's AIPrompt.tsx; whitespace-pre-wrap is
+  // dropped because renderMarkdown's <p>/<h*>/<ul> tags now govern block
+  // spacing (prose supplies the vertical rhythm the app gets from Tailwind
+  // Typography).
+  return `<div class="prose max-w-none prose-inherit ${promptClasses(sub)}" data-tpl>${renderMarkdown(sub.prompt)}</div>`;
 }
 
 function calloutBlock(sub) {
