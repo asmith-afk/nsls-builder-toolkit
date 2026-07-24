@@ -124,7 +124,7 @@ def sync_pointers():
             fm_match = re.match(r"^---\n(.*?)\n---", content, re.DOTALL)
             if fm_match:
                 fm = fm_match.group(1)
-                ml_match = re.search(r"description:\s*>-?\s*\n((?:\s+.+\n)*)", fm)
+                ml_match = re.search(r"description:\s*>-?\s*\n((?:[ \t]+.+\n?)+)", fm)
                 if ml_match:
                     desc = " ".join(l.strip() for l in ml_match.group(1).strip().split("\n"))
                 else:

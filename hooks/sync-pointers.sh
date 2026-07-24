@@ -32,7 +32,7 @@ import re, sys
 with open('$src', encoding='utf-8') as f: content = f.read()
 fm = re.match(r'^---\n(.*?)\n---', content, re.DOTALL)
 if not fm: sys.exit(0)
-m = re.search(r'description:\s*>-?\s*\n((?:\s+.+\n)*)', fm.group(1))
+m = re.search(r'description:\s*>-?\s*\n((?:[ \t]+.+\n?)+)', fm.group(1))
 if m: print(' '.join(l.strip() for l in m.group(1).strip().split('\n')))
 else:
     m = re.search(r'description:\s*(.+)', fm.group(1), re.MULTILINE)
