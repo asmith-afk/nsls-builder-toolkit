@@ -30,8 +30,9 @@ per-user token, minted in the next step.
 > secret **once, at creation** — it can never be viewed or re-downloaded afterwards. So
 > the client JSON is distributed as a file instead.
 
-1. Get `client_secret.json` from the **NSLS builders shared location** (Drive — ask in
-   #builders for the current link; it's restricted to @nsls.org).
+1. Get `client_secret.json` from the NSLS builders shared location:
+   https://drive.google.com/file/d/1fOu-0M35vgGO6mzbd0BInEt_sgkmgCn7/view
+   (view-only, restricted to @nsls.org accounts, unlisted — not discoverable by search).
 2. Save it as `~/.config/gws/client_secret.json`:
 
 ```bash
