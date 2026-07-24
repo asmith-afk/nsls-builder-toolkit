@@ -4,6 +4,8 @@
 
 > ⚠️ **CONFIRM WITH HR BEFORE RELYING ON THIS.** The field IDs below come from the archived v1 write flow (people-ops base `appnXPTu01esWWbrK`). Schema drifts — HR (Jenna) owns this base and had a Q2 launch in July 2026. **Verify every table/field against the live schema before any load, and resolve the "known gaps" section together.** This skill never writes Airtable; loading is HR's separate, HR-only step.
 
+> 📬 **Delivery is automatic as of v2.2.0.** The skill shares every rendered card with **Jenna Fontanez (`jfontanez@nsls.org`) as commenter** at render time, so no card can be orphaned in a manager's Drive. Cards arrive titled `(DRAFT)` while `[brackets]` are unresolved and are retitled `(FINAL)` when the manager confirms alignment is done — so **Gap E below is visible in the title**: only `(FINAL)` cards are loadable. Revise-mode shares carry a change summary and triage verdict in the notification, so the load is a patch rather than a re-key.
+
 ## Base
 
 `appnXPTu01esWWbrK` (people-ops) — HR-owned.

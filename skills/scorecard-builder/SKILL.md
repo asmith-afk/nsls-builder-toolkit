@@ -1,28 +1,37 @@
 ---
 name: scorecard-builder
 description: >-
-  Use when a manager wants to create, draft, build, or significantly edit an
-  employee performance ScoreCard — "create a scorecard", "build a scorecard for
-  [name]", "draft [name]'s scorecard", "update/revise [name]'s scorecard",
-  "reweight the accountabilities", "scorecard for my report", "make a scorecard
-  doc", "help me set [name]'s accountabilities" — including for a brand-new hire
-  with no history yet. Produces a founder-template Google Doc, never an Airtable row.
-version: 2.1.0
+  Use when a manager wants to create, draft, build, revise, or significantly edit
+  an employee performance ScoreCard — "create a scorecard", "build a scorecard for
+  [name]", "draft [name]'s scorecard", "update/revise [name]'s scorecard", "fix one
+  thing on the scorecard", "the scorecard is out of date", "this card is way off",
+  "revise it instead of rewriting it", "reweight the accountabilities", "scorecard
+  for my report", "make a scorecard doc", "help me set [name]'s accountabilities" —
+  including for a brand-new hire with no history yet. Revises an existing card in
+  place of rewriting it whenever one exists. Produces a founder-template Google Doc
+  auto-shared with HR, never an Airtable row.
+version: 2.2.0
 ---
 
 # ScoreCard Builder
 
-Turn a manager's real knowledge of a report into a clean **founder-template ScoreCard Google Doc** — weighted outcome accountabilities (Side A), core competencies (Side B), and a binary Core Values gate — that aligns manager and employee on what the role is *for* and how "meets" is judged. **The Doc is the deliverable.** The manager hands it to HR, who loads it into the system of record.
+Turn a manager's real knowledge of a report into a clean **founder-template ScoreCard Google Doc** — weighted outcome accountabilities (Side A), core competencies (Side B), and a binary Core Values gate — that aligns manager and employee on what the role is *for* and how "meets" is judged. **The Doc is the deliverable.**
+
+Two disciplines make this skill work, and both are easy to skip:
+
+1. **If a card already exists, revise it — don't rewrite it.** Regenerating from scratch throws away language a manager and report already agreed to. Triage how far off the card is, then make the *smallest* change that fixes it.
+2. **Every card is auto-shared with HR (Jenna Fontanez) the moment it's rendered.** A card that lives only in the manager's Drive is an orphan — it won't be in the system of record for the next scorecard round. This skill shares it for them and tells them it did.
 
 ## SAFETY: THREE-TIER PERMISSION MODEL
 
 This skill is deliberately **standalone and read-only against every shared system.** NSLS runs a live scorecard → scoring → bonus system (an HR-owned bot + a shared people-ops Airtable). This skill must never touch that machinery — it is not part of HR's process and is not the thing that loads scorecards into the system of record.
 
-1. **Read-only (free to do):** read the founder SOP + research `references/`; *optionally* read the data sources below (LOP/KPIs, Signal Quick Notes, the Knowledge Base) as drafting inputs — **only if the manager running this has access.** All optional; degrade gracefully when absent.
-2. **New-content write (OK — explain what and where first):** build a `.docx` locally and upload it as a **new, private Google Doc** owned by the manager running the skill.
+1. **Read-only (free to do):** read the founder SOP + research `references/`; read the **existing scorecard Doc** when one exists (never edit it in place); *optionally* read the data sources below (LOP/KPIs, Signal Quick Notes, the Knowledge Base) as drafting inputs — **only if the manager running this has access.** All optional; degrade gracefully when absent.
+2. **New-content write (OK — explain what and where first):** build a `.docx` locally and upload it as a **new** Google Doc owned by the manager running the skill, then **share that new Doc with HR (`jfontanez@nsls.org`) as commenter.** The HR share is a required part of the flow, not an optional extra — see *The HR handoff* below. Commenter, never writer: Jenna needs to flag problems, not rewrite accountabilities the manager and report agreed to.
 3. **NEVER — hard boundary, not negotiable:**
    - **No writes to any people-ops Airtable / ScoreCards / scoring system.** Loading the card is HR's job. This skill hands over a Doc.
-   - **No Slack/DM to the employee.** The manager shares the Doc themselves.
+   - **No editing or overwriting the prior card.** Read it, render a new version. History is the point.
+   - **No Slack/DM to the employee.** HR gets the Doc automatically; the *report* is the manager's to share with, personally.
    - **No comp math, bonus numbers, or payout bands** anywhere in the output.
    - **No pay figures at all** — keep compensation out of the Doc entirely.
 
@@ -30,22 +39,30 @@ This skill is deliberately **standalone and read-only against every shared syste
 
 A good scorecard is hard because the manager knows the person but not the *frame* — they write tasks instead of outcomes, list ten things instead of the vital few, reward the number instead of the judgment, and quietly forget the work that just keeps the lights on. This skill carries the frame so any NSLS manager doesn't have to: the founder's Topgrading structure, the research on why outcome-goals beat task-lists, the 2×2 portfolio lens (growth / efficiency / hygiene / reliability), and the reality-check discipline that grounds accountabilities in what the person *actually does* without letting activity masquerade as an accountability. It produces a Doc a manager and report can sit down over, every draft value bracketed for the two of them to confirm.
 
-## Two modes
+## Two modes — and the question that picks between them
+
+**Ask this before drafting a single line:**
+
+> **Is there an existing scorecard for this person?**
+
+If yes, **get it first** — paste its text, or give the Drive URL to read read-only. Do not draft anything until you've read it. A manager who says "update Maria's scorecard" is asking you to *change* a document, not to produce a second, competing one.
 
 | Mode | Trigger | Input |
 |---|---|---|
-| **Create** | New scorecard — existing role *or* brand-new hire | Role + whatever data exists (or a manager interview if none) |
-| **Significant edit** | Reweight, add/remove accountabilities, swap competencies, change mission/growth focus | The current scorecard Doc (paste text, or give the Drive URL to read read-only) |
+| **Create** | No card exists — new role *or* brand-new hire | Role + whatever data exists (or a manager interview if none) |
+| **Revise** | A card exists and needs changing — for *any* size of change | The current card + **drift triage** (below) to size the intervention |
 
-Both modes end the same way: a rendered Google Doc + a handoff reminder. Edit mode also emits a **change summary** so HR sees exactly what moved.
+Both modes end the same way: a rendered Google Doc, **auto-shared with HR**, plus an explanation of what the manager still owes. Revise mode also emits a **change summary** so HR sees exactly what moved.
 
 ## Quick Start
 
-1. **Mode + who + role + manager.** Creating or editing? Whose card? What is the role's one-sentence reason to exist? Who manages them?
-2. **Gather inputs** — pull whatever of the data sources below exists (all optional). If it's a **brand-new hire with no history, run the manager interview** (below) instead.
-3. **Draft the card** section by section (Mission → Side A → Core Values → Side B → Growth Focus → open questions), applying the guardrails. Leave every uncertain value as a `[bracket]` for the alignment conversation.
-4. **Render the Doc.** Copy `references/build_doc_template.py` → `~/build_<name>_scorecard.py`, fill the BODY, run with python-docx; it derives the filename and prints the exact `gws` upload command. (Mechanics: `/gdoc-build`.)
-5. **Hand off.** Give the manager the URL. Remind them: share with the report → align → send the finalized Doc to HR to load. **This skill stops at the Doc.**
+1. **Existing card? → get it.** Then: whose card, what is the role's one-sentence reason to exist, who manages them.
+2. **If revising, run drift triage** (below) — Tune / Revise / Rebuild. This decides how much you touch. Default to the smallest change.
+3. **Gather inputs** — pull whatever of the data sources below exists (all optional). If it's a **brand-new hire with no history, run the manager interview** (below) instead.
+4. **Draft the card** section by section (Mission → Side A → Core Values → Side B → Growth Focus → open questions), applying the guardrails. In revise mode, **carry surviving lines over verbatim.** Leave every uncertain value as a `[bracket]` for the alignment conversation.
+5. **Render the Doc.** Copy `references/build_doc_template.py` → `~/build_<name>_scorecard.py`, fill the BODY, run with python-docx; it derives the filename and prints **both** commands — upload, then the required HR share. Title carries `(DRAFT)` while brackets are live. (Mechanics: `/gdoc-build`.)
+6. **Share it with HR — required, not a reminder.** Run the printed STEP 2 share command (also in *The HR handoff* below). If it fails, **stop and tell the manager** — don't hand back a card you couldn't route.
+7. **Explain the flow.** Tell the manager the share already happened, why it matters, and what's still on them: align with the report → resolve brackets → come back and say "this card is final."
 
 ## Data sources (all optional — use what exists, degrade gracefully)
 
@@ -113,17 +130,100 @@ Score the 5 NSLS values as a **binary Pass / Flag gate** against each MAR. **Do 
 
 Select **5–8** from the Topgrading Competency Bank (the org's canonical behavioral taxonomy, HR-owned). Set a MAR per competency by role. Don't invent competencies; consume the bank. Menu + groupings + the caveat that the offline list is partial: `references/competency-bank.md`.
 
-## Significant-edit mode
+## Revise mode — drift triage
 
-1. **Get the current card.** Ask for the existing scorecard Doc — paste its text, or give the Drive URL and read it read-only via `gws`.
-2. **Show current state** back to the manager (accountabilities + weights, competencies, mission, growth focus).
-3. **Apply the changes** they want: add/remove/reweight accountabilities (re-validate weights = 100%), swap competencies + MARs, revise the mission or growth focus. Same guardrails apply.
-4. **Render a NEW Doc version** — never overwrite the old one; a new file preserves history.
-5. **Emit a change summary** — a short "what changed vs. the prior card" list (e.g., *"Accountability #3 reweighted 15% → 20%; added Reliability line at 10%; dropped Vendor Management"*) so HR can update the system of record precisely, not re-key the whole card.
+A card that's slightly wrong and a card that's fundamentally wrong need completely different treatment. Regenerating from scratch is the tempting default and it is usually the wrong one: it silently discards wording a manager and report negotiated, and it hands HR a card that looks entirely new when two numbers moved.
 
-## The HR handoff (the seam)
+**1. Get the current card and reflect it back.** Read it read-only. Show the manager what's there now — mission, accountabilities + weights, competencies + MARs, growth focus — before proposing anything. Confirm you're looking at the current version; ask if there's a newer one.
 
-The Doc is a **contract** to HR: its structure maps 1:1 to the fields HR loads into the system of record. Keep the render structurally consistent (stable headings, fixed table columns) so the handoff is a parse, not a re-type. The section-to-field mapping lives in `references/handoff-mapping.md` — **confirm it with HR before treating any card as loadable.** This skill produces the Doc; a separate HR-only skill loads it.
+**2. Score the drift** across five dimensions. Ask the manager which of these no longer holds:
+
+| Dimension | The question |
+|---|---|
+| **Mission** | Is this still why the role exists? |
+| **Accountability set** | Are these still the right 3–6 outcomes? Anything missing, anything obsolete? |
+| **Weights** | Does the relative importance still match reality? |
+| **Competencies + MARs** | Still the behaviors that matter for this seat, at the right bar? |
+| **Growth focus** | Is this still the live development bet, or was it already achieved? |
+
+**3. Pick the smallest intervention that fixes it.**
+
+| Verdict | Test | What you do |
+|---|---|---|
+| **Tune** | Mission intact · ≤2 dimensions off · ≤2 accountability lines wrong | Patch **only** those lines. Everything else carries over **verbatim** — same words, same order. Re-validate weights = 100%. |
+| **Revise** | Mission intact, but 3+ dimensions off, or roughly half of Side A is wrong | Rebuild Side A from the 2×2. Keep the mission and Side B **unless the manager specifically named them** as wrong. |
+| **Rebuild** | Mission is wrong · the role itself changed · most of Side A is task-shaped or obsolete | The old card is a **reference, not a base.** Run the manager interview fresh — then produce a **"carried forward from prior card"** list so nothing durable gets silently dropped. |
+
+**A rebuild has to be earned.** "The old card is messy" is not a reason to rebuild; it's a reason to tune the messy lines. If the manager describes one or two problems, you are in Tune — do not escalate on your own judgment. If you think the card needs more work than the manager asked for, *say so and let them decide* rather than quietly doing it.
+
+**4. Preserve agreed language.** Any line that survived the last alignment conversation is a **contract between manager and report.** Do not re-word it for style, tighten it, or "improve" it while you're in the file. Change it only when it's the thing being changed.
+
+**5. Render a NEW Doc** — never overwrite the old one; a new file preserves history. Keep the prior card's URL so the change summary can reference it.
+
+**6. Emit a change summary** — a short "what changed vs. the prior card" list (e.g., *"Accountability #3 reweighted 15% → 20%; added Reliability line at 10%; dropped Vendor Management; mission unchanged"*) so HR can update the system of record precisely rather than re-key the whole card. **This summary goes into the HR share note** (below) — that's what makes the handoff a patch instead of a re-type. Name the triage verdict in it, too: HR reads *Tune* very differently from *Rebuild*.
+
+## The HR handoff (the seam) — REQUIRED, and the skill does it
+
+**The failure this prevents:** a manager builds a good card, has a good conversation with their report, and the Doc sits in their personal Drive forever. It never reaches the system of record, so at the next scorecard round the person has no card — or an old one — and the work is done again from scratch. An unshared scorecard is an **orphan**. This is the single most-skipped step in the whole process, which is why the skill does it rather than reminding someone to.
+
+**Jenna Fontanez (`jfontanez@nsls.org`) owns the scorecard process.** She is the one who gets the card into the right place in the system of record. Every card goes to her.
+
+### Share it — at render, before you hand back the URL
+
+```bash
+# set -o pipefail is REQUIRED, not decoration: without it the exit status is
+# `tail`'s (always 0), so a 403/400 from gws reads as a successful share — the
+# silent orphan this whole section exists to prevent.
+set -o pipefail
+# fileId = the Doc you just uploaded. Note the split:
+#   role/type/emailAddress -> --json (request body)
+#   sendNotificationEmail/emailMessage -> --params (query params)
+gws drive permissions create \
+  --params '{"fileId":"<DOC_ID>","sendNotificationEmail":true,"emailMessage":"<SHARE NOTE>"}' \
+  --json '{"role":"commenter","type":"user","emailAddress":"jfontanez@nsls.org"}' \
+  | grep -v -i keyring | tail -5
+```
+
+**Then confirm the share actually landed** — don't trust the exit code alone. `gws drive permissions list --params '{"fileId":"<DOC_ID>"}'` should show `jfontanez@nsls.org` as `commenter`. If it doesn't, treat it as a failed share and use the fallback below.
+
+**The share note must say**, in plain language: whose card it is, who the manager is, whether it is **DRAFT or FINAL**, and — in revise mode — the **change summary** plus the triage verdict and the prior card's URL. A draft note explicitly says *brackets are still open, please don't load yet.* Without that, Jenna can't tell a finished card from an in-progress one (see Gap E in `references/handoff-mapping.md` — **HR loads only confirmed values**).
+
+**Commenter, not writer.** Jenna needs to flag problems on the card, not change accountabilities the manager and report agreed to.
+
+### Then explain the flow — every time, even though it's automatic
+
+Managers must not be surprised that HR has their draft, and must not think the share was the last step. Tell them, in the hand-back:
+
+1. **What just happened** — "I've shared this with Jenna Fontanez in HR as a commenter and she's been notified. She owns getting scorecards into the system of record."
+2. **Why** — "A card that only lives in your Drive won't exist for the next scorecard round. This is the step that normally gets missed."
+3. **What's still on you** — "It's marked DRAFT: share it with your report, work through the `[brackets]` together, then come back and tell me it's final. Jenna won't load it until then."
+
+### On FINAL — the second half of the handoff
+
+When the manager says the brackets are resolved:
+
+```bash
+set -o pipefail   # same trap: without it a failed retitle looks like success
+# swap (DRAFT) -> (FINAL) so HR can see at a glance that it's loadable.
+# Keep the rest of the title byte-identical to what the renderer produced.
+gws drive files update --params '{"fileId":"<DOC_ID>"}' \
+  --json '{"name":"ScoreCard — <Name> — <Role> — <FY> (FINAL)"}' \
+  | grep -v -i keyring | tail -3
+```
+
+**Confirm the retitle before telling HR anything** — `gws drive files get --params '{"fileId":"<DOC_ID>","fields":"name"}'` must come back `(FINAL)`. Telling Jenna a card is ready to load while it still reads `(DRAFT)` is worse than not telling her: she has no way to know which signal to trust.
+
+Then send Jenna a short "ready to load" note. **Show the manager the text and get their go-ahead before sending** — it goes out under their name. Jenna already has access, so this is a notification, not a new share.
+
+### If the share fails — STOP, don't paper over it
+
+A silent share failure recreates the exact orphan problem this section exists to solve. Never report a card as done when it isn't routed. Hand the manager the fallback verbatim:
+
+> "I couldn't share this automatically — **please share it yourself before you close this out**: open `<URL>` → Share → `jfontanez@nsls.org` → **Commenter** → add a note saying it's a draft for `<report>`."
+
+### The structural contract
+
+The Doc's structure maps 1:1 to the fields HR loads. Keep the render structurally consistent (stable headings, fixed table columns) so the handoff is a parse, not a re-type. The section-to-field mapping lives in `references/handoff-mapping.md` — **confirm it with HR before treating any card as loadable.** This skill produces and routes the Doc; loading it is HR's separate, HR-only step.
 
 ## Diagnostic loop — rendering the Doc
 
@@ -137,6 +237,11 @@ The Doc is a **contract** to HR: its structure maps 1:1 to the fields HR loads i
 | `gws --upload` rejects the path | file outside cwd | build in `~`, run `gws` from `~` |
 | `gws` JSON parse fails | keyring line on stdout | pipe through `grep -v -i keyring \| tail` |
 | Brand font missing after upload | Google Docs strips custom fonts | Calibri body; brand = navy `#1A2B4A` colors |
+| Share returns `403 insufficientFilePermissions` | Doc isn't owned by the account `gws` is authed as | Confirm the upload succeeded under the manager's own account; re-check `gws drive files get` |
+| Share returns `400` / `sharingRateLimitExceeded` | Notification flags sent in `--json` instead of `--params`, or Workspace sharing policy | Flags are **query params**. If policy blocks it, use the manual fallback above — never skip |
+| Share "succeeds" but Jenna gets no email | `sendNotificationEmail` omitted or in the body | Must be `true` in `--params`; verify with `gws drive permissions list` |
+| Command exits 0 but nothing happened | `\| grep \| tail` swallows the failure — exit status is `tail`'s | `set -o pipefail` before any piped `gws` write, then verify by re-reading the resource |
+| Doc already shared (revise mode, same file) | Permission exists | Expected — you should be rendering a **new** Doc, not re-sharing the old one. Check you didn't overwrite |
 
 Full render mechanics: `/gdoc-build`.
 
@@ -146,14 +251,17 @@ Full render mechanics: `/gdoc-build`.
 - **`/signal` · `/person-intelligence`** — read-only Quick Notes for the reality-check (optional).
 - **LOP base** `appAcnl4o8AQVZR1j` — read-only strategy/KPI cascade.
 - **Knowledge Base** (`kb.nsls.org` `/mcp`) — read-only KPI definitions/mappings, growing.
-- **HR's scorecard system** (people-ops Airtable + scoring bot) — the live system of record. **This skill never touches it.** Loading the Doc is a separate, HR-only step.
+- **`gws drive permissions`** — how the card reaches HR. Write access limited to sharing the *new* Doc this skill created.
+- **HR's scorecard system** (people-ops Airtable + scoring bot) — the live system of record. **This skill never touches it.** It routes the Doc to Jenna; loading it is a separate, HR-only step.
 
 ## Output guidelines
 
 - **Deliverable = the Doc URL** + a one-line section list. Don't dump the whole card into chat.
 - **It's a discussion instrument** — brackets are a feature; say so.
-- **Edit mode also returns the change summary.**
-- **Remind the handoff:** manager → share with report → align → send finalized Doc to HR to load. **Keep pay out.**
+- **Revise mode also returns the change summary** + the triage verdict (Tune / Revise / Rebuild) + the prior card's URL.
+- **State the HR share as done, not as homework:** "shared with Jenna Fontanez (HR) as commenter, she's been notified." Then name the remaining steps: share with the report → align → resolve brackets → tell me it's final.
+- **Never sign off without the share confirmed.** If it failed, lead with that, not with the URL.
+- **Keep pay out.**
 
 ## Rationalizations you will have
 
@@ -167,6 +275,13 @@ Full render mechanics: `/gdoc-build`.
 | "It's a new hire and I have no data, so I'll draft generic accountabilities." | Run the manager interview. Generic ≠ grounded. |
 | "This role is unusual — I'll invent a competency." | Consume the bank; flag gaps to HR. |
 | "I'll paste the whole card into chat." | Return the URL. |
+| "The existing card is messy — a clean rebuild is faster." | Faster for you, lossy for them. Those words were negotiated. Tune first; a rebuild has to be earned. |
+| "They said 'update the scorecard,' so I'll draft a fresh one." | "Update" means change *this* document. Read it first, then triage. |
+| "While I'm in here I'll tighten the wording on the other accountabilities." | Agreed language is a contract, not a draft. Change only what's being changed. |
+| "The manager will send it to Jenna themselves." | That is precisely the step that gets skipped. Share it now. |
+| "It's only a draft — no need to bother HR yet." | Draft-shared-and-labeled beats finished-and-orphaned. Mark it DRAFT and send it. |
+| "The share errored but the Doc is fine, I'll just mention it at the end." | An unrouted card is an orphan. Lead with the failure and the manual fallback. |
+| "I'll give Jenna writer access so she can just fix it." | Commenter. She flags; the manager and report own the content. |
 
 ## Red Flags — STOP
 
@@ -175,8 +290,14 @@ Full render mechanics: `/gdoc-build`.
 - About to put a bonus %, band, or salary in the Doc → **STOP.** No comp.
 - About to promote a Signal Quick Note straight into an accountability → **STOP.** Reality-check, not source.
 - About to implement ±15% values math → **STOP.** Binary gate.
-- About to overwrite the prior Doc in edit mode → **STOP.** Render a new version.
+- About to overwrite the prior Doc in revise mode → **STOP.** Render a new version.
 - About to hand back 7+ accountabilities or task-shaped lines → **STOP.** Vital few (3–6), outcomes.
+- About to draft a card without asking whether one already exists → **STOP.** Ask first.
+- About to regenerate a whole card when the manager named only 1–2 problems → **STOP.** That's Tune. Patch those lines.
+- About to re-word accountabilities that already survived an alignment conversation → **STOP.** That language is a contract.
+- About to hand back the Doc URL without sharing it with `jfontanez@nsls.org` → **STOP.** The card is an orphan.
+- About to report the card as done when the share errored → **STOP.** Lead with the failure + manual fallback.
+- About to retitle `(DRAFT)` → `(FINAL)` while `[brackets]` are still live → **STOP.** HR loads only confirmed values.
 
 ## References
 

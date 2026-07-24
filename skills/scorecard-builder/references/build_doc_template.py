@@ -8,14 +8,21 @@ USAGE
      (if import fails: python3.12 -m pip install --upgrade --force-reinstall \
       python-docx --target /tmp/pptx_deps -q)
      The script derives the output filename from NAME (e.g. ~/chelsea_byers_scorecard.docx)
-     and PRINTS the exact `gws` upload command with that filename — copy it verbatim.
-  4. Run the printed upload command (it fills in the right filename automatically):
+     and PRINTS both commands you need — upload, then the REQUIRED HR share.
+  4. Run the printed STEP 1 upload command (it fills in the right filename):
        cd ~ && gws drive files create \
          --json '{"name":"ScoreCard — <Name> — <Role> — <FY> (DRAFT)","mimeType":"application/vnd.google-apps.document"}' \
          --upload <the-derived-filename>.docx \
          --upload-content-type "application/vnd.openxmlformats-officedocument.wordprocessingml.document" \
          --format json | grep -v -i keyring | tail -6
-  5. Return the URL to the manager. This skill NEVER writes Airtable.
+  5. Run the printed STEP 2 share command — REQUIRED. Every card goes to HR
+     (Jenna Fontanez, jfontanez@nsls.org) as commenter at render time. An
+     unshared card is an orphan: it never reaches the system of record.
+     Note the param split — role/type/emailAddress are the BODY (--json);
+     sendNotificationEmail/emailMessage are QUERY params (--params).
+  6. Return the URL to the manager, state that the HR share is done, and name
+     what's still theirs: share with the report, resolve the [brackets], then
+     retitle (DRAFT) -> (FINAL) and notify HR. This skill NEVER writes Airtable.
 
 Helpers below produce real Word elements that survive .docx -> Google Doc
 conversion. add_runs() parses mini-markdown inside any paragraph or table cell:
@@ -131,7 +138,13 @@ t = doc.add_paragraph().add_run(f"ScoreCard — {NAME}")
 t.bold = True; t.font.size = Pt(20); t.font.color.rgb = RGBColor(*P["h1"])
 sr = doc.add_paragraph().add_run(f"{ROLE} · {FY}")
 sr.font.size = Pt(13); sr.font.color.rgb = RGBColor(*P["h2"])
-tg = doc.add_paragraph().add_run("DRAFT for manager↔employee alignment — not written to Airtable, not shared")
+# Assert only what stays true for the life of the Doc. DRAFT/FINAL status lives
+# in the TITLE (retitled on confirmed alignment), so don't restate it here — and
+# never claim a share state: the skill shares this with HR the moment it renders.
+tg = doc.add_paragraph().add_run(
+    "Alignment instrument for manager↔employee — current status is in the document title. "
+    "Shared with HR for tracking; never written to Airtable by this skill."
+)
 tg.italic = True; tg.font.size = Pt(10.5); tg.font.color.rgb = RGBColor(0x88, 0x88, 0x88)
 para("**[bracketed]** = draft placeholder — the employee confirms or changes each in the alignment conversation.", size=10)
 rule()
@@ -203,12 +216,36 @@ fname = f"{slug}_scorecard.docx"
 out = os.path.expanduser(f"~/{fname}")
 doc.save(out)
 print("saved", out)
-print("\nUpload it with (run from ~):")
+print("\nSTEP 1 — upload it with (run from ~):")
+# `set -o pipefail` on every printed command: these all end in `| grep | tail`,
+# so without it the pipeline's exit status is tail's (0) and a gws 4xx reads as
+# success. That turns a failed share into a silently orphaned ScoreCard.
 print(
-    f'cd ~ && gws drive files create '
+    f'set -o pipefail; cd ~ && gws drive files create '
     f'--json \'{{"name":"ScoreCard — {NAME} — {ROLE} — {FY} (DRAFT)",'
     f'"mimeType":"application/vnd.google-apps.document"}}\' '
     f'--upload {fname} '
     f'--upload-content-type "application/vnd.openxmlformats-officedocument.wordprocessingml.document" '
     f'--format json | grep -v -i keyring | tail -6'
 )
+
+# STEP 2 is not optional. An unshared ScoreCard never reaches the system of
+# record — it dies in the manager's Drive and the work is redone next cycle.
+# Jenna Fontanez owns the scorecard process; commenter, not writer, because the
+# manager and report own the card's content.
+print("\nSTEP 2 — REQUIRED: share it with HR (Jenna). Fill in <DOC_ID> from step 1,")
+print("and replace <NOTE> with: whose card, who the manager is, DRAFT vs FINAL,")
+print("plus (revise mode) the change summary + triage verdict + prior card URL.")
+print(
+    f'set -o pipefail; cd ~ && gws drive permissions create '
+    f'--params \'{{"fileId":"<DOC_ID>","sendNotificationEmail":true,'
+    f'"emailMessage":"<NOTE>"}}\' '
+    f'--json \'{{"role":"commenter","type":"user",'
+    f'"emailAddress":"jfontanez@nsls.org"}}\' '
+    f'| grep -v -i keyring | tail -5'
+)
+print("\nSTEP 3 — confirm it landed (exit code alone is not proof):")
+print('gws drive permissions list --params \'{"fileId":"<DOC_ID>"}\''
+      ' | grep -v -i keyring | grep -i fontanez')
+print("\nIf STEP 2 or 3 fails, do NOT report the card as done — give the manager")
+print("the manual fallback (Share -> jfontanez@nsls.org -> Commenter). See SKILL.md.")
