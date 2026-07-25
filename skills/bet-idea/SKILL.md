@@ -130,6 +130,18 @@ email, never the driver's. Revisions still attribute the driver's token +
 (`worth_researching`, step 7) is the OWNER's spoken call in session; the
 driver never attests on their behalf.
 
+## Entry: autonomous mode (unattended agents only)
+
+Triggered ONLY when the invoker explicitly states it is running unattended —
+e.g. the weekly roadshow-intel clustering agent handing over an orphan-theme
+cluster. A human present, however brief, gets the normal flow above. Read
+`references/autonomous-mode.md` BEFORE any write. In brief: every drafted
+section is tagged `assumption`, the materiality gate is cite-or-abort from
+the cluster's own claims (no citable path → no bet, theme stays `brewing`),
+the interactive checkpoints are skipped and recorded as skipped in the
+first status update, and `advance_stage` / evidence attestation /
+`upsert_taxonomy` are off-limits entirely.
+
 ## Step 1 — Sketch capture
 
 **Purpose:** get the whole canvas + thesis on the page in minutes, not hours.
@@ -336,6 +348,9 @@ idea ──bet-idea──▶ Idea-stage bet: full canvas + thesis (assumption/op
   operationalized against `upsert_assumption`.
 - `references/stress-test-rubric.md` — our 7-dimension rubric, anchored to
   the engine's evidence tags and experiment kinds.
+- `references/autonomous-mode.md` — the headless entry contract for
+  unattended agents (weekly roadshow clustering): cite-or-abort
+  materiality, skipped-and-recorded checkpoints, hard limits.
 - `references/leanspark-stress-test-notes.md`,
   `references/customer-interview-playbook-notes.md` — the Phase 1 source
   notes these three references are built from.
@@ -362,3 +377,4 @@ statements, scores) so the human can enter them by hand, and point at
 | "No token, I'll skip the write and keep going quietly." | Print what would have been written. Silent skips lose the human's own idea. |
 | "This is obviously a bet, skipping the materiality gate." | The gate exists because the SLT asked what qualifies. Ask both legs out loud — a great idea below both bars is LOP work, and saying so is the skill working. |
 | "The vector is obvious from the sketch, I'll just set it." | Propose it, but the owner confirms — the vector files the bet in every portfolio review. |
+| "Running unattended, and the cluster is clearly material — I'll estimate the $ path." | Cite-or-abort. No citable path in the claims → no bet, theme stays `brewing`. A junk bet costs more than an abort. |

@@ -52,7 +52,11 @@ Per roadshow meeting, once its report page exists:
 log_evidence(
   kind: "roadshow",
   title: "<school> roadshow meeting",
-  link: "<roadshow.nsls.org report page URL>",
+  link: "<Fathom ?t= timestamp URL — preferred; roadshow.nsls.org report page acceptable>",
+  // Prefer the recording timestamp: the automated pipeline caps rows without
+  // a recording link at "interest" because report-page links are
+  // self-referential provenance. A human grading FROM the recording may still
+  // use the report page, but the timestamp link is the stronger citation.
   data: { problem_confirmed: … },
   signal_strength: <graded by the ladder from the recording — never from the summary's politeness>,
   entity_type/entity_id,
