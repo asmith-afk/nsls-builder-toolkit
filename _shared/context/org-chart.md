@@ -1,5 +1,5 @@
 # NSLS Org Chart
-_Last synced: 2026-07-20_
+_Last synced: 2026-07-27_
 
 ## Business Intelligence
 
@@ -16,6 +16,7 @@ _Last synced: 2026-07-20_
 | Alexis Scott | Chapter Success Manager (Gold) | James Corriveau | ascott@nsls.org | U08ABVDPWE5 |
 | Allyson Trachtenberg | Strategic Chapter Manager | Marissa Curry | atrachtenberg@nsls.org | U0ANJTQD81L |
 | Alyssa Placeres | Chapter Success Manager (Gold) | James Corriveau | aplaceres@nsls.org | U07TSQZ4THT |
+| Amy Aguirre | Strategic Chapter Manager | Marissa Curry | aaguirre@nsls.org |  |
 | Arianne Stinson | Chapter Success Manager (Silver) | James Corriveau | astinson@nsls.org | U0393VBME00 |
 | Ashleigh Smith | Vice President, Client Services | Gary Tuerack | asmith@nsls.org | UEWBC2R08 |
 | Brielle Jones | Chapter Success Manager (Silver) | James Corriveau | bjones@nsls.org | U091ZV57M29 |
@@ -151,7 +152,7 @@ _Last synced: 2026-07-20_
 | Davo Wood | AI Support | Kevin Prentiss | davowood@nsls.org | U0B2B0L7858 |
 | Jana Amsellem | AI Product Architect | Kevin Prentiss | rakasha@nsls.org | U070WE56UU9 |
 | Lauren Prentiss | Senior Product Manager | Chelsea Byers | lprentiss@nsls.org | U08RN7X685A |
-| Trina Limpert | Product Manager | Kevin Prentiss | tlimpert@nsls.org | U0AJ5H67WET |
+| Trina Limpert | Contractor | Kevin Prentiss | tlimpert@nsls.org | U0AJ5H67WET |
 | Tyler Lagaly | Senior Product Designer | Kevin Prentiss | tlagaly@nsls.org | U09CYKGQZB2 |
 
 ## Program Development
@@ -187,7 +188,7 @@ _Last synced: 2026-07-20_
 |------|-------|---------|-------|-------|
 | Adam Carpenter |  |  |  |  |
 | Adam Munns |  |  | hello@munnsmedia.com | U0AM0JG42F6 |
-| Bruno Drouin |  |  | bdrouin@nsls.org | U097SSUQB6J |
+| Bruno Drouin |  | Michael O'Brien | bdrouin@nsls.org | U097SSUQB6J |
 | Collin Wood |  |  | cwood@nsls.org | U08RLLMFJTU |
 | David Weber  |  |  | dweber@nsls.org | U086Y4L1ZED |
 | Elizabeth Garretson |  |  | egarretson@nsls.org | U07SRF50VGD |

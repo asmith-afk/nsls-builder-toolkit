@@ -93,6 +93,7 @@
     "department": "Client Services",
     "manages": [
       "Allyson Trachtenberg",
+      "Amy Aguirre",
       "Jakita Cofer",
       "Karissa Tedesco",
       "Liliana Gonzalez",
@@ -101,6 +102,15 @@
       "Olivia Orend",
       "Zoe Wallis"
     ]
+  },
+  {
+    "name": "Amy Aguirre",
+    "title": "Strategic Chapter Manager",
+    "manager": "Marissa Curry",
+    "email": "aaguirre@nsls.org",
+    "slack": "",
+    "department": "Client Services",
+    "manages": []
   },
   {
     "name": "Alexis Scott",
@@ -252,7 +262,7 @@
   },
   {
     "name": "Trina Limpert",
-    "title": "Product Manager",
+    "title": "Contractor",
     "manager": "Kevin Prentiss",
     "email": "tlimpert@nsls.org",
     "slack": "U0AJ5H67WET",
@@ -351,6 +361,7 @@
     "department": "Marketing",
     "manages": [
       "Andrew Hesse",
+      "Bruno Drouin",
       "Gabriela R Cordeiro",
       "Joshua Hrala",
       "Michael Adamian",
@@ -445,7 +456,7 @@
   {
     "name": "Bruno Drouin",
     "title": "",
-    "manager": "",
+    "manager": "Michael O'Brien",
     "email": "bdrouin@nsls.org",
     "slack": "U097SSUQB6J",
     "department": "Unknown",
