@@ -3,6 +3,8 @@ __pycache__/
 *.pyc
 *.pyo
 
-# Runtime hook markers written into the plugin dir (see hooks/session-ping.*)
+# Runtime state written into an installed clone (never committed).
+# Hook markers: see hooks/session-ping.*
 .last-ping-failed
 .pending-announcements
+.install-identity

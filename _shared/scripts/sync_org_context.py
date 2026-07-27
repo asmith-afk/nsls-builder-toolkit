@@ -337,10 +337,14 @@ def update_vault():
         print("Error: OBSIDIAN_VAULT_PATH not set and not found in personal toolkit .env", file=sys.stderr)
         sys.exit(1)
 
+    # §3.3: create the write target if absent instead of erroring out. On a
+    # Light-tier vault 30-people/ doesn't exist yet, and populating it is exactly
+    # this sync's job — a missing dir is not an error (mirrors the companion's
+    # ensure-vault-structure precedent). Genuine errors below still exit non-zero.
     people_dir = Path(vault_path) / "30-people"
     if not people_dir.exists():
-        print(f"Error: {people_dir} does not exist", file=sys.stderr)
-        sys.exit(1)
+        print(f"  30-people/ not found — creating {people_dir}", file=sys.stderr)
+    people_dir.mkdir(parents=True, exist_ok=True)
 
     json_file = CONTEXT_DIR / "org-chart.json"
     if not json_file.exists():

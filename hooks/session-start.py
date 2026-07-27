@@ -28,7 +28,7 @@ CONFIG_DIR = Path(os.environ.get("CLAUDE_CONFIG_DIR") or (HOME / ".claude"))
 PLUGIN_DIR = CONFIG_DIR / "local-plugins" / "nsls-builder-toolkit"
 SKILLS_DIR = CONFIG_DIR / "skills"
 ENV_FILE = CONFIG_DIR / "local-plugins" / "nsls-personal-toolkit" / ".env"
-PROXY_URL = "https://web-production-6281e.up.railway.app"
+PROXY_URL = os.environ.get("NSLS_TRACKER_URL", "https://web-production-6281e.up.railway.app")
 
 # When a session-ping can't be delivered (timeout / network / proxy down), we
 # stash the payload here and replay it at the start of the next session so a

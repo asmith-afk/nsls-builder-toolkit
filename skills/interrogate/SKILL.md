@@ -146,15 +146,25 @@ After the user confirms, produce all three outputs.
 
 ### 4A: Obsidian Project Home Note
 
-Check if the user has an Obsidian vault:
+Resolve the vault cross-platform — prefer `$OBSIDIAN_VAULT_PATH` (the same var
+the rest of this skill and the personal toolkit already use), and fall back to
+the macOS iCloud path. **Don't skip silently on Windows**: the old macOS-only
+`-d` check always failed there, so Obsidian output was dropped with no message.
+
 ```bash
-[ -d "$HOME/Library/Mobile Documents/iCloud~md~obsidian/Documents" ] && echo "obsidian" || echo "no-obsidian"
+VAULT="${OBSIDIAN_VAULT_PATH:-$HOME/Library/Mobile Documents/iCloud~md~obsidian/Documents/KP}"
+if [ -d "$VAULT" ]; then
+  echo "obsidian: $VAULT"
+else
+  echo "no Obsidian vault found — set OBSIDIAN_VAULT_PATH (or create the vault) to get the project note; skipping it for now"
+fi
 ```
 
-If yes, create the project home note. Use the template from the `/log` skill:
+If a vault is found, create the project home note there. Use the template from
+the `/log` skill:
 
 ```
-~/Library/Mobile Documents/iCloud~md~obsidian/Documents/KP/20-projects/[slug]/[slug].md
+$VAULT/20-projects/[slug]/[slug].md
 ```
 
 **Frontmatter fields** (map from interrogation answers):

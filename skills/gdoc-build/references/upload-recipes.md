@@ -2,6 +2,23 @@
 
 Copy-paste shell snippets for the upload flow. Tested 2026-05-01 on the builder-toolkit onboarding doc rebuild.
 
+> **On Windows** the snippets below are macOS/Linux-shaped. Translate: `cd ~` →
+> `cd $env:USERPROFILE`; `~/foo.docx` → `$env:USERPROFILE\foo.docx`; `tail -10` →
+> `Select-Object -Last 10`. Use `$env:VAR`, **not** `%VAR%` — CMD-style `%VAR%` is
+> passed through literally by PowerShell, so `gws --upload` gets a path containing
+> the text `%USERPROFILE%` and can't find your file. The `gws --upload` cwd restriction is the same on
+> every platform — build the `.docx` in your home dir and run `gws` from there.
+>
+> ⚠️ **Don't pipe `gws` straight into `Select-Object`.** PowerShell throws away a
+> native command's exit code across a pipe, so the `set -o pipefail` rule below has
+> no Windows equivalent — a failed upload (403, bad scope) yields a clean-looking
+> pipeline. Assign, check, then trim:
+> ```powershell
+> $out = gws drive files create ... --format json
+> if ($LASTEXITCODE -ne 0) { throw "gws failed (exit $LASTEXITCODE)" }
+> $out | Select-Object -Last 10
+> ```
+
 ## Upload `.docx` as a new Google Doc
 
 The `.docx` MUST be in `~` (or the cwd you're running `gws` from). `gws` rejects paths outside cwd.

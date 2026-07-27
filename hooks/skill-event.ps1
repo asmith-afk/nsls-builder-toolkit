@@ -1,4 +1,4 @@
-# skill-event.ps1 — PreToolUse(Skill) hook for Windows.
+# skill-event.ps1 - PreToolUse(Skill) hook for Windows.
 # Windows counterpart to hooks/skill-event.sh (which Windows can't run). Reads
 # the Claude Code hook JSON from stdin, extracts tool_input.skill, and fires a
 # non-blocking POST to the tracker /skill-event. Never blocks tool execution.
@@ -9,7 +9,7 @@ $skill = $null
 try { $skill = ($raw | ConvertFrom-Json).tool_input.skill } catch {}
 if ([string]::IsNullOrWhiteSpace($skill)) { exit 0 }
 
-# Builder email — same precedence as session-ping.ps1 / session-start.py.
+# Builder email - same precedence as session-ping.ps1 / session-start.py.
 $email = ''
 $envFile = Join-Path $env:USERPROFILE '.claude\local-plugins\nsls-personal-toolkit\.env'
 if (Test-Path $envFile) {

@@ -34,13 +34,36 @@ Full reference: `references/gws-reference.md` (relative to this skill)
 
 ## Prerequisites — Auto-Install
 
-If `gws` is not on the PATH, install it:
+If `gws` is not on the PATH, install it.
 
+**macOS / Linux:**
 ```bash
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/googleworkspace/cli/releases/latest/download/google-workspace-cli-installer.sh | sh
 ```
 
+**Windows** (the shell installer above is bash-only) — download the release zip,
+extract `gws.exe` to `%LOCALAPPDATA%\Programs\gws`, add it to PATH:
+```powershell
+$dir = "$env:LOCALAPPDATA\Programs\gws"
+New-Item -ItemType Directory -Force $dir | Out-Null
+$zip = "$env:TEMP\gws-win.zip"
+Invoke-WebRequest -UseBasicParsing `
+  -Uri "https://github.com/googleworkspace/cli/releases/latest/download/google-workspace-cli-x86_64-pc-windows-msvc.zip" `
+  -OutFile $zip
+Expand-Archive -Force $zip "$env:TEMP\gws-extract"
+$exe = (Get-ChildItem "$env:TEMP\gws-extract" -Recurse -Filter gws.exe | Select-Object -First 1).FullName
+Copy-Item $exe "$dir\gws.exe" -Force
+# Add to user PATH once (idempotent: no duplicate on re-run, no leading ';' when empty).
+$u = [Environment]::GetEnvironmentVariable('Path','User')
+if (($u -split ';') -notcontains $dir) { [Environment]::SetEnvironmentVariable('Path', (@($u, $dir) | Where-Object { $_ }) -join ';', 'User') }
+```
+
 This installs the latest release from https://github.com/googleworkspace/cli.
+
+> ⚠️ **Windows needs the MS Visual C++ x64 runtime.** Without it `gws.exe` exits with
+> `0xC0000135` and **prints nothing at all** — near-impossible to debug blind. Install it
+> from https://aka.ms/vs/17/release/vc_redist.x64.exe (double-click → Yes → Install).
+> `install.ps1` stages this in your Downloads folder and prints the step.
 
 After install, authenticate:
 

@@ -1,4 +1,4 @@
-# session-start.ps1 — Windows SessionStart hook for the NSLS toolkits.
+# session-start.ps1 - Windows SessionStart hook for the NSLS toolkits.
 # Windows counterpart to session-start.py (which needs python3 that Windows
 # lacks). Does the same three things:
 #   1. git pull both toolkits to get latest
@@ -68,7 +68,11 @@ description: >-
 
 Read and follow the full skill at ``$pointerPath``.
 "@
-        Set-Content -Path $destMd -Value $pointer -Encoding UTF8
+        # BOM-less write (matches install.ps1): PS 5.1 `Set-Content -Encoding
+        # utf8` prepends a BOM. Harmless-looking on a pointer, but this hook runs
+        # every session, so a BOM here would silently re-introduce one on files
+        # install.ps1 just wrote clean.
+        [System.IO.File]::WriteAllText($destMd, ($pointer + "`r`n"), (New-Object System.Text.UTF8Encoding $false))
         $count++
     }
     return $count

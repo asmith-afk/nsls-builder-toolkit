@@ -36,6 +36,41 @@ The fastest path for a builder asking for a Google Doc:
 6. **Return the URL.** `https://docs.google.com/document/d/<id>/edit` — give the user that link.
 7. **Clean up local artifacts.** `rm ~/build_<short-name>.py ~/<short-name>.docx`
 
+> **On Windows** — the Quick Start commands above are macOS/Linux-shaped. Translations:
+> - **Write env vars as `$env:VAR`, never `%VAR%`.** PowerShell passes CMD-style
+>   `%VAR%` through literally, so a path built that way arrives at `gws`/`Copy-Item`
+>   containing the text `%USERPROFILE%` and resolves to nothing. `%VAR%` appears below
+>   only when naming a location in prose; every command uses `$env:VAR`.
+> - **Python:** use the full path `$env:LOCALAPPDATA\Programs\Python\Python312\python.exe`,
+>   never `python`/`python3.12`. Stock Win11 `python`/`python3` are Microsoft Store stubs
+>   that print "Python was not found" and **exit 0** — a naive check passes while nothing
+>   runs. `install.ps1` installs Python 3.12 to that path *and* `python-docx` into it, so
+>   on a toolkit machine you usually don't need the `--target /tmp/pptx_deps` install at all.
+> - **Temp deps dir:** if you do need a target install, replace `/tmp/pptx_deps` with a
+>   writable dir such as `%TEMP%\pptx_deps` (`$env:TEMP\pptx_deps`), and set `PYTHONPATH`
+>   to it.
+> - **`gws --upload` cwd restriction still applies:** build the `.docx` in your home dir
+>   (`%USERPROFILE%`) and run `gws` from there — `--upload` rejects paths outside the cwd.
+> - Home paths: `~/build_<name>.py` → `$env:USERPROFILE\build_<name>.py`.
+>
+> On a toolkit Windows machine the whole flow is:
+> ```powershell
+> $py = "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe"
+> Copy-Item templates\build_doc.py "$env:USERPROFILE\build_mydoc.py"
+> cd $env:USERPROFILE
+> # EDIT build_mydoc.py FIRST: the template ships output_path = '/Users/k/your_doc_name.docx'
+> # (a macOS path). Set it to "$env:USERPROFILE\mydoc.docx" and customize the content
+> # sections. Run it unedited and it dies with FileNotFoundError on the missing /Users/k.
+> & $py build_mydoc.py           # produces mydoc.docx in the home dir
+> $gwsOut = gws drive files create --json '{"name":"My Doc","mimeType":"application/vnd.google-apps.document"}' --upload mydoc.docx --upload-content-type "application/vnd.openxmlformats-officedocument.wordprocessingml.document" --format json
+> if ($LASTEXITCODE -ne 0) { throw "gws upload failed (exit $LASTEXITCODE)" }
+> $gwsOut | Select-Object -Last 10
+> ```
+>
+> The `$LASTEXITCODE` check is the PowerShell equivalent of the `set -o pipefail` rule
+> above: piping `gws` straight into `Select-Object` swallows the exit code, so a 403 on
+> upload produces a clean-looking pipeline and you proceed as if the doc exists.
+
 ## NSLS Brand Constants
 
 Don't invent colors. Use these.

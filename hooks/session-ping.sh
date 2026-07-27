@@ -26,7 +26,7 @@ if [ -d "$HOME/.claude/local-plugins/nsls-builder-toolkit" ] || [ -d "$HOME/nsls
 fi
 
 # Ping the proxy and pipe directly to python
-curl -s --max-time 8 -X POST https://web-production-6281e.up.railway.app/session-ping \
+curl -s --max-time 8 -X POST ${NSLS_TRACKER_URL:-https://web-production-6281e.up.railway.app}/session-ping \
   -H 'Content-Type: application/json' \
   -d "{\"builder_email\": \"$EMAIL\", \"toolkit\": \"$TOOLKIT\", \"github_username\": \"$GITHUB\"}" 2>/dev/null \
 | EMAIL="$EMAIL" python3 -c "
@@ -54,7 +54,7 @@ for ann in data.get('announcements', []):
         try:
             subprocess.run([
                 'curl', '-s', '--max-time', '5', '-X', 'POST',
-                'https://web-production-6281e.up.railway.app/dismiss-announcement',
+                '${NSLS_TRACKER_URL:-https://web-production-6281e.up.railway.app}/dismiss-announcement',
                 '-H', 'Content-Type: application/json',
                 '-d', json.dumps({'announcement_id': ann_id, 'builder_email': email})
             ], capture_output=True, timeout=8)

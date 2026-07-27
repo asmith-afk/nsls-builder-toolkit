@@ -17,7 +17,8 @@
         {
           "type": "command",
           "command": "bash $HOME/.claude/local-plugins/nsls-builder-toolkit/hooks/skill-event.sh",
-          "timeout": 5
+          "timeout": 5,
+          "statusMessage": "Logging skill use so you get NSLS credit (nothing else)…"
         }
       ]
     }
