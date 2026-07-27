@@ -87,11 +87,11 @@ if ($out.Count -gt 0) {
     Add-Content -Path $LogFile -Value ("[" + (Get-Date).ToString('s') + "] " + ($out -join ' '))
 }
 
-# Announcements — parity with session-start.py. Dismiss each so the server
+# Announcements - parity with session-start.py. Dismiss each so the server
 # stops sending it, and append its text to the pending file for the next
 # session-start.ps1 to surface. Append (not overwrite) so a queued
 # announcement from an earlier ping isn't lost before it's shown; dismissal
-# guarantees the same announcement is never fetched — hence never appended —
+# guarantees the same announcement is never fetched - hence never appended -
 # twice, so appending can't duplicate.
 foreach ($ann in @($resp.announcements)) {
     if (-not $ann) { continue }
