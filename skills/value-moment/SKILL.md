@@ -159,6 +159,9 @@ number, or cut the candidate.
   the careers this major commonly leads to and their pay. Use only the provided
   figures; if one is missing, describe the trend qualitatively and invent no
   number."*  plus `grounding: { need: ["careers","salary"], from: { major: "major" } }`.
+  (That `from` assumes a standalone major substep. When major is collected inside the
+  `education` entry form — as Welcome does — address the subfield: `from: { major:
+  "education.major" }`. See "Addressing the major" below.)
 - **example_output:** *"A marketing degree opens a range of roles — Marketing
   Managers (national median $161,030), Sales Managers ($138,060), and Market
   Research Analysts ($76,950), among others…"* — real figures from the lookup.
@@ -181,9 +184,50 @@ The data-fetch companion this sub-skill named now exists:
 Coverage today: the **full CIP catalog (~2,143 majors)** with **national + per-state
 median salary** (`--state "Ohio"`), **projected % growth** (BLS EP 2024–34), and
 **popularity-ranked** matching (IPEDS degrees, so "Nursing" → Registered Nursing).
-Free-text major names resolve via the matcher. Fast-follow: metro-level wages,
-richer aliasing. For a genuinely uncovered major or a missing figure, stay
-model-reasoned — never fabricate.
+Fast-follow: metro-level wages, richer aliasing. For a genuinely uncovered major or
+a missing figure, stay model-reasoned — never fabricate.
+
+### The match is gated on confidence — an ambiguous major grounds to NOTHING
+
+Free-text major names resolve via the matcher, but **not every term resolves**, and
+that is deliberate. A loose match produces a confidently wrong figure with a BLS
+citation attached, which is worse than no figure at all.
+
+- **An exact catalogue title always MATCHES — which is not the same as grounding.**
+  All 2,143 titles resolve exactly, so a picklist removes the *matching* risk
+  entirely. It does not remove the *coverage* risk: a title whose CIP has no
+  crosswalked occupation still returns an empty payload (see the ~194 below). So a
+  picklist-fed moment is reliable in the sense that it never grounds against the
+  WRONG major — but you still have to check the specific major returns figures.
+- **A dominant common name grounds** — "Business Administration" → *Business
+  Administration and Management, General.*, "Economics" → *Economics, General.*
+- **An ambiguous name grounds to nothing.** "Communications" matches five unrelated
+  programs (visual design, strategic comms, broadcast tech) with no clear winner, so
+  the runtime returns an empty payload. "Criminal Justice" likewise. The lookup tells
+  you when this happens and lists the alternatives — pick an exact title, or keep the
+  nugget qualitative.
+- **~194 majors have no crosswalked occupations** (mostly "…, Other." catch-all
+  codes). These return an empty payload rather than a placeholder SOC.
+
+The CLI and the runtime run the **same** matching rules against the **same**
+snapshot, so what the lookup shows you is what a member gets. If the lookup says
+a major is ambiguous, the track cannot ground it — do not author figures around it.
+
+### Addressing the major: `grounding.from`
+
+`from` maps a lookup input to where the answer lives. Supported shapes:
+
+| ref | resolves against |
+|---|---|
+| `"major"` | a substep whose answer is a plain string |
+| `"education.major"` | a subfield of the structured `education` / `work` entry form |
+| `"education.major"` | …an entry **list** — the first entry with a non-empty value wins |
+| `"education.major"` | …a JSON-encoded answer of either shape |
+
+**Address the subfield, not the substep.** `from: { major: "education" }` does NOT
+work: the entry form holds several fields, and the resolver refuses to guess which
+one is the major rather than grounding on an arbitrary value. (It used to guess, and
+picked School Name — so a member at MIT grounded against *Gunsmithing/Gunsmith.*)
 
 ## How it's scored
 
