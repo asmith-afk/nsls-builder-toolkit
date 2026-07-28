@@ -451,7 +451,23 @@ function wheelSvg(activeIndex, activeSecondary) {
     `<svg width="300" height="300" style="position:absolute;top:0;left:0">${wedges}</svg>${labels}</div>`;
 }
 
-function wheelWithCheckboxesField(sub, slug) {
+// showCheckboxes lets the standalone WheelInput (fieldType "wheel" — the
+// slider half of the combined pair, see SubStepRenderer.tsx) reuse this same
+// renderer without its reason-checkbox block. Default true preserves
+// dropdown-with-checkboxes exactly (byte-identical — existing tests cover
+// it). Passing false is stronger than just omitting checkboxOptions: a wheel
+// substep is never supposed to show reason checkboxes, so this forces that
+// even if the data happens to carry a stray checkboxOptions array.
+// `multi` controls the wrapper's data-multi, which player.js reads as
+// `dataset.multi === "true"` to decide whether a click toggles an option or
+// replaces the current selection. `dropdown-with-checkboxes` is genuinely
+// multi-select; a standalone `wheel` is a single 0-10 rating and must be false,
+// or a member can select 3 AND 7 and both persist.
+//
+// It stays PRESENT-but-false rather than omitted: captureCurrent() locates the
+// grid with `[data-slug][data-multi]`, which matches on attribute presence, so
+// removing it would stop the answer being captured at all.
+function wheelWithCheckboxesField(sub, slug, { showCheckboxes = true, multi = true } = {}) {
   const isClarity = String(sub.title || "").toLowerCase().includes("clarity");
   const isConfidence = String(sub.title || "").toLowerCase().includes("confidence");
   const activeIndex = isClarity ? 2 : isConfidence ? 3 : 2;
@@ -468,12 +484,54 @@ function wheelWithCheckboxesField(sub, slug) {
   const label = sub.textFieldLabel
     ? `<div><p class="text-lg font-medium text-center">${esc(sub.textFieldLabel)}</p></div>`
     : "";
-  const checks = (sub.checkboxOptions || []).map((o, i) =>
-    checkboxRow(String(o), (sub.dropdownOptions || []).length + i)).join("");
+  const checks = showCheckboxes
+    ? (sub.checkboxOptions || []).map((o, i) => checkboxRow(String(o), (sub.dropdownOptions || []).length + i)).join("")
+    : "";
   const checksBlock = checks
     ? `<div class="space-y-2 grid grid-cols-1 gap-0.5 max-w-md mx-auto mb-8">${checks}</div>`
     : "";
-  return `<div class="space-y-4 tp-options" data-slug="${slug}" data-multi="true">${wheelSvg(activeIndex, secondary)}${scaleBlock}${label}${checksBlock}</div>`;
+  return `<div class="space-y-4 tp-options" data-slug="${slug}" data-multi="${multi}">${wheelSvg(activeIndex, secondary)}${scaleBlock}${label}${checksBlock}</div>`;
+}
+
+// MultiSelectListInput.tsx — checkbox rows sourced from checkboxOptions (the
+// standalone half of the combined pair, split out so the wheel and the
+// checkbox list can live on separate substeps — see wheelWithCheckboxesField
+// above and SubStepRenderer.tsx). freeResponseEnabled adds a write-in row.
+// The real component stores a JSON blob ({checkboxes, freeResponseSelected,
+// freeResponse}) for the free-text answer; the static player's capture only
+// reads aria-selected values off [data-option], so the free-text VALUE isn't
+// captured here — documented divergence, same class as the AI-generate
+// placeholder. The row still renders so a focus-group participant sees the
+// real affordance instead of it silently vanishing.
+function multiSelectListField(sub, slug) {
+  const opts = sub.checkboxOptions || [];
+  const rows = opts.map((o, i) => checkboxRow(String(o), i)).join("");
+  // The "Other" checkbox toggle is captured via data-option like any other row
+  // (its value is just the literal label string), but the typed text in the
+  // input below it was never captured at all — no data-input/data-slug, so a
+  // participant's written-in answer silently vanished. Reuse the entry-form
+  // contract (data-entry-form="<slug>" on the container + data-subfield on the
+  // field, see entryFormField/#48) rather than inventing a new capture shape:
+  // captureCurrent() already scans for exactly this and stores it as
+  // "<slug>.other", alongside the checkbox selections under the bare "<slug>"
+  // key. Only added when the row itself exists — no entry-form container
+  // when there's no subfield to capture.
+  const otherRow = sub.freeResponseEnabled
+    ? checkboxRow(sub.freeResponseLabel || "Other (please specify)", opts.length) +
+      `<div class="px-2.5 pt-1"><input type="text" class="step-input w-full" placeholder="Type your response..." data-subfield="other" aria-label="${esc(sub.freeResponseLabel || "Other response")}"></div>`
+    : "";
+  const entryForm = sub.freeResponseEnabled ? ` data-entry-form="${slug}"` : "";
+  return `<div class="tp-options space-y-3" data-slug="${slug}" data-multi="true"${entryForm}>${rows}${otherRow}</div>`;
+}
+
+// resume-upload — no ignite-next component exists for this fieldType yet;
+// it ships ahead of the real upload UI. A static prototype can't host a
+// real file upload (no backend to receive it), so this is a deliberate stub:
+// a plain file input + label so a focus-group participant understands what
+// the screen asks for, with no JS behind it (see task brief for issue #51).
+function resumeUploadField(sub) {
+  const label = sub.textFieldLabel || "Upload your resume";
+  return `<div class="space-y-2"><label class="block text-sm font-medium text-dark">${esc(label)}</label><input type="file" class="step-input w-full" accept=".pdf,.doc,.docx"></div>`;
 }
 
 // Education / Work entry forms — SubStepRenderer EducationInput/WorkInput.
@@ -557,6 +615,9 @@ function renderCollect(sub) {
     case "radio": input = radioField(sub, slug); break;
     case "image-multiselect": input = imageMultiselectField(sub, slug); break;
     case "dropdown-with-checkboxes": input = wheelWithCheckboxesField(sub, slug); break;
+    case "wheel": input = wheelWithCheckboxesField(sub, slug, { showCheckboxes: false, multi: false }); break;
+    case "multi-select-list": input = multiSelectListField(sub, slug); break;
+    case "resume-upload": input = resumeUploadField(sub); break;
     case "education": input = entryFormField(sub, slug, "education"); break;
     case "work": input = entryFormField(sub, slug, "work"); break;
     case "dream-job-select": input = dreamJobSelectField(sub, slug); break;
