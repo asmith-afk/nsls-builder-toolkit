@@ -10,6 +10,32 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_PATH = join(HERE, "..", "..", "data", "track-capabilities.json");
 const DAY_MS = 86_400_000;
 
+/**
+ * An array of strings — ELEMENTS checked, not just the container. `Array.isArray`
+ * alone let `declared: [42]` through as a valid manifest; consumers read these as
+ * strings and compare them against field-type names, so a number matches nothing and
+ * the type silently reads as unsupported. An empty array stays valid.
+ */
+const isStringArray = (v) => Array.isArray(v) && v.every((e) => typeof e === "string");
+
+/** `fieldTypes.aiContext` on disk: a legacy string[] OR the object form. Both valid. */
+const isValidAiContext = (v) => {
+  if (isStringArray(v)) return true; // legacy flat form
+  if (!v || typeof v !== "object" || Array.isArray(v)) return false;
+  return isStringArray(v.customFormatting) && typeof v.genericFallbackForUnlistedTypes === "boolean";
+};
+
+/**
+ * Normalise either shape to the object form. A legacy flat list says which types have
+ * custom formatting and says NOTHING about the fallback, so it reports false — "not
+ * asserted" rather than "asserted absent".
+ */
+export function aiContextOf(raw) {
+  return Array.isArray(raw)
+    ? { customFormatting: raw, genericFallbackForUnlistedTypes: false }
+    : { customFormatting: raw.customFormatting, genericFallbackForUnlistedTypes: raw.genericFallbackForUnlistedTypes };
+}
+
 export function loadCapabilities({ path = DEFAULT_PATH, maxAgeDays = 30, now = Date.now() } = {}) {
   const warnings = [];
   if (!existsSync(path)) {
@@ -38,14 +64,26 @@ export function loadCapabilities({ path = DEFAULT_PATH, maxAgeDays = 30, now = D
   const badField = (() => {
     const ft = parsed?.fieldTypes;
     if (!ft || typeof ft !== "object") return "fieldTypes";
-    for (const k of ["declared", "rendered", "aiContext"]) {
-      if (!Array.isArray(ft[k])) return `fieldTypes.${k}`;
+    for (const k of ["declared", "rendered"]) {
+      if (!isStringArray(ft[k])) return `fieldTypes.${k}`;
     }
+    // aiContext accepts TWO shapes on purpose. The original flat string[] read as
+    // "the field types the AI sees", but aiContextBuilder's switch has a `default`
+    // branch, so every other included answer ALSO reaches the prompt with generic
+    // formatting — so ignite-next is changing it to
+    //   { customFormatting: string[], genericFallbackForUnlistedTypes: boolean }.
+    // Rejecting that shape would degrade the manifest to null the moment it ships,
+    // and because that only WARNS, this validator would silently fall back to its
+    // stale hardcoded FALLBACK_FIELD_TYPES list while appearing to work. Accept both.
+    if (!isValidAiContext(ft.aiContext)) return "fieldTypes.aiContext";
     for (const k of ["substepFields", "responseModel"]) {
-      if (!Array.isArray(parsed[k])) return k;
+      if (!isStringArray(parsed[k])) return k;
     }
     const rc = parsed.runtimeCapabilities;
     if (!rc || typeof rc !== "object" || Array.isArray(rc)) return "runtimeCapabilities";
+    // Values are promised booleans. A string like "yes" is truthy everywhere it is
+    // read, so an unwired capability could report as wired — the worst direction.
+    if (!Object.values(rc).every((x) => typeof x === "boolean")) return "runtimeCapabilities";
     return null;
   })();
   if (badField) {
