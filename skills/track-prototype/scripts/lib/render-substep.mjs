@@ -602,6 +602,33 @@ function dreamJobRequirementsField(sub) {
   return `<div class="space-y-4">${banner}<div class="space-y-3">${items}</div></div>`;
 }
 
+// SelectWithCustomTimeInput.tsx — a single-choice list where one authored
+// option is literally the string "Custom time" (the Self-Leadership
+// morning-nudge-timing / evening-nudge-timing substeps encode it in `options`
+// — see tracks-export.json). The real component is a Radix <Select> that
+// conditionally reveals a native time <input> via React state once "Custom
+// time" is picked. The static player has no such runtime, so — same
+// documented-divergence class as other faithful-chrome fields — the time
+// input is always rendered below the option list rather than toggled, and
+// both are captured through the SAME contracts every sibling
+// option-list/entry-form renderer already uses:
+//   - data-slug + data-multi="false" + data-option (radioField's shape) for
+//     the picked option, so player.js's existing generic [data-option] click
+//     handler and captureCurrent() grid-read work with zero player.js changes.
+//   - data-entry-form + data-subfield="customTime" (the entry-form shape) for
+//     the typed time, so captureCurrent() stores it as "<slug>.customTime"
+//     alongside the chosen option under the bare "<slug>" key.
+// Fixes issue #51's 4th instance: this fieldType previously had no case in
+// renderCollect and fell through to the plain "Type your answer" text box.
+function selectWithCustomTimeField(sub, slug) {
+  const rows = (sub.options || []).map((o, i) => {
+    const t = optionText(o, i);
+    return `<button type="button" class="tp-radio-row flex w-full items-center gap-3 cursor-pointer bg-transparent border-0 p-0 text-left" data-option data-value="${esc(t)}" data-index="${i}"><span class="tp-radio w-5 h-5 rounded-full border-2 border-gray-300 shrink-0"></span><span class="text-dark">${esc(t)}</span></button>`;
+  }).join("");
+  const timeRow = `<div class="px-2.5 pt-1"><input type="time" class="step-input w-full" data-subfield="customTime" aria-label="Custom time"></div>`;
+  return `<div class="tp-options space-y-3" data-slug="${slug}" data-multi="false" data-entry-form="${slug}">${rows}${timeRow}</div>`;
+}
+
 // --- Collect assembly --------------------------------------------------------
 
 function renderCollect(sub) {
@@ -622,6 +649,7 @@ function renderCollect(sub) {
     case "work": input = entryFormField(sub, slug, "work"); break;
     case "dream-job-select": input = dreamJobSelectField(sub, slug); break;
     case "dream-job-requirements": input = dreamJobRequirementsField(sub); break;
+    case "select-with-custom-time": input = selectWithCustomTimeField(sub, slug); break;
     default: input = textField(sub, slug); // text / textarea / unknown
   }
 
