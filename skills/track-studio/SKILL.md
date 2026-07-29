@@ -28,7 +28,8 @@ tracks; this skill is the *doer*.)
 |---|---|---|
 | **Add an idea** | `track-brief` | → Backlog |
 | **Build a prototype** | `track-design` (calls `value-moment`, then `academic-outcomes` + `prompt-pack`) | Backlog → In Development |
-| **Refine for production** | `track-prototype` (walk → focus-group → score → gate) | In Development → Live |
+| **Refine for production** | `track-prototype` (walk → focus-group → score → gate) | stays In Development |
+| **Take a track live / hand off to engineering** | `track-publish` (integrity gate → ignite-next issues → verified go-live) | In Development → Live |
 | **Optimize a live track** | `track-optimize` *(not built yet — see below)* | Live → Optimization → Live |
 
 > **`track-optimize` is forthcoming.** Until it ships, route an optimize request
@@ -103,4 +104,4 @@ actually fits — don't force the mismatched hand-off.
 
 ## Reference index
 - `scripts/list_studio_tracks.mjs` — list Studio tracks by stage (reads the base the dashboard uses).
-- Hand-off targets: `track-brief`, `track-design`, `value-moment`, `academic-outcomes`, `prompt-pack`, `track-prototype`, `track-optimize`.
+- Hand-off targets: `track-brief`, `track-design`, `value-moment`, `academic-outcomes`, `prompt-pack`, `track-prototype`, `track-publish`, `track-optimize`.

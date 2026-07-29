@@ -84,14 +84,19 @@ Gate: a working Phase-1 build. **Turn live AI ON** for scoring — run the panel
 
 4. **Handoff:** the Google Doc link + the scorecard + the checks-met total.
 
-5. **Ship = flip the board.** When a run clears the ship-bar AND the version actually ships to members (merged + deployed in ignite-next), advance the Studio stage so the board stays truthful:
-   Prefer the Studio MCP tool `set_stage` with `live_version` (`society-studio`
-   server); script fallback:
-   ```
-   AIRTABLE_API_KEY=… AIRTABLE_BASE_ID=appzDWu6GowvnACtv \
-     node scripts/set-stage.mjs <slug> live --live-version <contentHash>
-   ```
-   Sets `stage=live`, `is_live`, `current_version` (the hash `PostHogActuals.live_track_version` joins on for calibration). **Gate pass alone is not Live** — run this at the actual ship moment; if shipping happens later or by someone else, say so in the handoff and leave the stage as-is until it ships.
+5. **Ship: hand off to `track-publish`.** A cleared ship-bar is the input to publishing, not
+   the act of publishing. Route to the **`track-publish`** skill, which runs the go-live gate:
+   it re-checks integrity, files what ignite-next needs as issues for Red, and — after Red
+   deploys — records the track live only once it has proved the deployed content hash-matches
+   the approved version.
+
+   **Do not set the stage yourself.** `set_stage` refuses `stage=live` and so does
+   `scripts/set-stage.mjs`; `go_live` is the only path, and it derives `current_version` (the
+   hash `PostHogActuals.live_track_version` joins on for calibration) plus
+   `current_version_id` from the one version it verified, so they cannot disagree.
+
+   **Gate pass alone is not Live.** Nothing member-facing ships from a button press; the
+   ignite-next deploy is the ship moment.
 
 ### The iteration loop
 Builder says **"implement the focus-group changes"** → read `recommendations.md`, edit `track.json` per each `fix` rec's `change` (CONTESTED `review` recs go to a human, not auto-applied), **`save_draft` the edited JSON** (note = which recs were applied; pass the previous hash as `parent_hash`), re-run Phase 1 → Phase 2 → a v{N+1} ScoreRun showing the delta. **Scores are a ranking + ship-bar gate, NOT a calibrated prediction** — celebrate green checks; don't over-read the number (synthetic personas overstate adoption).

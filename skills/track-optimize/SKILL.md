@@ -113,19 +113,28 @@ it immediately** (Studio MCP; note = the hypothesis one-liner; `parent_hash` =
 the LIVE version's hash so lineage shows what this candidate is based on).
 If the gate round produces further edits, each edit is re-saved (see
 track-prototype's iteration loop) — **the LATEST save's returned hash** is the
-one the final score and, at ship, `set_stage --live-version` must use; an
-earlier save's hash is stale the moment the content changes. Then preview it in the
+one the final score must use, and the one `track-publish` will verify against what
+is deployed; an earlier save's hash is stale the moment the content changes. Then preview it in the
 demo (build-prototype, with the prompt-context note so the change is legible),
 then hand to **`track-prototype`** to walk → focus-group → score → gate (set
-the Hypotheses row to `in-gate`). On pass, a human ships it — and at that ship
-moment: **tag the version** (write the shipped `content_hash` to the
-Hypotheses row's `version` field, status `shipped`) and flip the board back
-yourself (nothing else writes stage):
-```
-AIRTABLE_API_KEY=… AIRTABLE_BASE_ID=appzDWu6GowvnACtv \
-  node <track-prototype>/scripts/set-stage.mjs <slug> live --live-version <contentHash>
-```
-Do not bypass the gate.
+the Hypotheses row to `in-gate`).
+
+**On gate pass, route immediately to `track-publish`** — before anything is tagged
+as shipped. It runs the handoff first (filing what ignite-next needs as an issue
+for Red), Red builds and deploys, and only then does its `go_live` step verify
+that the deployed content hash-matches the approved version and record the track
+live. Routing after a "ship moment" instead would skip the handoff entirely — the
+handoff has to precede the build, not follow it.
+
+**Then** tag the version: once `go_live` succeeds, write the shipped
+`content_hash` to the Hypotheses row's `version` field with status `shipped`.
+Tagging before that marks a hypothesis shipped on the strength of an intention;
+`go_live` is what establishes that it actually shipped.
+
+Do not flip the stage yourself: `set_stage` and `set-stage.mjs` both refuse
+`live`, because going live now requires proving the deployed content matches an
+approved version. `go_live` writes the stage and both pin fields itself. Do not
+bypass the gate.
 
 ## Guardrails
 

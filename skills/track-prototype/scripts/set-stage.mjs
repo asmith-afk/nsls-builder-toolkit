@@ -3,8 +3,15 @@
 // each skill writes its own transition instead of leaving stage as an unowned
 // manual Airtable edit —
 //   track-design (authoring starts)          → in-development
-//   track-prototype (gate passed + shipped)  → live  (--live-version <content-hash>)
-//   track-optimize (optimization flagged)    → optimization; re-ship → live
+//   track-optimize (optimization flagged)    → optimization
+//
+// `live` is REFUSED here. Going live is a verified step: use the track-publish skill
+// (Studio MCP `go_live`), which proves the deployed content hash-matches an approved,
+// immutable version and that ignite-next can actually render it, then writes
+// current_version AND current_version_id from that one version so they cannot disagree.
+// This script writes Airtable directly, so it was the real bypass — the gate is only the
+// only path if this refuses too.
+//
 // Reads AIRTABLE_API_KEY + AIRTABLE_BASE_ID from env (base appzDWu6GowvnACtv).
 // PATCHes with typecast:true so a select option that doesn't exist yet is created
 // (scoped tokens can't add options via the metadata API — see airtable gotchas).
@@ -31,17 +38,23 @@ export async function findTrackBySlug({ apiKey, baseId, slug, fetchImpl = fetch 
 
 // PATCH the stage (and, when going live, the shipped version marker). Throws on
 // non-2xx — a stage transition that silently fails leaves the board lying.
-export async function setStage({ apiKey, baseId, slug, stage, liveVersion, fetchImpl = fetch }) {
+export async function setStage({ apiKey, baseId, slug, stage, fetchImpl = fetch }) {
   if (!STAGES.includes(stage)) {
     throw new Error(`stage must be one of ${STAGES.join(" / ")} (got "${stage}")`);
+  }
+  // Refused BEFORE any read: this script writes Airtable directly, so it was the real bypass
+  // around the go-live gate — refusing `live` in the Studio MCP tool alone would have left the
+  // gate advisory-by-bypass.
+  if (stage === "live") {
+    throw new Error(
+      "set-stage cannot take a track live. Going live is verified now: use the track-publish " +
+        "skill (Studio MCP `go_live`), which proves the deployed content hash-matches an " +
+        "approved version and that ignite-next can render it, then writes both pin fields itself."
+    );
   }
   const rec = await findTrackBySlug({ apiKey, baseId, slug, fetchImpl });
   if (!rec) throw new Error(`No Tracks row with slug "${slug}" — create it first (track-brief writes the backlog row).`);
   const fields = { stage };
-  if (stage === "live") {
-    fields.is_live = true;
-    if (liveVersion) fields.current_version = liveVersion;
-  }
   const res = await fetchImpl(`https://api.airtable.com/v0/${baseId}/Tracks/${rec.id}`, {
     method: "PATCH",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -52,18 +65,18 @@ export async function setStage({ apiKey, baseId, slug, stage, liveVersion, fetch
   return { recordId: rec.id, from: prev, to: stage, fields };
 }
 
-// CLI: node set-stage.mjs <slug> <stage> [--live-version <content-hash>]
+// CLI: node set-stage.mjs <slug> <stage>
+// `--live-version` is gone with the `live` transition: go_live derives the hash from the
+// version it verified, so there is nothing left for a caller to pass (or to get wrong).
 if (import.meta.url === `file://${process.argv[1]}`) {
   const [slug, stage] = process.argv.slice(2).filter((a) => !a.startsWith("--"));
-  const lvIdx = process.argv.indexOf("--live-version");
-  const liveVersion = lvIdx !== -1 ? process.argv[lvIdx + 1] : undefined;
   const apiKey = process.env.AIRTABLE_API_KEY;
   const baseId = process.env.AIRTABLE_BASE_ID;
   if (!slug || !stage || !apiKey || !baseId) {
-    console.error("Usage: AIRTABLE_API_KEY=… AIRTABLE_BASE_ID=… node set-stage.mjs <slug> <stage> [--live-version <content-hash>]");
-    console.error(`stages: ${STAGES.join(" / ")}`);
+    console.error("Usage: AIRTABLE_API_KEY=… AIRTABLE_BASE_ID=… node set-stage.mjs <slug> <stage>");
+    console.error(`stages: ${STAGES.filter((s) => s !== "live").join(" / ")} (live: use the track-publish skill)`);
     process.exit(2);
   }
-  const out = await setStage({ apiKey, baseId, slug, stage, liveVersion });
+  const out = await setStage({ apiKey, baseId, slug, stage });
   console.log(`stage: ${slug} ${out.from} → ${out.to}` + (out.fields.current_version ? ` (current_version=${out.fields.current_version}, is_live=true)` : ""));
 }
