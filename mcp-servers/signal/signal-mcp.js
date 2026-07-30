@@ -15514,25 +15514,39 @@ var tools = [
   },
   {
     name: "signal_wins",
-    description: "Public + clarified Quick Notes wins. Executives: org-wide. Managers: their direct reports. Window in weeks (1-26, default 4).",
+    description: "Public + clarified Quick Notes wins. Executives: org-wide. Managers: their direct reports by default; set include_subtree=true to cover their FULL reporting subtree (direct reports + reports' reports, skip-level) when the manager asks about their whole org/branch, not just people who report straight to them. Window in weeks (1-26, default 4).",
     inputSchema: {
       type: "object",
       properties: {
-        weeks: { type: "integer", minimum: 1, maximum: 26, description: "Lookback window in weeks. Default 4." }
+        weeks: { type: "integer", minimum: 1, maximum: 26, description: "Lookback window in weeks. Default 4." },
+        include_subtree: {
+          type: "boolean",
+          description: "Manager scope only. false (default): direct reports. true: the manager's full reporting subtree, including reports' reports (skip-level). No effect for executives."
+        }
       }
     },
-    handler: (args) => call("/api/mcp/wins", { weeks: args.weeks ?? 4 })
+    handler: (args) => call("/api/mcp/wins", {
+      weeks: args.weeks ?? 4,
+      scope: args.include_subtree ? "subtree" : void 0
+    })
   },
   {
     name: "signal_friction",
-    description: "Actionable + clarified friction quotes with per-person streak counts. Executives: org-wide. Managers: their direct reports. Window in weeks (1-26, default 4).",
+    description: "Actionable + clarified friction quotes with per-person streak counts. Executives: org-wide. Managers: their direct reports by default; set include_subtree=true to cover their FULL reporting subtree (direct reports + reports' reports, skip-level) when the manager asks about their whole org/branch, not just people who report straight to them. Window in weeks (1-26, default 4).",
     inputSchema: {
       type: "object",
       properties: {
-        weeks: { type: "integer", minimum: 1, maximum: 26, description: "Lookback window in weeks. Default 4." }
+        weeks: { type: "integer", minimum: 1, maximum: 26, description: "Lookback window in weeks. Default 4." },
+        include_subtree: {
+          type: "boolean",
+          description: "Manager scope only. false (default): direct reports. true: the manager's full reporting subtree, including reports' reports (skip-level). No effect for executives."
+        }
       }
     },
-    handler: (args) => call("/api/mcp/friction", { weeks: args.weeks ?? 4 })
+    handler: (args) => call("/api/mcp/friction", {
+      weeks: args.weeks ?? 4,
+      scope: args.include_subtree ? "subtree" : void 0
+    })
   },
   {
     name: "signal_person",
