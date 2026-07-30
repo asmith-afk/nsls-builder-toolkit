@@ -2,11 +2,11 @@
 // contract and the ontology token-ordering rule.
 // Usage (CLI): node validate-track-json.mjs <path-to-tracks.json> [--assume slugA,slugB] [--assume-clarity]
 
+const VALID_TYPES = new Set(["say", "collect", "generate", "chat", "ai-process"]);
+
 /** The three arrays an author can put an option list in. Each fieldType reads at most
  *  one of them; the others are silently discarded (track-studio#60). */
 const OPTION_ARRAYS = ["options", "checkboxOptions", "dropdownOptions"];
-
-const VALID_TYPES = new Set(["say", "collect", "generate", "chat", "ai-process"]);
 // Fallback ONLY for when no capability manifest is available. The manifest
 // (generated from ignite-next) is the source of truth; this list is known to go
 // stale — it once omitted wheel/multi-select-list/resume-upload while all three
