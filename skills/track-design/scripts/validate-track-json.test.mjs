@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { validateTracks, parseArgs } from "./validate-track-json.mjs";
+import { loadVendoredCapabilities, validateTracks, parseArgs } from "./validate-track-json.mjs";
 
 const goodTracks = [
   {
@@ -195,4 +195,183 @@ test("an empty prompt is still allowed on say and celebration substeps", () => {
 test("a null prompt is still an error on any substep type", () => {
   const r = validateTracks(oneSubstep("say", null), { assumeClarity: true });
   assert.equal(r.errors.filter((e) => /missing required "prompt"/.test(e)).length, 1);
+});
+
+// ---------------------------------------------------------------------------
+// Option-array ambiguity (track-studio#60).
+//
+// There are THREE option arrays on a substep — options, checkboxOptions,
+// dropdownOptions — and nothing at author time says which one a given fieldType
+// actually reads. Welcome v7-draft.5 put 18 CIP majors in `options` on a
+// `multi-select-list`, which reads `checkboxOptions`; the member was shown a
+// career-needs list instead of majors, and the version still scored 16/16
+// because a synthetic panel reads design intent, not the rendered widget.
+//
+// Two rules. The first needs no knowledge of the app: populating more than one
+// option array means at least one is silently discarded, whichever is read.
+// Measured against live content — 0 of 69 substeps with any option array
+// populate two — so this has no false positives today.
+// ---------------------------------------------------------------------------
+
+const withFields = (fields) => [{
+  id: "t", title: "T",
+  steps: [{ id: "s", title: "S", substeps: [{ id: "sub-1", slug: "x", title: "X", type: "collect", prompt: "p", ...fields }] }],
+}];
+
+test("populating two option arrays warns that one will be discarded", () => {
+  // Julia's repro shape: the intended list in `options`, a leftover list in `checkboxOptions`.
+  const r = validateTracks(withFields({
+    fieldType: "multi-select-list",
+    options: ["Business Administration", "Registered Nursing", "Psychology"],
+    checkboxOptions: ["Clearer goals", "Stronger professional network"],
+  }), { assumeClarity: true });
+  const hits = r.warnings.filter((w) => /option/i.test(w));
+  assert.equal(hits.length, 1, `expected one option warning, got ${JSON.stringify(r.warnings)}`);
+  assert.match(hits[0], /sub-1/);
+  assert.match(hits[0], /options/);
+  assert.match(hits[0], /checkboxOptions/);
+});
+
+test("one populated option array is fine, whichever it is", () => {
+  for (const key of ["options", "checkboxOptions", "dropdownOptions"]) {
+    const r = validateTracks(withFields({ fieldType: "multi-select-list", [key]: ["a", "b"] }), { assumeClarity: true });
+    assert.deepEqual(r.warnings.filter((w) => /more than one/i.test(w)), [], key);
+  }
+});
+
+test("empty option arrays are not 'populated' — no warning for the leftover []", () => {
+  // Clearing a list in the editor leaves [], which must not read as a second list.
+  const r = validateTracks(withFields({ fieldType: "multi-select-list", options: [], checkboxOptions: ["a"] }), { assumeClarity: true });
+  assert.deepEqual(r.warnings.filter((w) => /more than one/i.test(w)), []);
+});
+
+test("the option warning names every populated array, not just two", () => {
+  const r = validateTracks(withFields({
+    fieldType: "select", options: ["a"], checkboxOptions: ["b"], dropdownOptions: ["c"],
+  }), { assumeClarity: true });
+  const hit = r.warnings.find((w) => /more than one/i.test(w));
+  assert.ok(hit, "expected a warning");
+  for (const k of ["options", "checkboxOptions", "dropdownOptions"]) assert.match(hit, new RegExp(k));
+});
+
+// The precise rule — "this fieldType reads checkboxOptions, so your `options` is
+// dead" — needs to know each fieldType's accessor. That is an ignite-next fact
+// (SubStepRenderer.tsx), and hard-coding it here would recreate the duplicated
+// truth the capability manifest exists to remove. So it activates only when the
+// manifest supplies it (ignite-next#985), and stays silent otherwise.
+test("with a manifest accessor map, the wrong array is named specifically", () => {
+  const caps = {
+    fieldTypes: {
+      declared: ["multi-select-list"], rendered: ["multi-select-list"], aiContext: [],
+      optionSource: { "multi-select-list": "checkboxOptions" },
+    },
+    runtimeCapabilities: {}, substepFields: [], responseModel: [],
+  };
+  const r = validateTracks(withFields({ fieldType: "multi-select-list", options: ["Psychology"] }), { capabilities: caps, assumeClarity: true });
+  const hit = r.warnings.find((w) => /never read|does not read|reads/i.test(w));
+  assert.ok(hit, `expected an accessor warning, got ${JSON.stringify(r.warnings)}`);
+  assert.match(hit, /checkboxOptions/);
+});
+
+test("with a manifest accessor map, the CORRECT array produces no warning", () => {
+  const caps = {
+    fieldTypes: {
+      declared: ["multi-select-list"], rendered: ["multi-select-list"], aiContext: [],
+      optionSource: { "multi-select-list": "checkboxOptions" },
+    },
+    runtimeCapabilities: {}, substepFields: [], responseModel: [],
+  };
+  const r = validateTracks(withFields({ fieldType: "multi-select-list", checkboxOptions: ["Psychology"] }), { capabilities: caps, assumeClarity: true });
+  assert.deepEqual(r.warnings.filter((w) => /option/i.test(w)), []);
+});
+
+test("without an accessor map the specific rule stays silent — no guessing", () => {
+  const r = validateTracks(withFields({ fieldType: "multi-select-list", options: ["Psychology"] }), { assumeClarity: true });
+  assert.deepEqual(r.warnings.filter((w) => /never read|does not read/i.test(w)), []);
+});
+
+// ---------------------------------------------------------------------------
+// The CLI must actually pass the manifest (macroscope, track-studio#60 PR).
+//
+// The CLI called validateTracks WITHOUT capabilities, so every manifest-driven
+// check was unreachable from the documented entry point — including the #51
+// protection against a fieldType that is declared but has no render path. The
+// manifest was sitting in data/ unread the whole time.
+// ---------------------------------------------------------------------------
+
+test("the vendored capability manifest loads and carries a rendered field-type list", async () => {
+  const { caps, note } = await loadVendoredCapabilities(import.meta.url);
+  assert.equal(note, null, `expected a clean load, got: ${note}`);
+  assert.ok(Array.isArray(caps.fieldTypes.rendered) && caps.fieldTypes.rendered.length > 0);
+});
+
+test("WITH the manifest an unknown fieldType is an ERROR, not a warning", () => {
+  // This is the observable difference between caps being passed and not. Before the CLI fix
+  // it produced only a warning, so a genuinely unsupported field type did not fail the gate.
+  const tracks = withFields({ fieldType: "holographic-input-that-cannot-exist" });
+  const caps = { fieldTypes: { declared: ["text"], rendered: ["text"], aiContext: [] }, runtimeCapabilities: {}, substepFields: [], responseModel: [] };
+  const withCaps = validateTracks(tracks, { capabilities: caps, assumeClarity: true });
+  assert.equal(withCaps.errors.filter((e) => /unknown fieldType/.test(e)).length, 1);
+
+  const without = validateTracks(tracks, { assumeClarity: true });
+  assert.deepEqual(without.errors.filter((e) => /unknown fieldType/.test(e)), []);
+  assert.equal(without.warnings.filter((w) => /unknown fieldType/.test(w)).length, 1);
+});
+
+test("a missing manifest degrades with a note rather than throwing", async () => {
+  // A validator that refuses to run because a capability file is absent is one people route around.
+  const { caps, note } = await loadVendoredCapabilities("file:///nonexistent/deeply/fake.mjs");
+  assert.equal(caps, null);
+  assert.match(note ?? "", /not read|no fieldTypes/i);
+});
+
+test("a malformed manifest degrades instead of crashing the CLI", async () => {
+  // `rendered: {}` is truthy, so a truthiness guard let it through and
+  // `rendered.includes(ft)` then threw TypeError — crashing the validator instead of
+  // degrading, which is the opposite of what the loader promises. Same class as the
+  // element-validation gap in track-studio's lib/capabilities.ts.
+  const { mkdtempSync, mkdirSync, writeFileSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { pathToFileURL } = await import("node:url");
+
+  const shapes = [
+    { fieldTypes: { rendered: {}, declared: [] } },
+    { fieldTypes: { rendered: ["text"], declared: "text" } },
+    { fieldTypes: { rendered: [42], declared: ["text"] } },
+    { fieldTypes: {} },
+    { nope: true },
+    "not an object",
+  ];
+
+  for (const shape of shapes) {
+    const root = mkdtempSync(join(tmpdir(), "caps-"));
+    mkdirSync(join(root, "scripts"));
+    mkdirSync(join(root, "data"));
+    writeFileSync(join(root, "data", "track-capabilities.json"), JSON.stringify(shape));
+    const url = pathToFileURL(join(root, "scripts", "validate.mjs")).href;
+
+    const { caps, note } = await loadVendoredCapabilities(url);
+    assert.equal(caps, null, `${JSON.stringify(shape)} should not be accepted`);
+    assert.ok(note, "a rejected manifest must announce itself");
+
+    // And the reduced path must still run without throwing.
+    assert.doesNotThrow(() =>
+      validateTracks(withFields({ fieldType: "text" }), { capabilities: caps ?? undefined, assumeClarity: true }),
+    );
+  }
+});
+
+test("a well-formed manifest is still accepted", async () => {
+  const { mkdtempSync, mkdirSync, writeFileSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { pathToFileURL } = await import("node:url");
+  const root = mkdtempSync(join(tmpdir(), "caps-ok-"));
+  mkdirSync(join(root, "scripts")); mkdirSync(join(root, "data"));
+  writeFileSync(join(root, "data", "track-capabilities.json"),
+    JSON.stringify({ fieldTypes: { rendered: ["text"], declared: ["text"], aiContext: [] } }));
+  const { caps, note } = await loadVendoredCapabilities(pathToFileURL(join(root, "scripts", "v.mjs")).href);
+  assert.equal(note, null);
+  assert.deepEqual(caps.fieldTypes.rendered, ["text"]);
 });

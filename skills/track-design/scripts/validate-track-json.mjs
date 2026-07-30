@@ -2,6 +2,10 @@
 // contract and the ontology token-ordering rule.
 // Usage (CLI): node validate-track-json.mjs <path-to-tracks.json> [--assume slugA,slugB] [--assume-clarity]
 
+/** The three arrays an author can put an option list in. Each fieldType reads at most
+ *  one of them; the others are silently discarded (track-studio#60). */
+const OPTION_ARRAYS = ["options", "checkboxOptions", "dropdownOptions"];
+
 const VALID_TYPES = new Set(["say", "collect", "generate", "chat", "ai-process"]);
 // Fallback ONLY for when no capability manifest is available. The manifest
 // (generated from ignite-next) is the source of truth; this list is known to go
@@ -132,6 +136,43 @@ export function validateTracks(tracks, opts = {}) {
             warnings.push(`${blabel} unknown fieldType "${ft}".`);
           }
         }
+        // Option-array ambiguity (track-studio#60). A substep has THREE places to put a
+        // list — options / checkboxOptions / dropdownOptions — and each fieldType reads
+        // exactly one of them (or none). Nothing at author time said which, so 18 CIP
+        // majors went into `options` on a `multi-select-list`, which reads
+        // `checkboxOptions`: the member was shown a career-needs list instead of majors,
+        // and the draft still scored 16/16 because a synthetic panel reads design intent
+        // rather than the rendered widget.
+        const populatedOptionArrays = OPTION_ARRAYS.filter(
+          (k) => Array.isArray(sub[k]) && sub[k].length > 0,
+        );
+        // Rule 1 — needs no knowledge of the app: whichever array is read, the others are
+        // discarded. Measured against live content, no substep populates two, so this does
+        // not fire on any existing authoring pattern.
+        if (populatedOptionArrays.length > 1) {
+          warnings.push(
+            `${blabel} populates more than one option array (${populatedOptionArrays.join(", ")}) — ` +
+              `a fieldType reads only one, so the rest are silently discarded. Keep the list in a single array.`,
+          );
+        }
+        // Rule 2 — precise, and only when the capability manifest says which array this
+        // fieldType reads. That is an ignite-next fact (SubStepRenderer.tsx); hard-coding it
+        // here would recreate the duplicated truth the manifest exists to remove, so absent
+        // the map this says nothing rather than guessing (ignite-next#985).
+        const optionSource = opts.capabilities?.fieldTypes?.optionSource;
+        if (optionSource && ft) {
+          const reads = optionSource[ft];
+          for (const k of populatedOptionArrays) {
+            if (reads === undefined) continue; // manifest has no opinion on this fieldType
+            if (k !== reads) {
+              warnings.push(
+                reads === null
+                  ? `${blabel} populates "${k}", but fieldType "${ft}" reads no option array at all — it will be discarded.`
+                  : `${blabel} populates "${k}", but fieldType "${ft}" reads "${reads}" — "${k}" is never read. Move the list.`,
+              );
+            }
+          }
+        }
         for (const f of Object.keys(sub)) if (AUTO_FIELDS.has(f)) errors.push(`${blabel} has auto-managed field "${f}" — remove it.`);
         const bSlug = sub.slug || slugify(sub.title || "");
         if (bSlug) { if (subSlugs.has(bSlug)) errors.push(`${blabel} duplicate slug "${bSlug}" within step.`); else subSlugs.add(bSlug); }
@@ -174,6 +215,46 @@ export function parseArgs(args) {
   return { file, assume, assumeClarity };
 }
 
+/**
+ * Load the vendored capability manifest that sits beside this script.
+ *
+ * The CLI used to call validateTracks WITHOUT capabilities, which quietly disabled every
+ * manifest-driven check for anyone running the validator the documented way — including the
+ * #51 protection (a fieldType that is declared but has no render path in ignite-next, i.e.
+ * one that silently degrades to a text box for the member). The manifest was sitting in
+ * data/ the whole time, unread.
+ *
+ * Degrades rather than throws: a missing or malformed manifest returns null and the caller
+ * proceeds with the reduced checks, announcing it. A validator that refuses to run because a
+ * capability file is absent is a validator people route around.
+ */
+export async function loadVendoredCapabilities(scriptUrl) {
+  const { readFileSync } = await import("node:fs");
+  const { fileURLToPath } = await import("node:url");
+  const { dirname, join } = await import("node:path");
+  const here = dirname(fileURLToPath(scriptUrl));
+  const path = join(here, "..", "data", "track-capabilities.json");
+  try {
+    const caps = JSON.parse(readFileSync(path, "utf8"));
+    // Validate the SHAPE, not just presence. `rendered: {}` is truthy, and the consumer calls
+    // `rendered.includes(ft)` — which throws TypeError on a non-array and crashes the CLI,
+    // the exact opposite of the degradation this function promises. Elements are checked too:
+    // `rendered: [42]` would not throw, but no real fieldType could ever match it, turning
+    // every field type into a spurious error.
+    const isStringArray = (v) => Array.isArray(v) && v.every((e) => typeof e === "string");
+    if (!caps || typeof caps !== "object" || !caps.fieldTypes ||
+        !isStringArray(caps.fieldTypes.rendered) || !isStringArray(caps.fieldTypes.declared)) {
+      return {
+        caps: null,
+        note: `${path} is not a usable manifest (fieldTypes.declared/rendered must be arrays of strings) — field-type checks are reduced.`,
+      };
+    }
+    return { caps, note: null };
+  } catch (e) {
+    return { caps: null, note: `capability manifest not read (${e.message}) — field-type checks are reduced.` };
+  }
+}
+
 // ---- CLI ----
 if (import.meta.url === `file://${process.argv[1]}`) {
   const { file, assume, assumeClarity } = parseArgs(process.argv.slice(2));
@@ -182,7 +263,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   let data;
   try { data = JSON.parse(readFileSync(file, "utf8")); }
   catch (e) { console.error(`Could not read/parse ${file}: ${e.message}`); process.exit(2); }
-  const { errors, warnings } = validateTracks(data, { assume, assumeClarity });
+  const { caps, note } = await loadVendoredCapabilities(import.meta.url);
+  if (note) console.warn(`WARN  ${note}`);
+  const { errors, warnings } = validateTracks(data, { assume, assumeClarity, capabilities: caps ?? undefined });
   for (const w of warnings) console.warn(`WARN  ${w}`);
   for (const e of errors) console.error(`ERROR ${e}`);
   if (errors.length) { console.error(`\n${errors.length} error(s), ${warnings.length} warning(s).`); process.exit(1); }
