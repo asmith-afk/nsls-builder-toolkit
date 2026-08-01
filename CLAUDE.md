@@ -32,7 +32,7 @@ The install script sets up three things:
 - `/connect` → provides connections. Domain skills → deep expertise. `/data-intel` → orchestrates across all of them.
 
 ### NSLS-specific tasks (always)
-- Use **NSLS Builder Toolkit** skills for anything NSLS-domain: slides, automations, Google Workspace, focus groups, deployment, web research
+- Use **NSLS Builder Toolkit** skills for anything NSLS-domain: slides, automations, Google Workspace, focus groups, deployment, web research, expense receipts (`/receipts` — clears Ramp's missing-receipt queue, dry run by default)
 - These override generic skills when the task is NSLS-related
 
 ### Git operations
