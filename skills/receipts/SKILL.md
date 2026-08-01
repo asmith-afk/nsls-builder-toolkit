@@ -45,8 +45,13 @@ curl -fsSL https://agents.ramp.com/install.sh | sh
 ramp auth login
 ```
 
-Install via the script above, not Homebrew — Homebrew's build fails on
-machines with an outdated Xcode Command Line Tools. Without this step,
+Install via the script above, not Homebrew. `brew install
+ramp-public/ramp/ramp-cli` works in principle — the formula just fetches a
+prebuilt binary, no compile step — but Homebrew's own preflight refuses to
+run at all on a machine with outdated Xcode Command Line Tools (`Error:
+Your Command Line Tools are too outdated` — observed 2026-08-01, before the
+formula ever runs). The install script sidesteps that check entirely and
+fetches the same prebuilt binary directly. Without this step,
 `/receipts` can't even build the list of transactions that need a receipt —
 this one isn't optional.
 

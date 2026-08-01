@@ -62,19 +62,22 @@ def check_anthropic() -> bool:
         print(f"FAIL     anthropic source: invoices endpoint shape changed — got {payload!r:.200}")
         return False
 
-    rows = SOURCE.parse_invoices(payload)
+    try:
+        rows = SOURCE.parse_invoices(payload)
+    except Exception as exc:
+        print(f"FAIL     anthropic source: parse_invoices raised — a field was probably "
+              f"renamed: {exc}")
+        return False
     if not rows:
         print("FAIL     anthropic source: parse_invoices dropped everything — field names may have changed")
         return False
 
+    # _download() itself raises SourceUnavailable if the fetched bytes don't
+    # start with %PDF, so success here already guarantees a real PDF.
     try:
         pdf = SOURCE._download(rows[0]["pdf_url"])
     except SourceUnavailable as exc:
         print(f"FAIL     anthropic source: {exc}")
-        return False
-
-    if not pdf.startswith(b"%PDF"):
-        print(f"FAIL     anthropic source: not a PDF: {pdf[:16]!r}")
         return False
 
     print(f"OK       anthropic source: {len(invoices)} invoices, {len(rows)} paid; "
