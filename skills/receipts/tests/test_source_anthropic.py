@@ -54,6 +54,39 @@ def test_provenance_is_unique_per_invoice():
     assert "anthropic" in rows[0]["provenance"]
 
 
+# Reproduces the live Ramp account: four separate $214.56 Anthropic charges
+# within six minutes on 2026-07-23. Same date, same total — provenance must
+# still be distinct per invoice, because downstream matching and the
+# per-upload idempotency key both derive from it.
+SAME_DAY_PAYLOAD = {
+    "invoices": [
+        {"total": 21456, "status": "paid", "created_ts": 1784800800,
+         "invoice_pdf_url": "https://pay.stripe.com/invoice/acct_X/live_C1/pdf?s=ap"},
+        {"total": 21456, "status": "paid", "created_ts": 1784800800,
+         "invoice_pdf_url": "https://pay.stripe.com/invoice/acct_X/live_C2/pdf?s=ap"},
+        {"total": 21456, "status": "paid", "created_ts": 1784800800,
+         "invoice_pdf_url": "https://pay.stripe.com/invoice/acct_X/live_C3/pdf?s=ap"},
+        {"total": 21456, "status": "paid", "created_ts": 1784800800,
+         "invoice_pdf_url": "https://pay.stripe.com/invoice/acct_X/live_C4/pdf?s=ap"},
+    ],
+    "has_more": False,
+    "next_page": None,
+}
+
+
+def test_provenance_is_unique_for_same_date_same_amount_invoices():
+    rows = SOURCE.parse_invoices(SAME_DAY_PAYLOAD)
+    assert len(rows) == 4
+    assert len({r["provenance"] for r in rows}) == 4, (
+        "provenance collided across same-date, same-amount invoices "
+        f"— got {[r['provenance'] for r in rows]}"
+    )
+    # Still human-readable: date and amount stay visible.
+    for r in rows:
+        assert "2026-07-23" in r["provenance"]
+        assert "21456" in r["provenance"]
+
+
 def test_merchants_declared():
     assert "anthropic" in SOURCE.MERCHANTS
 

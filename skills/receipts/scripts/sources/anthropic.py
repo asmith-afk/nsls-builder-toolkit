@@ -15,6 +15,7 @@ takes out the Anthropic source, not the whole /receipts run.
 """
 
 import datetime as dt
+import hashlib
 import json
 import os
 import urllib.request
@@ -34,11 +35,19 @@ class AnthropicSource:
             if inv.get("status") != "paid" or not inv.get("invoice_pdf_url"):
                 continue
             date = dt.datetime.fromtimestamp(inv["created_ts"], dt.UTC).date().isoformat()
+            # invoice_pdf_url is unique per invoice (…/live_A/pdf vs …/live_B/pdf).
+            # Fold a stable, deterministic slice of it into provenance so that
+            # same-date, same-amount invoices — e.g. four $214.56 Anthropic
+            # charges within six minutes — don't collide. Must be stable across
+            # runs (never random/time-based): the per-upload idempotency key
+            # derives from provenance, and a changing key would defeat Ramp's
+            # duplicate collapsing.
+            token = hashlib.sha1(inv["invoice_pdf_url"].encode()).hexdigest()[:8]
             rows.append({
                 "amount_cents": int(inv["total"]),
                 "date": date,
                 "pdf_url": inv["invoice_pdf_url"],
-                "provenance": f"anthropic:invoice {date} {inv['total']}",
+                "provenance": f"anthropic:invoice {date} {inv['total']} {token}",
             })
         return rows
 
@@ -109,10 +118,6 @@ SOURCE = AnthropicSource()
 
 
 def _login():
-    org = os.environ.get("ANTHROPIC_ORG_UUID")
-    if not org:
-        raise SourceUnavailable("ANTHROPIC_ORG_UUID is not set.")
-
     from playwright.sync_api import sync_playwright
 
     with sync_playwright() as p:
