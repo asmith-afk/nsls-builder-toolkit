@@ -57,6 +57,7 @@ Then open Claude Code and say `/setup` to connect your tools and optionally inst
 | **/society-invite-llm-email-prompt** | Build the LLM-node prompt for personalized Society member-invitation emails — NSLS data fields and fill rates, life-stage resolution, voice rules, and the failure catalogue from real testing |
 | **/llm-email-workflow** | The pipeline around an LLM email — data profiling, audience segmentation, node wiring, safety nodes, sandbox-to-live rollout |
 | **/feature-branch-protocol-template** | Template for building your own work-discipline skill — setup, checkpoints, irreversible-step rules, final handoff. Copy to `~/.claude/skills/` and fill in your own preferences. Red's developer version included as a seed. |
+| **/receipts** | Find Ramp transactions missing receipts, fetch them from Anthropic billing or Gmail, upload to Ramp (dry run by default; `--send` executes) |
 
 ## Strategy & Knowledge Work
 
@@ -231,6 +232,7 @@ They form a cycle: `/data-model-discovery` explores a new system → maps it aga
 | **society-invite-llm-email-prompt** | LLM-node prompt for Society member-invitation emails — NSLS fields, life-stage buckets, tested failure catalogue |
 | **llm-email-workflow** | End-to-end pipeline for LLM-generated emails — data, audience, node wiring, guardrails, rollout |
 | **kw:brainstorm / kw:plan / kw:review / kw:compound** | Strategy & knowledge-work pipeline (non-software) |
+| **receipts** | Find Ramp transactions missing receipts, fetch them from Anthropic billing or Gmail, upload to Ramp (dry run by default; `--send` executes) |
 
 ## Updates
 
