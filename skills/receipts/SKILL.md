@@ -136,12 +136,22 @@ for the rest.
   with more results still pending. This is not a skip — the source ran and
   returned partial results. Results are incomplete; narrow the date window
   (`--since`/`--until`) and re-run to get a query small enough to finish.
-- **`SOURCES: 0 loaded (none)` + exit 2** — no receipt source loaded at all,
-  so nothing was searched. The run refuses to list transactions as "no
-  receipt found" when it never looked. The `SOURCE …: SKIPPED (...)` lines
-  printed above it say why (a source that fails at *import* — missing
-  dependency, syntax error — is reported and skipped, never fatal to the
-  others). Every report states how many sources loaded, every run.
+- **`SOURCES: N loaded, 0 searched (...)` + exit 2** — zero sources actually
+  searched, even though `N` loaded. "Loaded" only means the module imported
+  cleanly; it says nothing about whether `fetch()` ever ran. On a fresh,
+  unconfigured install this is the normal first run: both sources import
+  fine and then fail *inside* `fetch()` — `ANTHROPIC_ORG_UUID` unset, no
+  `gws` CLI on PATH, a dead auth session — so `loaded` is nonzero while
+  `searched` stays 0. The run refuses to list transactions as "no receipt
+  found" when nothing was searched for them. The `SOURCE …: SKIPPED (...)`
+  lines printed above it say why each source failed; fix those and re-run.
+  Every report states both numbers, every run, so "loaded" can never be
+  misread as "worked."
+- **`SOURCES: N loaded, M searched (...)` where 0 < M < N** — a normal
+  degraded run, not a failure. Some sources searched and some didn't; the
+  report proceeds, and `UNFOUND` is legitimate for what the searching
+  source(s) genuinely didn't find. The dead source is still named on its own
+  `SOURCE …: SKIPPED (...)` line above.
 - **`ERROR uploading <id> …`** — that one upload failed; the rest of the run
   continued and the ledger was still saved. Transport-level failures
   (timeouts, reset connections) are recorded but do **not** count toward the

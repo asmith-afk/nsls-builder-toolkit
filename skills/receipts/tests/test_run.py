@@ -193,9 +193,11 @@ def test_one_broken_source_does_not_take_down_the_run():
 
 def test_report_always_says_how_many_sources_loaded():
     # "0 receipts found" and "we never looked" render identically unless the
-    # report states, every run, how many sources actually loaded.
-    text = build_report([], {}, [], ["ANTHROPIC", "GMAIL"])
-    assert "SOURCES: 2 loaded (ANTHROPIC, GMAIL)" in text
+    # report states, every run, how many sources actually loaded — and
+    # separately, how many actually searched, so "loaded" can never be
+    # mistaken for "worked."
+    text = build_report([], {}, [], ["ANTHROPIC", "GMAIL"], ["ANTHROPIC", "GMAIL"])
+    assert "SOURCES: 2 loaded, 2 searched (ANTHROPIC, GMAIL)" in text
 
 
 def test_zero_sources_refuses_to_report_unfound_and_exits_nonzero():
@@ -214,8 +216,8 @@ def test_zero_sources_refuses_to_report_unfound_and_exits_nonzero():
     assert "No receipt found" not in out.getvalue(), (
         "must not report UNFOUND when nothing was searched: " + out.getvalue()
     )
-    assert "SOURCES: 0 loaded" in combined
-    assert "no receipt sources loaded" in combined.lower()
+    assert "SOURCES: 0 loaded, 0 searched" in combined
+    assert "no receipt source was able to search" in combined.lower()
 
 
 def test_load_sources_skips_a_module_that_fails_to_import():
@@ -328,6 +330,89 @@ def test_mid_loop_auth_expiry_exits_2_and_keeps_the_ledger():
     assert Ledger(ledger_path).status("t1") == "UPLOADED", (
         "the ledger must be saved even when the run aborts"
     )
+
+
+def test_zero_sources_searched_but_imported_refuses_and_exits_2():
+    # Both real sources (anthropic.py, gmail.py) fail at *fetch* time, not
+    # import time — ANTHROPIC_ORG_UUID unset, `gws` CLI missing. The old
+    # guard only counted sources that *imported* (appended to `loaded`
+    # before fetch() was ever called), so this exact path — the default
+    # experience for an unconfigured install — slipped through: `SOURCES: 2
+    # loaded` read as reassuring, and the tool still printed "no receipt
+    # found" for transactions nothing had searched, and exited 0. Tracking
+    # only sources that actually *searched* must catch this.
+    class DeadAnthropic:
+        def fetch(self, since, until):
+            raise SourceUnavailable("ANTHROPIC_ORG_UUID is not set")
+
+    class DeadGmail:
+        def fetch(self, since, until):
+            raise SourceUnavailable("`gws` CLI not found")
+
+    with patch("run.missing_receipts", return_value=[T1]), \
+         patch("run.load_sources", return_value=[DeadAnthropic(), DeadGmail()]), \
+         patch("run.Ledger", return_value=Ledger(Path(tempfile.mkdtemp()) / "l.json")):
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            code = main([])
+
+    combined = out.getvalue() + err.getvalue()
+    assert code != 0, "0 of 2 loaded sources actually searched — this must not exit 0"
+    assert "No receipt found" not in out.getvalue(), (
+        "must not assert 'no receipt found' about transactions nothing searched: " + out.getvalue()
+    )
+    assert "no receipt source" in combined.lower() and "search" in combined.lower()
+    assert "2 loaded" in combined and "0 searched" in combined, (
+        "the SOURCES line must distinguish loaded from searched: " + combined
+    )
+
+
+def test_one_of_two_searched_is_a_normal_degraded_run():
+    # A partial run — one source dead at fetch time, one source working — is
+    # NOT the zero-searched failure case. It must proceed normally, report
+    # UNFOUND for what the working source genuinely didn't find, and exit 0.
+    # The residual-fix guard must not overcorrect and treat every degraded
+    # run as a failure.
+    class DeadGmail:
+        def fetch(self, since, until):
+            raise SourceUnavailable("`gws` CLI not found")
+
+    class WorkingAnthropic:
+        def fetch(self, since, until):
+            return [R1]
+
+    with patch("run.missing_receipts", return_value=[T1, T2]), \
+         patch("run.load_sources", return_value=[WorkingAnthropic(), DeadGmail()]), \
+         patch("run.Ledger", return_value=Ledger(Path(tempfile.mkdtemp()) / "l.json")):
+        out = io.StringIO()
+        with redirect_stdout(out):
+            code = main([])
+
+    text = out.getvalue()
+    assert code == 0, "one working source out of two is a normal degraded run, not a failure"
+    assert "## No receipt found" in text
+    assert "Neon Tech" in text, (
+        "T2 genuinely has no receipt from the one source that did search — "
+        "UNFOUND is legitimate here, not a suppressed finding: " + text
+    )
+    assert "1 searched" in text
+
+
+def test_zero_sources_searched_with_no_transactions_is_not_a_false_alarm():
+    # Nothing was missing, so nothing was missed — a dead source with an
+    # empty transaction queue must not trip the refusal.
+    class DeadAnthropic:
+        def fetch(self, since, until):
+            raise SourceUnavailable("ANTHROPIC_ORG_UUID is not set")
+
+    with patch("run.missing_receipts", return_value=[]), \
+         patch("run.load_sources", return_value=[DeadAnthropic()]), \
+         patch("run.Ledger", return_value=Ledger(Path(tempfile.mkdtemp()) / "l.json")):
+        out = io.StringIO()
+        with redirect_stdout(out):
+            code = main([])
+    assert code == 0, "no transactions were in the queue, so there is nothing to fail about"
+    assert "Nothing missing a receipt" in out.getvalue()
 
 
 if __name__ == "__main__":

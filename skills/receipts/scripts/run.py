@@ -17,7 +17,7 @@ LEDGER_PATH = Path(os.path.expanduser("~/.claude-receipts-ledger.json"))
 ACTIONABLE = (CONFIDENT, BALANCED)
 
 
-def _source_lines(skipped_sources, sources_loaded) -> list[str]:
+def _source_lines(skipped_sources, sources_loaded, sources_searched=None) -> list[str]:
     lines = []
     for note in skipped_sources:
         name, _, reason = note.partition(": ")
@@ -34,15 +34,24 @@ def _source_lines(skipped_sources, sources_loaded) -> list[str]:
     # Stated every run, not just when something went wrong. "No receipt in any
     # source" and "there were no sources" print identically otherwise, and the
     # second one is a broken install reading as a clean audit.
+    #
+    # "loaded" and "searched" are deliberately kept as two separate numbers.
+    # A source can *import* cleanly (its module has no syntax error, its
+    # dependencies are installed) and still never *search* anything, because
+    # it fails inside fetch() — missing ANTHROPIC_ORG_UUID, no `gws` CLI on
+    # PATH, a dead auth session. "2 loaded" reads as reassuring; a reader
+    # must not be able to mistake it for "2 searched".
     names = list(sources_loaded or [])
-    lines.append(f"SOURCES: {len(names)} loaded ({', '.join(names) if names else 'none'})")
+    searched_n = len(sources_searched) if sources_searched is not None else len(names)
+    lines.append(f"SOURCES: {len(names)} loaded, {searched_n} searched "
+                 f"({', '.join(names) if names else 'none'})")
     lines.append("")
     return lines
 
 
-def build_report(pairings, results, skipped_sources, sources_loaded=None) -> str:
+def build_report(pairings, results, skipped_sources, sources_loaded=None, sources_searched=None) -> str:
     lines = ["# Receipts → Ramp", ""]
-    lines.extend(_source_lines(skipped_sources, sources_loaded))
+    lines.extend(_source_lines(skipped_sources, sources_loaded, sources_searched))
 
     # A pairing only counts as outstanding if its receipt did NOT successfully
     # upload — regardless of outcome. A BALANCED pairing (e.g. one of four
@@ -102,7 +111,7 @@ def main(argv: list[str]) -> int:
         return 2
     print("", file=sys.stderr)
 
-    receipts, skipped, loaded = [], [], []
+    receipts, skipped, loaded, searched = [], [], [], []
     # A source that fails at import (missing dependency, syntax error) is
     # reported and skipped — it must not end discovery for the others.
     import_errors: list[str] = []
@@ -114,6 +123,11 @@ def main(argv: list[str]) -> int:
         loaded.append(name)
         try:
             receipts.extend(src.fetch(args.since, until))
+            # fetch() returned without raising — this source actually
+            # searched, even if (below) it turns out to have been a partial
+            # search. `loaded` only proves the module imported; `searched` is
+            # the one that matters for "did anything look."
+            searched.append(name)
             # A source can hit an internal cap (e.g. Gmail's pagination
             # guard) and return normally with a partial result instead of
             # raising. If that never reaches the report, the user sees a
@@ -133,17 +147,26 @@ def main(argv: list[str]) -> int:
 
     pairings = match(txns, receipts)
 
-    # Zero sources loaded means nothing was searched. Every transaction would
-    # come back UNFOUND — "no receipt in any source" — and the run would exit 0
-    # looking like a completed audit that simply found nothing. That is an
-    # empty result that means we didn't look, and it must not be reported as a
-    # finding. (With no transactions in the window there is no UNFOUND to
-    # misreport, so that case still exits 0 — but the SOURCES line above always
-    # says zero loaded.)
-    if not loaded and pairings:
-        print("\n".join(["# Receipts → Ramp", ""] + _source_lines(skipped, loaded)))
-        print(f"\nERROR: no receipt sources loaded — {len(pairings)} transactions are "
-              f"missing a receipt and none of them were searched. Refusing to report them "
+    # Zero sources *searched* means nothing was searched — not zero sources
+    # *loaded*. Both real sources (anthropic.py, gmail.py) fail inside
+    # fetch(), not at import: missing ANTHROPIC_ORG_UUID, no `gws` CLI, a
+    # dead auth session. A guard keyed on "loaded" never fires for that path
+    # — the default experience of an unconfigured install — because `loaded`
+    # is populated before fetch() is ever called. Keying on `searched`
+    # catches it: every transaction would otherwise come back UNFOUND — "no
+    # receipt in any source" — and the run would exit 0 looking like a
+    # completed audit that simply found nothing. That is an empty result
+    # that means we didn't look, and it must not be reported as a finding.
+    # (With no transactions in the window there is no UNFOUND to misreport,
+    # so that case still exits 0 — but the SOURCES line above always shows
+    # the true loaded/searched split. And a partial run — 1 of 2 sources
+    # searched — is a normal degraded run, not this failure: it proceeds,
+    # and UNFOUND is legitimate for what the working source genuinely didn't
+    # find.)
+    if not searched and pairings:
+        print("\n".join(["# Receipts → Ramp", ""] + _source_lines(skipped, loaded, searched)))
+        print(f"\nERROR: no receipt source was able to search — {len(pairings)} transactions "
+              f"are missing a receipt and none of them were searched. Refusing to report them "
               f"as 'no receipt found'. Fix source setup (see the SOURCE lines above and "
               f"the Setup section of SKILL.md) and re-run.", file=sys.stderr)
         return 2
@@ -186,7 +209,7 @@ def main(argv: list[str]) -> int:
     if exit_code:
         return exit_code
 
-    print(build_report(pairings, results, skipped, loaded))
+    print(build_report(pairings, results, skipped, loaded, searched))
     if not args.send:
         print("\nDry run — nothing uploaded. Re-run with --send to execute.")
     return 0
