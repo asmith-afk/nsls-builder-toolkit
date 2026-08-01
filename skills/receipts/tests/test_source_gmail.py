@@ -384,6 +384,12 @@ def test_fetch_warns_when_pagination_cap_is_hit_with_more_pages_pending():
     assert "WARNING" in warning
     assert str(PAGE_GUARD) in warning
     assert "incomplete" in warning.lower() or "not scanned" in warning.lower()
+    # The stderr warning alone isn't enough — run.py's report only reaches a
+    # user via skipped_sources, which it populates by checking this public
+    # attribute (getattr(src, "truncated", None)). Without it being set,
+    # truncation would be invisible outside raw terminal output.
+    assert SOURCE.truncated, "must set a public `truncated` reason so run.py can report it"
+    assert str(PAGE_GUARD) in SOURCE.truncated
 
 
 def test_fetch_does_not_warn_when_pagination_ends_within_the_cap():
@@ -401,6 +407,7 @@ def test_fetch_does_not_warn_when_pagination_ends_within_the_cap():
          patch("sources.gmail.sys.stderr", captured_stderr):
         SOURCE.fetch("2026-01-01", "2026-12-31")
     assert captured_stderr.getvalue() == ""
+    assert SOURCE.truncated is None, "a normal run must not leave a stale truncated reason"
 
 
 def test_fetch_provenance_is_stable_and_keyed_on_message_id():

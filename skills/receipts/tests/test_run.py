@@ -98,6 +98,55 @@ def test_corrupt_ledger_caught_prints_message_and_exits_2():
     assert str(corrupt_path.resolve()) in err.getvalue()
 
 
+def test_truncated_source_reports_partial_results_not_a_clean_run():
+    # A source can hit an internal cap (e.g. Gmail's pagination guard) and
+    # return *normally* with a partial list rather than raising. If that
+    # never reaches the report, the user sees a clean run with fewer
+    # receipts and zero indication anything was truncated — the exact
+    # "degradation that reads as a clean result" failure mode this codebase
+    # treats as its recurring bug. The source signals this via a public
+    # `truncated` attribute set during fetch(); main() must check it and
+    # surface it through the same reporting channel as a skipped source,
+    # while still using the partial results it did get (not discarding them).
+    class PartialSource:
+        def __init__(self):
+            self.truncated = None
+
+        def fetch(self, since, until):
+            self.truncated = "hit the 50-page cap, 5000 messages fetched, results incomplete"
+            return [R1]
+
+    with patch("run.missing_receipts", return_value=[T1]), \
+         patch("run.load_sources", return_value=[PartialSource()]), \
+         patch("run.Ledger", return_value=Ledger(Path(tempfile.mkdtemp()) / "l.json")):
+        out = io.StringIO()
+        with redirect_stdout(out):
+            code = main([])
+
+    text = out.getvalue()
+    assert code == 0
+    assert "TRUNCATED" in text
+    assert "results incomplete" in text
+    assert "Anthropic" in text, "the partial receipts must still be used, not discarded"
+
+
+def test_no_truncated_line_when_source_has_no_truncated_attribute():
+    # Sources that never set `truncated` (i.e. every source before this
+    # change, and any source that doesn't hit a cap) must not spuriously
+    # trigger the new check — getattr(..., None) must default safely.
+    class PlainSource:
+        def fetch(self, since, until):
+            return [R1]
+
+    with patch("run.missing_receipts", return_value=[T1]), \
+         patch("run.load_sources", return_value=[PlainSource()]), \
+         patch("run.Ledger", return_value=Ledger(Path(tempfile.mkdtemp()) / "l.json")):
+        out = io.StringIO()
+        with redirect_stdout(out):
+            code = main([])
+    assert "TRUNCATED" not in out.getvalue()
+
+
 def test_one_broken_source_does_not_take_down_the_run():
     # A source raising anything other than SourceUnavailable (network
     # timeout, JSON decode error, KeyError...) must be recorded in `skipped`

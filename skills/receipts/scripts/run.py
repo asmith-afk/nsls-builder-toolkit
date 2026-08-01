@@ -89,6 +89,15 @@ def main(argv: list[str]) -> int:
         name = type(src).__name__.replace("Source", "").upper()
         try:
             receipts.extend(src.fetch(args.since, until))
+            # A source can hit an internal cap (e.g. Gmail's pagination
+            # guard) and return normally with a partial result instead of
+            # raising. If that never reaches the report, the user sees a
+            # clean run with fewer receipts and no sign anything was
+            # truncated — announce it through the same channel as a skipped
+            # source, while still using the partial results it did return.
+            truncated = getattr(src, "truncated", None)
+            if truncated:
+                skipped.append(f"{name}: TRUNCATED ({truncated})")
         except SourceUnavailable as exc:
             skipped.append(f"{name}: {exc}")
         except Exception as exc:

@@ -145,6 +145,13 @@ def _decode_b64url(data: str) -> bytes:
 
 class GmailSource:
     MERCHANTS: tuple[str, ...] = ()
+    # Set during fetch() to a human-readable reason when the pagination cap
+    # is hit with more results still pending; None otherwise. run.py checks
+    # this (via getattr, so sources that never set it are unaffected) and
+    # surfaces it through the report's existing "SOURCE ... " channel — the
+    # stderr warning below is necessary but not sufficient, since it never
+    # reaches the markdown report a user actually reads.
+    truncated: str | None = None
 
     def parse_amount(self, text: str) -> int | None:
         text = text or ""
@@ -195,6 +202,7 @@ class GmailSource:
         # is hit while more pages remain, that's a silent truncation unless
         # we say so — print a visible warning rather than letting results
         # quietly vanish.
+        self.truncated = None
         stubs: list[dict] = []
         page_token = None
         for _ in range(PAGE_GUARD):
@@ -208,6 +216,10 @@ class GmailSource:
                 break
         else:
             if page_token:
+                self.truncated = (
+                    f"hit the {PAGE_GUARD}-page cap, {len(stubs)} messages fetched, "
+                    f"results incomplete"
+                )
                 print(
                     f"WARNING: gmail source hit the {PAGE_GUARD}-page pagination cap "
                     f"({len(stubs)} messages fetched) with more results still available "
