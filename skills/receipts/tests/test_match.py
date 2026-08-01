@@ -77,6 +77,36 @@ def test_receipts_with_no_transaction_produce_no_pairings():
     assert match([], [rcpt(25908)]) == []
 
 
+def test_duplicate_receipt_provenance_does_not_bind_to_multiple_transactions():
+    """Receipts with identical provenance must not be bound to multiple transactions.
+
+    This occurs when Task 8 adds Gmail source alongside Anthropic: subscription charges
+    produce both an emailed receipt (Gmail) and a billing-portal invoice (Anthropic).
+    Both are Receipt objects with the same logical receipt, but appear as separate list
+    entries. Without dedup, one transaction binds to both while another goes unreceipted.
+    """
+    txns = [txn(f"t{i}", 21456) for i in range(2)]
+    # Two Receipt objects with the same provenance (simulating the Gmail+Anthropic case)
+    rs = [rcpt(21456, prov="invoice-A"), rcpt(21456, prov="invoice-A")]
+    pairs = match(txns, rs)
+
+    # Count how many times each provenance is bound
+    provenance_to_txns = {}
+    for p in pairs:
+        if p.receipt:
+            prov = p.receipt.provenance
+            if prov not in provenance_to_txns:
+                provenance_to_txns[prov] = []
+            provenance_to_txns[prov].append(p.transaction.id)
+
+    # Each unique provenance should be bound to at most one transaction
+    for prov, txn_ids in provenance_to_txns.items():
+        assert len(txn_ids) == 1, (
+            f"Provenance {prov} bound to {len(txn_ids)} transactions: {txn_ids}. "
+            "Dedup must ensure each receipt binds to at most one transaction."
+        )
+
+
 if __name__ == "__main__":
     print("Running match tests")
     for n, f in sorted(globals().items()):
