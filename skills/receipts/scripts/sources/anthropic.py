@@ -24,10 +24,19 @@ from .base import Receipt, SourceUnavailable
 
 LISTING = "https://claude.ai/api/stripe/{org}/invoices?limit=100&page={page}"
 PROFILE = os.path.expanduser("~/.claude-receipts-profile")
+PAGE_GUARD = 20  # pages (100 invoices/page = 2,000 invoices) — see fetch()
 
 
 class AnthropicSource:
     MERCHANTS = ("anthropic", "anthropicpbc")
+    # Set during fetch() to a human-readable reason whenever this source
+    # returned LESS than it was asked for but did not fail outright: the page
+    # guard fired with more pages pending, the cursor went missing, or an
+    # invoice PDF could not be downloaded. None otherwise. run.py reads it via
+    # getattr and prints "SOURCE ANTHROPIC: TRUNCATED (...)" — the same channel
+    # GmailSource already uses. Without it, a partial search returns quietly
+    # and every unmatched transaction reads as a genuine gap.
+    truncated: str | None = None
 
     def parse_invoices(self, payload: dict) -> list[dict]:
         rows = []
@@ -65,7 +74,8 @@ class AnthropicSource:
         except ImportError as exc:
             raise SourceUnavailable(
                 "Playwright is required for the Anthropic source. Install with: "
-                "python3.12 -m pip install playwright && python3.12 -m playwright install chromium"
+                "python3.12 -m pip install --user --break-system-packages playwright "
+                "&& python3.12 -m playwright install chromium"
             ) from exc
 
         url = LISTING.format(org=org, page=page)
@@ -74,6 +84,18 @@ class AnthropicSource:
             try:
                 pg = ctx.new_page()
                 resp = pg.goto(url)
+                # 403 is authorization, not authentication: the session is
+                # fine, the account just isn't an org admin. Telling that user
+                # to log in again sends them around a loop that can never
+                # succeed and hides the one fact they can act on.
+                if resp is not None and resp.status == 403:
+                    raise SourceUnavailable(
+                        f"claude.ai refused the billing invoice listing for organization "
+                        f"{org} (HTTP 403). This account is not an org admin there, and "
+                        f"only an org admin can read billing invoices — signing in again "
+                        f"will not change it. Ask an org owner for admin access, or unset "
+                        f"ANTHROPIC_ORG_UUID to run without this source."
+                    )
                 if resp is None or resp.status != 200:
                     raise SourceUnavailable(
                         "claude.ai session expired. Run: python3.12 "
@@ -92,26 +114,71 @@ class AnthropicSource:
         return data
 
     def fetch(self, since: str, until: str) -> list[Receipt]:
-        rows, page, guard = [], "", 0
-        while guard < 20:
+        self.truncated = None
+        notes: list[str] = []
+
+        rows: list[dict] = []
+        page, payload = "", {}
+        for _ in range(PAGE_GUARD):
             payload = self._listing(page)
             rows.extend(self.parse_invoices(payload))
             if not payload.get("has_more"):
                 break
-            page = payload.get("next_page") or ""
-            guard += 1
+            next_page = payload.get("next_page") or ""
+            # has_more with no usable cursor used to leave `page` at "" and
+            # re-request the identical first page until the guard ran out —
+            # up to 20 Playwright browser launches returning the same rows,
+            # making no progress and saying nothing. Stop, and say so.
+            if not next_page or next_page == page:
+                notes.append(
+                    f"the invoice listing reported more pages but returned no usable "
+                    f"next_page cursor after {len(rows)} invoices — results are incomplete"
+                )
+                break
+            page = next_page
+        else:
+            # Guard exhausted with more pages still pending. Keep what we have,
+            # but this is a partial search, not a complete one.
+            if payload.get("has_more"):
+                notes.append(
+                    f"hit the {PAGE_GUARD}-page cap, {len(rows)} invoices fetched, "
+                    f"results incomplete — narrow the date range and re-run"
+                )
 
-        return [
-            Receipt(
+        # Per-invoice download. One expired URL, non-PDF response, or network
+        # blip used to abort the whole list comprehension and discard every
+        # valid invoice already gathered — one stale row took the entire
+        # Anthropic source down. Keep the good ones; report the losses.
+        out: list[Receipt] = []
+        failures: list[str] = []
+        for r in rows:
+            if not (since <= r["date"] <= until):
+                continue
+            try:
+                pdf = self._download(r["pdf_url"])
+            except Exception as exc:
+                failures.append(
+                    f"{r['date']} ${r['amount_cents'] / 100:,.2f} ({type(exc).__name__})"
+                )
+                continue
+            out.append(Receipt(
                 merchant="anthropic",
                 amount_cents=r["amount_cents"],
                 date=r["date"],
-                pdf_bytes=self._download(r["pdf_url"]),
+                pdf_bytes=pdf,
                 provenance=r["provenance"],
+            ))
+
+        if failures:
+            shown = ", ".join(failures[:5])
+            more = f" (+{len(failures) - 5} more)" if len(failures) > 5 else ""
+            notes.append(
+                f"{len(failures)} invoice PDF(s) failed to download and were skipped: "
+                f"{shown}{more}"
             )
-            for r in rows
-            if since <= r["date"] <= until
-        ]
+
+        self.truncated = "; ".join(notes) or None
+        return out
 
 
 SOURCE = AnthropicSource()

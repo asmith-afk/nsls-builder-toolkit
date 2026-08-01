@@ -32,6 +32,50 @@ changes nothing in Ramp. Nothing is ever uploaded without `--send`.
 - `/receipts --since 2026-01-01` — widen the window (default: `2026-01-01`)
 - `/receipts --until 2026-06-30` — narrow the window (default: today)
 
+## Execution
+
+**Everything below this section describes what the script does. None of it
+happens unless you run the script.** This file is prompt content, not a
+command definition — reading it executes nothing. Reciting the workflow from
+these notes instead of running `run.py` produces a report of a run that never
+happened, which is the worst possible output: a clean-looking audit of nothing.
+
+Run it from the repository root, so the relative path resolves:
+
+```bash
+python3.12 skills/receipts/scripts/run.py
+```
+
+That is the dry run — it reaches Ramp and the receipt sources read-only and
+uploads nothing. To execute the uploads, and only when the user has actually
+asked to send:
+
+```bash
+python3.12 skills/receipts/scripts/run.py --send
+```
+
+Map the user's request onto the flags and pass them through verbatim:
+
+| The user says | You run |
+|---|---|
+| "receipts", "what's missing", anything unqualified | the bare command above (dry run) |
+| "send", "upload them", "do it", "go ahead" | add `--send` |
+| any start date ("since June", "from 2026-06-01") | add `--since 2026-06-01` |
+| any end date ("through June", "up to 2026-06-30") | add `--until 2026-06-30` |
+| a month or range ("June receipts") | both: `--since 2026-06-01 --until 2026-06-30` |
+
+Dates are ISO `YYYY-MM-DD`. `--since` defaults to `2026-01-01` and `--until`
+to today; omit either flag when the user didn't ask for it. Both bounds are
+inclusive.
+
+Then **relay the script's own output** — the markdown report it prints on
+stdout, plus any `SOURCE …: SKIPPED/TRUNCATED` lines and its exit code. Do not
+paraphrase this document in place of that report, do not summarize a run you
+did not make, and do not describe expected results. If the script exits
+non-zero, show its stderr message and stop; the exit codes are explained under
+[Troubleshooting](#troubleshooting). If the run was a dry run, say so
+explicitly and tell the user that `--send` is what executes it.
+
 ## Setup
 
 Three independent prerequisites. **None of them are required for the other
@@ -72,9 +116,23 @@ Two things, both required for this source specifically:
 
 ```bash
 export ANTHROPIC_ORG_UUID=<your-claude.ai-org-uuid>   # Settings > Organization
-python3.12 -m pip install playwright
+python3.12 -m pip install --user --break-system-packages playwright
 python3.12 -m playwright install chromium
 ```
+
+The two pip flags are not optional on a Mac. Homebrew's python3.12 is a PEP 668
+"externally managed" interpreter, so the plain `pip install` form aborts before
+installing anything:
+
+```
+error: externally-managed-environment
+× This environment is externally managed
+```
+
+`--user --break-system-packages` is the documented escape and is what was
+verified working on this toolkit's reference machine (2026-08-01). It installs
+into your own user site-packages, not Homebrew's tree. A virtualenv works too,
+but then every `python3.12` invocation in this skill has to run inside it.
 
 Then log in once (opens a real browser window):
 
@@ -132,10 +190,25 @@ for the rest.
   `ANTHROPIC_ORG_UUID`, install Playwright, or re-run
   `python3.12 skills/receipts/scripts/sources/anthropic.py --login` if the
   claude.ai session expired.
-- **`SOURCE GMAIL: TRUNCATED (...)`** — the 50-page pagination cap was hit
-  with more results still pending. This is not a skip — the source ran and
-  returned partial results. Results are incomplete; narrow the date window
-  (`--since`/`--until`) and re-run to get a query small enough to finish.
+- **`SOURCE ANTHROPIC: SKIPPED (… HTTP 403 … not an org admin …)`** — a
+  different failure that looks similar and is not fixable the same way. The
+  claude.ai session is fine; the account just can't read that organization's
+  billing invoices. Logging in again cannot change it. Ask an org owner for
+  admin access, or unset `ANTHROPIC_ORG_UUID` to run without this source. A
+  401 or a redirect is the session-expiry case above and *does* want
+  `--login`.
+- **`SOURCE <NAME>: TRUNCATED (...)`** — the source ran and returned
+  **partial** results. This is not a skip and not a failure; it is an
+  incomplete search, and any `UNFOUND` below it may be an artifact of what
+  wasn't searched. Both sources report it the same way:
+  - Gmail — the 50-page pagination cap was hit with more results pending.
+  - Anthropic — the 20-page cap was hit, or the invoice listing claimed more
+    pages while returning no cursor, or one or more invoice PDFs failed to
+    download (those are named, with date and amount, in the message).
+
+  Narrow the date window (`--since`/`--until`) and re-run to get a query small
+  enough to finish. Download failures are usually transient — re-running is
+  often enough.
 - **`SOURCES: N loaded, 0 searched (...)` + exit 2** — zero sources actually
   searched, even though `N` loaded. "Loaded" only means the module imported
   cleanly; it says nothing about whether `fetch()` ever ran. On a fresh,

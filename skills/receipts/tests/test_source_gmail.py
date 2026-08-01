@@ -62,7 +62,25 @@ def test_parse_amount_does_not_match_subtotal_as_total():
 
 def test_build_query_scopes_by_date():
     q = SOURCE.build_query("2026-07-01", "2026-07-31")
-    assert "after:2026/07/01" in q and "before:2026/07/31" in q
+    assert "after:2026/07/01" in q
+    # Gmail's `before:` is EXCLUSIVE. Passing `until` straight through drops
+    # every receipt sent on the end date — and with the default `until` of
+    # today, today's transactions can never match today's receipts. The query
+    # must ask for the day after.
+    assert "before:2026/08/01" in q, q
+    assert "before:2026/07/31" not in q, q
+
+
+def test_build_query_start_boundary_stays_inclusive():
+    # `after:` is inclusive, so `since` passes through untouched — a
+    # one-day window must ask for exactly that one day.
+    q = SOURCE.build_query("2026-07-15", "2026-07-15")
+    assert "after:2026/07/15" in q and "before:2026/07/16" in q, q
+
+
+def test_build_query_end_boundary_rolls_over_month_and_year():
+    assert "before:2026/03/01" in SOURCE.build_query("2026-02-01", "2026-02-28")
+    assert "before:2027/01/01" in SOURCE.build_query("2026-12-01", "2026-12-31")
 
 
 def test_empty_merchants_means_any():

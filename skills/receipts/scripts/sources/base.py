@@ -1,9 +1,11 @@
 #!/usr/bin/env python3.12
 """Contract every receipt source implements."""
 
+import hashlib
 import importlib
 import pkgutil
 import re
+import unicodedata
 from dataclasses import dataclass
 
 
@@ -21,7 +23,38 @@ class Receipt:
 
 
 def normalize_merchant(name: str) -> str:
-    return re.sub(r"[^a-z0-9]", "", (name or "").lower())
+    """Fold a merchant name to a comparable key.
+
+    Two failures the naive `[^a-z0-9]` strip produced, both silent:
+
+    * Accented Latin lost its letters instead of folding them. Ramp's
+      "München" became "mnchen" while a receipt's "Munchen" became "munchen",
+      so a real receipt for a real charge came back UNFOUND. NFKD decomposes
+      the letter into base + combining mark; dropping only the marks keeps
+      the base letter.
+    * Merchants written entirely in a non-Latin script collapsed to "" — and
+      so compared EQUAL to every other such merchant, and to a blank name.
+      That is the dangerous direction: equal keys make one vendor's receipt an
+      automatic upload against another vendor's charge. When nothing survives
+      the fold, fall back to a per-name key that only ever equals itself.
+
+    The result is always [a-z0-9]*, so normalize_merchant is idempotent —
+    match.py re-normalizes already-normalized Receipt.merchant values.
+    """
+    decomposed = unicodedata.normalize("NFKD", name or "")
+    folded = "".join(c for c in decomposed if not unicodedata.combining(c))
+    slug = re.sub(r"[^a-z0-9]", "", folded.lower())
+    if slug:
+        return slug
+
+    # Nothing survived. A name that is genuinely blank stays blank — there is
+    # no merchant to distinguish. A name with real content gets a stable,
+    # process-independent sentinel built only from [a-z0-9], so re-normalizing
+    # it is a no-op and no two different names can ever collide into "".
+    stripped = " ".join((name or "").split())
+    if not stripped:
+        return ""
+    return "x" + hashlib.sha1(stripped.casefold().encode("utf-8")).hexdigest()[:16]
 
 
 def load_sources(errors: list | None = None) -> list:

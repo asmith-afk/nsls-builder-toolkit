@@ -15,6 +15,10 @@ from upload import Ledger, upload
 
 LEDGER_PATH = Path(os.path.expanduser("~/.claude-receipts-ledger.json"))
 ACTIONABLE = (CONFIDENT, BALANCED)
+# Upload outcomes that mean the transaction is no longer missing a receipt:
+# UPLOADED (we attached one) and SKIPPED (Ramp already had one). Everything
+# else — DRY_RUN, FAILED, ESCALATED, ERROR, PENDING — leaves the gap open.
+RESOLVED = ("UPLOADED", "SKIPPED")
 
 
 def _source_lines(skipped_sources, sources_loaded, sources_searched=None) -> list[str]:
@@ -54,12 +58,19 @@ def build_report(pairings, results, skipped_sources, sources_loaded=None, source
     lines.extend(_source_lines(skipped_sources, sources_loaded, sources_searched))
 
     # A pairing only counts as outstanding if its receipt did NOT successfully
-    # upload — regardless of outcome. A BALANCED pairing (e.g. one of four
-    # indistinguishable $214.56 charges) that uploaded fine must not be
-    # double-counted as still missing just because it isn't CONFIDENT.
-    outstanding = sum(p.transaction.amount_cents for p in pairings
-                      if results.get(p.transaction.id) != "UPLOADED")
-    lines.append(f"**{len(pairings)} transactions missing receipts — "
+    # upload and Ramp doesn't already have one — regardless of outcome. A
+    # BALANCED pairing (e.g. one of four indistinguishable $214.56 charges)
+    # that uploaded fine must not be double-counted as still missing just
+    # because it isn't CONFIDENT.
+    #
+    # The COUNT is computed from the same list as the dollar figure. Printing
+    # len(pairings) beside a filtered total let a successful --send report
+    # "1 transactions missing receipts — $0.00 outstanding": a headline that
+    # contradicts itself and names cleared transactions as gaps.
+    still_missing = [p for p in pairings
+                     if results.get(p.transaction.id) not in RESOLVED]
+    outstanding = sum(p.transaction.amount_cents for p in still_missing)
+    lines.append(f"**{len(still_missing)} transactions missing receipts — "
                  f"${outstanding/100:,.2f} outstanding**")
     lines.append("")
 

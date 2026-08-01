@@ -61,6 +61,7 @@ against real mail rather than assumed:
 """
 
 import base64
+import datetime as dt
 import json
 import os
 import re
@@ -164,7 +165,13 @@ class GmailSource:
         return round(float(m.group(1).replace(",", "")) * 100) if m else None
 
     def build_query(self, since: str, until: str) -> str:
-        return (f"after:{since.replace('-', '/')} before:{until.replace('-', '/')} "
+        # Gmail's `before:` is EXCLUSIVE while `after:` is inclusive. Passing
+        # `until` through unchanged drops every receipt sent ON the end date —
+        # and since `until` defaults to today, today's transactions could never
+        # match today's receipts. Ask for the day after so the window the caller
+        # asked for is the window Gmail searches.
+        until_exclusive = (dt.date.fromisoformat(until) + dt.timedelta(days=1)).isoformat()
+        return (f"after:{since.replace('-', '/')} before:{until_exclusive.replace('-', '/')} "
                 f"(subject:receipt OR subject:invoice OR subject:payment)")
 
     @staticmethod

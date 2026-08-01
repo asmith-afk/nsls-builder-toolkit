@@ -165,6 +165,33 @@ def test_balanced_never_binds_a_receipt_outside_the_window():
     assert {p.outcome for p in pairs} == {AMBIGUOUS}
 
 
+def test_accented_merchant_binds_to_its_unaccented_receipt():
+    # Ramp spells it "München GmbH"; the receipt's sender domain gives
+    # "munchengmbh". Stripping non-ASCII bytes turns the transaction into
+    # "mnchengmbh" and the pair silently lands as UNFOUND — a real receipt
+    # reported as a gap.
+    p = match([txn("t", 21456, "2026-07-23", merchant="München GmbH")],
+              [rcpt(21456, "2026-07-23", "inv-de", merchant="munchengmbh")])
+    assert p[0].outcome == CONFIDENT, p[0].note
+
+
+def test_two_different_non_latin_merchants_never_cross_bind():
+    # Both merchants used to normalize to "", making them the same group key
+    # and the same receipt candidate — an automatic upload of one vendor's
+    # receipt against another vendor's charge.
+    pairs = match(
+        [txn("t1", 21456, "2026-07-23", merchant="東京カフェ"),
+         txn("t2", 21456, "2026-07-23", merchant="大阪ストア")],
+        [rcpt(21456, "2026-07-23", "inv-jp", merchant="東京カフェ")],
+    )
+    by_id = {p.transaction.id: p for p in pairs}
+    assert by_id["t1"].outcome == CONFIDENT, by_id["t1"].note
+    assert by_id["t2"].outcome == UNFOUND, (
+        "a different merchant must not attract the first one's receipt: "
+        f"{by_id['t2'].outcome}"
+    )
+
+
 def _within(a: str, b: str, days: int) -> bool:
     import datetime
     return abs((datetime.date.fromisoformat(a) - datetime.date.fromisoformat(b)).days) <= days

@@ -126,6 +126,105 @@ def test_corrupt_ledger_raises_clear_error():
         assert "idempotent" in error_msg.lower(), f"error must mention idempotency: {error_msg}"
 
 
+def test_structurally_invalid_ledgers_raise_corrupt_ledger_not_a_mid_run_crash():
+    # A ledger can be valid JSON and still be the wrong shape — hand-edited,
+    # truncated-then-repaired, written by an older version. Catching only
+    # JSONDecodeError loads it cleanly and defers the blow-up to record() /
+    # attempts() / status(), which fire mid-upload, after real receipts have
+    # already been sent to Ramp. The failure must happen at load time, with
+    # the documented CorruptLedger message contract.
+    cases = {
+        "null root": "null",
+        "list root": '[{"provenance": "p", "status": "UPLOADED"}]',
+        "string root": '"nope"',
+        "rows are not a list": '{"t1": {"provenance": "p", "status": "UPLOADED"}}',
+        "row is not a dict": '{"t1": ["UPLOADED"]}',
+        "row missing provenance": '{"t1": [{"status": "UPLOADED"}]}',
+        "row missing status": '{"t1": [{"provenance": "p"}]}',
+        "rows are a bare string": '{"t1": "UPLOADED"}',
+        "row is null": '{"t1": [null]}',
+    }
+    for label, content in cases.items():
+        p = Path(tempfile.mkdtemp()) / "ledger.json"
+        p.write_text(content)
+        try:
+            Ledger(p)
+        except Ledger.CorruptLedger as e:
+            msg = str(e)
+            assert str(p.resolve()) in msg, f"{label}: error must name the path: {msg}"
+            assert "delete" in msg.lower(), f"{label}: must say deletion is safe: {msg}"
+            assert "idempotent" in msg.lower(), f"{label}: must say why: {msg}"
+        else:
+            raise AssertionError(
+                f"{label}: a structurally invalid ledger must raise CorruptLedger, "
+                "not load cleanly and crash later"
+            )
+
+
+def test_valid_ledger_shapes_still_load():
+    for content in ("{}", '{"t1": []}',
+                    '{"t1": [{"provenance": "p", "status": "FAILED", "transient": true}]}'):
+        p = Path(tempfile.mkdtemp()) / "ledger.json"
+        p.write_text(content)
+        Ledger(p)  # must not raise
+
+
+def test_a_different_receipt_candidate_gets_its_own_retry_budget():
+    # The retry cap exists to stop a candidate that keeps failing. Counting
+    # every historical row for the transaction instead makes it block a
+    # candidate it never tried: two failures on one bad receipt retire the
+    # transaction, so a later run that finds a genuinely different, valid
+    # receipt is ESCALATED without an upload ever being attempted — even
+    # though its idempotency key (transaction + provenance) is untouched.
+    led = _ledger()
+    for _ in range(MAX_ATTEMPTS):
+        led.record("t1", "anthropic:invoice A", "FAILED")
+
+    better = Receipt("anthropic", 21456, "2026-07-23", b"%PDF-1.4", "gmail:msg 19f9")
+    with patch("upload.needs_receipt", return_value=True):
+        with patch("upload.run", return_value=[{"id": "r1"}]) as r:
+            result = upload(Pairing(T, better, CONFIDENT, ""), led, dry_run=False)
+    assert result == "UPLOADED", (
+        "a never-tried receipt candidate must not inherit another candidate's "
+        f"exhausted retry budget (got {result})"
+    )
+    assert idempotency_key("t1", "gmail:msg 19f9") in r.call_args[0][0]
+
+
+def test_skipped_rows_do_not_burn_a_candidates_retry_budget():
+    led = _ledger()
+    for _ in range(MAX_ATTEMPTS):
+        led.record("t1", "anthropic:invoice B", "SKIPPED")
+    with patch("upload.needs_receipt", return_value=True):
+        with patch("upload.run", return_value=[{"id": "r1"}]):
+            assert upload(PAIR, led, dry_run=False) == "UPLOADED", (
+                "SKIPPED rows for another candidate are not failed attempts"
+            )
+
+
+def test_the_cap_still_stops_a_candidate_that_keeps_failing():
+    # The provenance scoping must not quietly disable the cap: the SAME
+    # candidate failing twice must still stop retrying.
+    led = _ledger()
+    with patch("upload.needs_receipt", return_value=True):
+        with patch("upload.run", side_effect=RampError("ramp rejected the file")):
+            for _ in range(MAX_ATTEMPTS):
+                assert upload(PAIR, led, dry_run=False) == "FAILED"
+        with patch("upload.run") as r:
+            assert upload(PAIR, led, dry_run=False) == "ESCALATED"
+            r.assert_not_called()
+
+
+def test_attempts_are_counted_per_provenance():
+    led = _ledger()
+    led.record("t1", "anthropic:invoice A", "FAILED")
+    led.record("t1", "anthropic:invoice A", "FAILED")
+    led.record("t1", "gmail:msg 1", "FAILED")
+    assert led.attempts("t1", "anthropic:invoice A") == 2
+    assert led.attempts("t1", "gmail:msg 1") == 1
+    assert led.attempts("t1", "gmail:msg 2") == 0
+
+
 def test_save_is_atomic_no_temp_files_left():
     tmpdir = Path(tempfile.mkdtemp())
     p = tmpdir / "ledger.json"
@@ -153,7 +252,7 @@ def test_auth_error_is_raised_not_recorded_as_failed():
                 pass
             else:
                 raise AssertionError("RampAuthError must propagate out of upload()")
-    assert led.attempts("t1") == 0, "an auth expiry must not count as an attempt"
+    assert led.attempts("t1", R.provenance) == 0, "an auth expiry must not count as an attempt"
 
 
 def test_transport_failures_do_not_burn_the_escalation_cap():

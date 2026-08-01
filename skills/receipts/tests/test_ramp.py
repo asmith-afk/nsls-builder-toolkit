@@ -2,6 +2,7 @@
 """Tests for ramp.py — the CLI wrapper."""
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 from unittest.mock import patch
@@ -83,6 +84,40 @@ def test_run_tolerates_leading_banner_before_json():
     with patch("os.path.exists", return_value=True):
         with patch("subprocess.run", return_value=FakeProc(payload)):
             assert run(["x"], rationale="y") == [{"ok": 1}]
+
+
+def test_run_wraps_a_cli_timeout_as_ramp_error():
+    # subprocess.run(timeout=180) raises TimeoutExpired, which is a
+    # SubprocessError — not a RampError. Every caller catches only
+    # RampError/RampAuthError, so a hung CLI escapes as a raw traceback
+    # instead of the controlled error path that prints a usable message.
+    with patch("os.path.exists", return_value=True):
+        with patch("subprocess.run",
+                   side_effect=subprocess.TimeoutExpired(cmd="ramp", timeout=180)):
+            try:
+                run(["transactions", "list"], rationale="x")
+            except RampError as exc:
+                msg = str(exc)
+                assert "timed out" in msg.lower(), f"must say it timed out: {msg}"
+                assert "180" in msg, f"must say how long it waited: {msg}"
+                assert "transactions list" in msg, f"must name what timed out: {msg}"
+                return
+    raise AssertionError("a CLI timeout must surface as RampError, not TimeoutExpired")
+
+
+def test_run_wraps_malformed_json_as_ramp_error():
+    # The CLI can emit a truncated or otherwise malformed payload. json.loads
+    # then raises JSONDecodeError (a ValueError), which no caller catches.
+    with patch("os.path.exists", return_value=True):
+        with patch("subprocess.run", return_value=FakeProc('{"data": [{"ok"')):
+            try:
+                run(["users", "me"], rationale="x")
+            except RampError as exc:
+                msg = str(exc)
+                assert "users me" in msg, f"must name the command: {msg}"
+                assert "json" in msg.lower(), f"must say the payload was bad JSON: {msg}"
+                return
+    raise AssertionError("malformed JSON must surface as RampError, not JSONDecodeError")
 
 
 def test_run_raises_when_binary_missing():

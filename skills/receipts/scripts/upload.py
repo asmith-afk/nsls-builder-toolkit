@@ -28,13 +28,51 @@ class Ledger:
         self.entries: dict[str, list[dict]] = {}
         if self.path.exists():
             try:
-                self.entries = json.loads(self.path.read_text())
-            except json.JSONDecodeError as e:
+                loaded = json.loads(self.path.read_text())
+                # Valid JSON is not a valid ledger. `null`, a list, or rows
+                # missing "provenance"/"status" all parse fine and then blow up
+                # inside record()/attempts()/status() as AttributeError or
+                # TypeError — mid-run, after real uploads have already gone to
+                # Ramp, and through an exception no caller is prepared for. The
+                # shape is checked here so the failure lands at load time with
+                # the documented CorruptLedger contract.
+                self._validate(loaded)
+                self.entries = loaded
+            except (json.JSONDecodeError, ValueError) as e:
                 raise self.CorruptLedger(
                     f"Ledger corrupted at {self.path.resolve()}\n"
                     f"It is safe to delete this file — uploads are idempotent and will retry.\n"
                     f"Error: {e}"
                 ) from e
+
+    @staticmethod
+    def _validate(loaded) -> None:
+        """Raise ValueError unless `loaded` is a dict[str, list[dict]] whose rows
+        carry the keys every reader assumes."""
+        if not isinstance(loaded, dict):
+            raise ValueError(
+                f"ledger root must be a JSON object, got {type(loaded).__name__}"
+            )
+        for txn_id, rows in loaded.items():
+            if not isinstance(txn_id, str):
+                raise ValueError(f"transaction id {txn_id!r} is not a string")
+            if not isinstance(rows, list):
+                raise ValueError(
+                    f"rows for transaction {txn_id!r} must be a list, "
+                    f"got {type(rows).__name__}"
+                )
+            for i, row in enumerate(rows):
+                if not isinstance(row, dict):
+                    raise ValueError(
+                        f"row {i} for transaction {txn_id!r} must be an object, "
+                        f"got {type(row).__name__}"
+                    )
+                missing = [k for k in ("provenance", "status") if k not in row]
+                if missing:
+                    raise ValueError(
+                        f"row {i} for transaction {txn_id!r} is missing "
+                        f"{', '.join(missing)}"
+                    )
 
     def record(self, txn_id: str, provenance: str, status: str, transient: bool = False) -> None:
         entry = {"provenance": provenance, "status": status}
@@ -44,15 +82,28 @@ class Ledger:
             entry["transient"] = True
         self.entries.setdefault(txn_id, []).append(entry)
 
-    def attempts(self, txn_id: str) -> int:
-        # Transient entries (network blips, a dead session, anything that never
-        # reached Ramp's judgment) don't count. MAX_ATTEMPTS is 2 — counting
-        # them means two unlucky timeouts retire a transaction permanently,
-        # clearable only by deleting the ledger by hand.
-        return sum(1 for e in self.entries.get(txn_id, []) if not e.get("transient"))
+    def attempts(self, txn_id: str, provenance: str) -> int:
+        """Attempts already spent on ONE receipt candidate for this transaction.
 
-    def status(self, txn_id: str) -> str | None:
-        rows = self.entries.get(txn_id)
+        Scoped to provenance because the idempotency key is: a different
+        candidate is a different upload that Ramp has never seen. Counting every
+        row for the transaction instead let two failures on one bad candidate
+        retire a later, genuinely different, valid receipt without ever trying
+        it — the cap blocking work it never attempted.
+
+        Transient entries (network blips, a dead session, anything that never
+        reached Ramp's judgment) don't count either. MAX_ATTEMPTS is 2 —
+        counting them means two unlucky timeouts retire a transaction
+        permanently, clearable only by deleting the ledger by hand.
+        """
+        return sum(1 for e in self.entries.get(txn_id, [])
+                   if e.get("provenance") == provenance and not e.get("transient"))
+
+    def status(self, txn_id: str, provenance: str | None = None) -> str | None:
+        """Last recorded status — for the whole transaction, or for one candidate."""
+        rows = self.entries.get(txn_id) or []
+        if provenance is not None:
+            rows = [e for e in rows if e.get("provenance") == provenance]
         return rows[-1]["status"] if rows else None
 
     def save(self) -> None:
@@ -83,7 +134,11 @@ def upload(pairing, ledger: Ledger, dry_run: bool) -> str:
         ledger.record(txn.id, rec.provenance, "SKIPPED")
         return "SKIPPED"
 
-    if ledger.attempts(txn.id) >= MAX_ATTEMPTS and ledger.status(txn.id) != "UPLOADED":
+    # Per-candidate, matching the per-candidate idempotency key below. A
+    # candidate that keeps failing still stops after MAX_ATTEMPTS; a candidate
+    # nothing has tried yet gets its own budget.
+    if (ledger.attempts(txn.id, rec.provenance) >= MAX_ATTEMPTS
+            and ledger.status(txn.id, rec.provenance) != "UPLOADED"):
         ledger.record(txn.id, rec.provenance, "ESCALATED")
         return "ESCALATED"
 

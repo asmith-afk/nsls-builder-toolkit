@@ -79,6 +79,30 @@ def test_balanced_and_uploaded_is_not_outstanding():
     )
 
 
+def test_headline_count_excludes_what_the_run_actually_resolved():
+    # `len(pairings)` counts transactions that uploaded fine, and ones upload
+    # SKIPPED because Ramp already had a receipt. A successful --send then
+    # prints "2 transactions missing receipts — $0.00 outstanding": a headline
+    # that contradicts its own dollar figure, and claims cleared transactions
+    # are still missing.
+    pairs = [Pairing(T1, R1, CONFIDENT, ""), Pairing(T3, R3, CONFIDENT, "")]
+    text = build_report(pairs, {"t1": "UPLOADED", "t3": "SKIPPED"}, [])
+    assert "**0 transactions missing receipts — $0.00 outstanding**" in text, text
+
+
+def test_headline_count_and_dollars_agree_on_the_remainder():
+    pairs = [Pairing(T1, R1, CONFIDENT, ""), Pairing(T2, None, UNFOUND, "")]
+    text = build_report(pairs, {"t1": "UPLOADED"}, [])
+    assert "**1 transactions missing receipts — $550.76 outstanding**" in text, text
+
+
+def test_skipped_amounts_are_not_counted_as_outstanding():
+    # SKIPPED means Ramp says the transaction already has a receipt — it is
+    # resolved, not outstanding, even though this run uploaded nothing for it.
+    text = build_report([Pairing(T3, R3, CONFIDENT, "")], {"t3": "SKIPPED"}, [])
+    assert "$0.00 outstanding" in text, text
+
+
 def test_dry_run_notice_prints_when_not_sending():
     with patch("run.missing_receipts", return_value=[]), \
          patch("run.load_sources", return_value=[]), \

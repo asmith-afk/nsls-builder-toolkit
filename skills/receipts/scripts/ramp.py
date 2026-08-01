@@ -14,6 +14,7 @@ import subprocess
 RAMP_BIN = shutil.which("ramp") or os.path.expanduser("~/.local/bin/ramp")
 AMOUNT = re.compile(r"(-?\$?\s?[0-9][0-9,]*\.[0-9]{2})")
 AUTH_HINTS = ("not authenticated", "unauthorized", "401", "auth", "login")
+TIMEOUT_SECONDS = 180
 
 
 class RampError(Exception):
@@ -38,14 +39,31 @@ def run(args: list[str], rationale: str) -> list[dict]:
             "`ramp` CLI not found. Install: curl -fsSL https://agents.ramp.com/install.sh | sh"
         )
     cmd = [RAMP_BIN, *args, "--rationale", rationale, "-o", "json"]
-    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+    # Every caller catches RampError/RampAuthError and nothing else. A hung CLI
+    # (TimeoutExpired) or a truncated payload (JSONDecodeError) would otherwise
+    # escape as a raw traceback, skipping the controlled error path entirely —
+    # and, inside the send loop, taking the run down mid-upload.
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired as exc:
+        raise RampError(
+            f"ramp {' '.join(args)} timed out after {TIMEOUT_SECONDS}s with no response. "
+            f"The CLI hung — check network access to Ramp, then re-run. "
+            f"Nothing was recorded for this call."
+        ) from exc
 
     # The CLI prints a keyring banner before JSON, and reports errors as a JSON
     # object with exit code 0. Both must be handled.
     start = proc.stdout.find("{")
     if start < 0:
         raise RampError(f"No JSON from ramp {' '.join(args)}: {proc.stderr[:200]}")
-    payload = json.loads(proc.stdout[start:])
+    try:
+        payload = json.loads(proc.stdout[start:])
+    except json.JSONDecodeError as exc:
+        raise RampError(
+            f"Malformed JSON from ramp {' '.join(args)}: {exc}. "
+            f"Output began: {proc.stdout[start:start + 200]!r}"
+        ) from exc
 
     if payload.get("error"):
         msg = str(payload["error"].get("message", ""))
