@@ -19,8 +19,8 @@ def txn(i, cents, date="2026-07-23", merchant="Anthropic"):
     return Transaction(id=i, merchant=merchant, amount_cents=cents, date=date)
 
 
-def rcpt(cents, date="2026-07-23", prov="p", merchant="anthropic"):
-    return Receipt(merchant, cents, date, b"%PDF-1.4", prov)
+def rcpt(cents, date="2026-07-23", prov="p", merchant="anthropic", pdf=b"%PDF-1.4"):
+    return Receipt(merchant, cents, date, pdf, prov)
 
 
 def test_single_match_is_confident():
@@ -103,7 +103,14 @@ def test_same_charge_from_two_sources_binds_exactly_one_receipt():
 
 
 def test_two_charges_two_sources_each_binds_one_receipt():
-    """Same collapse, N-wide: 2 identical charges seen by 2 sources = 4 receipts."""
+    """Same collapse, N-wide: 2 identical charges seen by 2 sources = 4 receipts.
+
+    The four receipts here are byte-identical, which is what makes the
+    collapse safe: no source is holding two DIFFERENT documents for this
+    merchant/amount/date. Four genuinely different documents from two sources
+    would mean each source saw two charges, and that stays AMBIGUOUS — see
+    test_two_receipts_from_one_source_is_two_charges_not_a_duplicate.
+    """
     txns = [txn(f"t{i}", 21456, "2026-07-23") for i in range(2)]
     rs = [
         rcpt(21456, "2026-07-23", prov="anthropic:invoice A"),
@@ -129,6 +136,107 @@ def test_same_provenance_twice_is_still_deduped():
     pairs = match(txns, rs)
     assert {p.outcome for p in pairs} == {AMBIGUOUS}
     assert all(p.receipt is None for p in pairs)
+
+
+def test_one_charge_two_sources_different_documents_still_binds_one():
+    """Critical-1, with the documents genuinely different — the real shape.
+
+    The portal invoice and the emailed receipt for one Anthropic charge are
+    different PDFs with different provenance. Nothing about the bytes says
+    they are the same charge; what says it is that they came from two
+    DIFFERENT sources, each holding exactly one document for this
+    merchant/amount/date. That must still collapse to one CONFIDENT bind.
+    """
+    txns = [txn("t1", 21456, "2026-07-23")]
+    rs = [
+        rcpt(21456, "2026-07-23", prov="anthropic:invoice 2026-07-23 21456 tok",
+             pdf=b"%PDF-portal-invoice"),
+        rcpt(21456, "2026-07-23", prov="gmail:msg 18f2c9ab7de",
+             pdf=b"%PDF-emailed-receipt"),
+    ]
+    pairs = match(txns, rs)
+
+    assert len(pairs) == 1
+    assert pairs[0].outcome == CONFIDENT, (
+        f"one charge seen once per source must still bind: {pairs[0].note}"
+    )
+    assert pairs[0].receipt is not None, "exactly one receipt must bind"
+
+
+def test_two_receipts_from_one_source_is_two_charges_not_a_duplicate():
+    """One source, two different documents, same merchant/amount/date.
+
+    Gmail holding two distinct receipt emails for the same merchant, amount
+    and day is not one charge seen twice — Gmail only sees each charge once.
+    It is two real charges, one of which already has its receipt and so is
+    not in the queue. Collapsing here would upload one of those documents
+    against the wrong charge, so nothing may bind.
+    """
+    txns = [txn("t1", 21456, "2026-07-23")]
+    rs = [
+        rcpt(21456, "2026-07-23", prov="gmail:msg A", pdf=b"%PDF-first-purchase"),
+        rcpt(21456, "2026-07-23", prov="gmail:msg B", pdf=b"%PDF-second-purchase"),
+    ]
+    pairs = match(txns, rs)
+
+    assert pairs[0].outcome == AMBIGUOUS, (
+        "two different documents from ONE source are two charges, not a duplicate"
+    )
+    assert pairs[0].receipt is None, "AMBIGUOUS must never assign"
+
+
+def test_three_receipts_two_sources_two_transactions_stays_ambiguous():
+    """Three documents across two sources cannot be a clean per-source view.
+
+    Two transactions and three different documents means at least one source
+    returned two of them — so that source saw two charges while the other saw
+    one, and the surplus is not explained by cross-source duplication.
+    """
+    txns = [txn(f"t{i}", 21456, "2026-07-23") for i in range(2)]
+    rs = [
+        rcpt(21456, "2026-07-23", prov="anthropic:invoice A", pdf=b"%PDF-a"),
+        rcpt(21456, "2026-07-23", prov="gmail:msg A", pdf=b"%PDF-b"),
+        rcpt(21456, "2026-07-23", prov="gmail:msg B", pdf=b"%PDF-c"),
+    ]
+    pairs = match(txns, rs)
+
+    assert {p.outcome for p in pairs} == {AMBIGUOUS}
+    assert all(p.receipt is None for p in pairs), "AMBIGUOUS must never assign"
+
+
+def test_unnamespaced_provenance_is_its_own_source():
+    """A provenance with no ':' must not share a namespace with another one.
+
+    Reading the source as "everything before the first ':'" would give every
+    unnamespaced provenance the same empty prefix, making two unrelated
+    documents look like one source holding two — or, worse under a naive
+    split, like two distinct sources. Each is its own source.
+    """
+    txns = [txn("t1", 21456, "2026-07-23")]
+    rs = [
+        rcpt(21456, "2026-07-23", prov="legacy-a", pdf=b"%PDF-a"),
+        rcpt(21456, "2026-07-23", prov="legacy-b", pdf=b"%PDF-b"),
+    ]
+    pairs = match(txns, rs)
+    assert pairs[0].outcome == CONFIDENT, "two distinct sources, one document each"
+
+    same_source = [
+        rcpt(21456, "2026-07-23", prov="legacy:a", pdf=b"%PDF-a"),
+        rcpt(21456, "2026-07-23", prov="legacy:b", pdf=b"%PDF-b"),
+    ]
+    assert match(txns, same_source)[0].outcome == AMBIGUOUS
+
+
+def test_collapse_is_deterministic_across_input_permutations():
+    """The surviving receipt must not depend on the order sources answered in."""
+    txns = [txn("t1", 21456, "2026-07-23")]
+    rs = [
+        rcpt(21456, "2026-07-23", prov="anthropic:invoice A", pdf=b"%PDF-a"),
+        rcpt(21456, "2026-07-23", prov="gmail:msg A", pdf=b"%PDF-b"),
+    ]
+    bound = {match(txns, order)[0].receipt.provenance
+             for order in (rs, list(reversed(rs)))}
+    assert len(bound) == 1, f"collapse picked different receipts by input order: {bound}"
 
 
 def test_more_receipts_than_transactions_but_not_identical_stays_ambiguous():

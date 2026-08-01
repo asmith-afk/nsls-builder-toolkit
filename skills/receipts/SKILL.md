@@ -152,15 +152,30 @@ ever upload anything to Ramp.**
 
 A charge that appears in two sources at once (Anthropic subscription charges
 arrive as both a billing-portal invoice and a receipt email) is not two
-charges: receipts identical on merchant, amount, and date collapse to the
-number of transactions before the counts are compared. Fewer receipts than
-transactions never collapses — that gap is real and stays `AMBIGUOUS`.
+charges. Extra receipts identical on merchant, amount, and date collapse to
+the number of transactions before the counts are compared — **but only when
+no single source contributed two different documents.** Being identical on
+merchant/amount/date is not proof of a duplicate: two same-price purchases
+from one merchant on one day look exactly the same, and one of them may
+already have its receipt and so not be in the queue. What separates the two
+is which source each document came from:
+
+- **One document per source** (portal invoice + emailed receipt) → one charge
+  seen once per source → collapses.
+- **Two different documents from the same source** (two Gmail receipt emails)
+  → that source only sees each charge once, so those are two real charges →
+  stays `AMBIGUOUS`, nothing binds.
+- **Byte-identical documents** are the same document no matter how many
+  sources carry them → always safe to collapse.
+
+Fewer receipts than transactions never collapses either — that gap is real
+and stays `AMBIGUOUS`.
 
 | Outcome | Meaning | Uploads? |
 |---|---|---|
 | `CONFIDENT` | Exactly one receipt matches exactly one transaction (merchant + amount + within the date window) | Yes |
 | `BALANCED` | N receipts match N transactions with the same merchant/amount (e.g. four identical $214.56 charges) — sorted by date and zipped 1:1 | Yes |
-| `AMBIGUOUS` | The receipt and transaction counts don't line up at a given merchant/amount (e.g. 3 transactions, 2 receipts), or the date-ordered assignment would hand some transaction a receipt outside the window | No — listed for you to resolve by hand |
+| `AMBIGUOUS` | The receipt and transaction counts don't line up at a given merchant/amount (e.g. 3 transactions, 2 receipts) — including a surplus one source alone accounts for — or the date-ordered assignment would hand some transaction a receipt outside the window | No — listed for you to resolve by hand |
 | `UNFOUND` | No receipt in any configured source | No — listed as a gap |
 
 ## Coverage — the known ceiling, not a defect
@@ -228,7 +243,10 @@ for the rest.
 - **`ERROR uploading <id> …`** — that one upload failed; the rest of the run
   continued and the ledger was still saved. Transport-level failures
   (timeouts, reset connections) are recorded but do **not** count toward the
-  2-attempt escalation cap; only failures Ramp itself rejected do.
+  2-attempt escalation cap; only failures Ramp itself rejected do. The full
+  report still prints, but **the run exits 1** — a send where some receipt
+  never got attached is not a clean run, and anything reading the exit code
+  (cron, CI, a wrapper script) has to see that.
 - **`CorruptLedger`** — the error message names the exact ledger file path.
   It's safe to delete it: every upload carries an idempotency key derived
   from the transaction + receipt provenance, so a fresh ledger just re-does

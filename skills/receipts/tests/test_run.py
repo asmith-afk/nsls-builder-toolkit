@@ -330,8 +330,35 @@ def test_mid_loop_upload_failure_still_persists_earlier_successes():
     assert Ledger(ledger_path).status("t1") == "UPLOADED", (
         "the upload that succeeded must survive a later failure"
     )
-    assert code == 0
+    assert code != 0, "a failed upload must not report a clean run"
+    assert code != 2, "a failed upload is not the terminal auth-abort path"
     assert "Ready" in text, "the report must still print after a mid-loop failure"
+
+
+def test_failed_upload_exits_nonzero_so_automation_sees_it():
+    # The loop deliberately swallows a per-transaction failure so the rest of
+    # the run continues. Swallowing the exit code with it made a partial
+    # failure indistinguishable from a clean run to anything reading $?.
+    ledger_path = Path(tempfile.mkdtemp()) / "l.json"
+
+    def fake_needs_receipt(txn_id):
+        raise RuntimeError("connection reset by peer")
+
+    code, text = _send_run(fake_needs_receipt, ledger_path)
+
+    assert code != 0, f"every upload failed and the run still exited {code}"
+    assert "ERROR uploading" in text, "the failure must also be visible in the output"
+
+
+def test_all_success_send_still_exits_zero():
+    # The nonzero exit must be caused by the failure, not by --send itself.
+    ledger_path = Path(tempfile.mkdtemp()) / "l.json"
+
+    code, text = _send_run(lambda txn_id: True, ledger_path)
+
+    assert code == 0, f"a send with no failures must exit 0, got {code}"
+    assert "ERROR uploading" not in text
+    assert Ledger(ledger_path).status("t1") == "UPLOADED"
 
 
 def test_mid_loop_auth_expiry_exits_2_and_keeps_the_ledger():

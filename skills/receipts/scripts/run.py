@@ -204,8 +204,14 @@ def main(argv: list[str]) -> int:
             except Exception as exc:
                 # One transaction's upload blowing up must not discard the
                 # ledger records of the ones that already worked, or suppress
-                # the report for everything else.
+                # the report for everything else — the loop keeps going. But
+                # the RUN did not do what it was asked to do: a receipt Ramp
+                # still needs was not attached. Exiting 0 here tells anything
+                # reading the exit code (cron, CI, a wrapper script) that a
+                # partially-failed send was a clean run, and the failure is
+                # never noticed because nobody reads the report.
                 results[p.transaction.id] = "ERROR"
+                exit_code = 1
                 print(f"\nERROR uploading {p.transaction.id} "
                       f"({p.transaction.merchant}): {type(exc).__name__}: {exc}",
                       file=sys.stderr)
@@ -217,13 +223,17 @@ def main(argv: list[str]) -> int:
         # they did — it gets written whether the loop finished or not.
         ledger.save()
 
-    if exit_code:
+    # An auth abort is terminal: everything after it was skipped, so there is
+    # no run to report on. A failed individual upload is not — the rest of the
+    # run really happened and the user needs to see it, so the report still
+    # prints and the nonzero code rides out alongside it.
+    if exit_code == 2:
         return exit_code
 
     print(build_report(pairings, results, skipped, loaded, searched))
     if not args.send:
         print("\nDry run — nothing uploaded. Re-run with --send to execute.")
-    return 0
+    return exit_code
 
 
 if __name__ == "__main__":
