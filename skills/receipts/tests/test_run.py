@@ -137,6 +137,62 @@ def test_corrupt_ledger_caught_prints_message_and_exits_2():
     assert str(corrupt_path.resolve()) in err.getvalue()
 
 
+def _unreadable_ledger_path():
+    """An existing ledger file this process has no permission to read.
+
+    Returns (path, restore) or (None, None) when permission bits don't apply
+    to this process (e.g. running as root, for whom chmod 000 doesn't block
+    a read), so the caller can skip rather than get a false pass.
+    """
+    if hasattr(os, "geteuid") and os.geteuid() == 0:
+        return None, None
+    tmp_dir = Path(tempfile.mkdtemp())
+    path = tmp_dir / "ledger.json"
+    path.write_text("{}")
+    os.chmod(path, 0o000)
+
+    def restore():
+        os.chmod(path, 0o600)
+        path.unlink()
+        tmp_dir.rmdir()
+
+    return path, restore
+
+
+def test_unreadable_ledger_caught_prints_message_and_exits_2():
+    # Round 3's Macroscope finding: main() wrapped Ledger(LEDGER_PATH) in
+    # `except Ledger.CorruptLedger` only. Ledger.exists()/.read_text() raise
+    # plain OSError for a permissions problem (or a dead home directory) —
+    # not CorruptLedger — so it propagated as a raw traceback, even on a dry
+    # run that read nothing and would otherwise have changed nothing.
+    ledger_path, restore = _unreadable_ledger_path()
+    if ledger_path is None:
+        return  # e.g. running as root, where chmod 000 doesn't restrict reads
+
+    try:
+        with patch("run.missing_receipts", return_value=[]), \
+             patch("run.load_sources", return_value=[]), \
+             patch("run.LEDGER_PATH", ledger_path):
+            err = io.StringIO()
+            with redirect_stderr(err):
+                code = main([])
+    finally:
+        restore()
+
+    assert code == 2, f"an unreadable ledger must exit 2, not crash, got {code}"
+    assert "Traceback" not in err.getvalue(), err.getvalue()
+    assert str(ledger_path) in err.getvalue(), (
+        "must name the ledger path: " + err.getvalue()
+    )
+    # Unreadable is not the same problem as corrupt (invalid JSON) — the
+    # message must not claim the file's contents are bad when it was never
+    # read at all, and must not tell the user it's safe to delete on that
+    # premise.
+    assert "corrupt" not in err.getvalue().lower(), (
+        "an unreadable file is not a corrupt one: " + err.getvalue()
+    )
+
+
 def test_truncated_source_reports_partial_results_not_a_clean_run():
     # A source can hit an internal cap (e.g. Gmail's pagination guard) and
     # return *normally* with a partial list rather than raising. If that

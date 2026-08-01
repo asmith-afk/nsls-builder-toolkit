@@ -187,6 +187,14 @@ def main(argv: list[str]) -> int:
     except Ledger.CorruptLedger as exc:
         print(f"\nERROR: {exc}", file=sys.stderr)
         return 2
+    except OSError as exc:
+        # Ledger.exists() or .read_text() can fail on permissions, a missing
+        # home directory, or any other OS-level problem — distinct from
+        # CorruptLedger (the file loaded but its contents were invalid).
+        # Don't call it corrupt; it may not have been readable at all, and
+        # "delete it, uploads are idempotent" is the wrong advice here.
+        print(f"\nERROR: could not read the ledger at {LEDGER_PATH}: {exc}", file=sys.stderr)
+        return 2
 
     results = {}
     exit_code = 0

@@ -262,6 +262,12 @@ for the rest.
   and escalations from that run are gone. A **dry run never writes the
   ledger at all** — it records nothing, so an unwritable path can't affect
   it.
+- **`ERROR: could not read the ledger at …`** — an *existing* ledger file
+  couldn't be opened (no read permission, an inaccessible home directory).
+  This is different from `CorruptLedger`: the file's contents were never
+  read, so it may be perfectly valid — fix the permissions rather than
+  deleting it. This check happens before any upload work, so it fires — and
+  exits nonzero — even on a dry run.
 - **`ESCALATED`** — this transaction hit the retry cap (2 attempts) without
   uploading. The skill will not retry it again. Attach the receipt manually
   in Ramp.
