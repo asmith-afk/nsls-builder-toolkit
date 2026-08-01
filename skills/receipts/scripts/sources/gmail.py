@@ -10,7 +10,7 @@ Three `gws` calls per receipt PDF (verified live 2026-08-01):
   2. gmail users messages get         -> headers, snippet, internalDate, MIME tree
   3. gmail users messages attachments get -> base64url PDF bytes
 
-Three deviations from a naive subject/snippet transcription, all measured
+Four deviations from a naive subject/snippet transcription, all measured
 against real mail rather than assumed:
 
 * Amount extraction reads the decoded text/plain body, not just the Subject
@@ -41,10 +41,23 @@ against real mail rather than assumed:
 * `list` follows `nextPageToken` to the end instead of reading only the
   first 100 results. Measured live 2026-08-01: the query below matched 516
   messages over a 2-month window (subject:receipt/invoice/payment are
-  common words in ordinary NSLS mail, not just vendor receipts), and the
-  real Asana receipt for the outstanding $937.33 charge only appeared on
+  common words in ordinary NSLS mail, not just vendor receipts), and a real,
+  live vendor receipt matching an outstanding transaction only appeared on
   page 4. Stopping at page 1 — the brief's original call, and a completely
-  reasonable-looking one — would silently have dropped it.
+  reasonable-looking one — would silently have dropped it. The pagination
+  loop is still capped (PAGE_GUARD, currently 50 pages / 5,000 messages) as
+  a sane upper bound; if that cap is ever hit with more results still
+  pending, `fetch()` prints a visible warning (see `_gws`/`fetch` below) —
+  a silent truncation here would be exactly the "degradation that reads as
+  a clean result" failure mode this codebase treats as its recurring bug.
+* `parse_amount` prefers a total-labelled dollar figure (near "Total",
+  "Amount charged", "Amount paid", "Grand Total") over the first bare `$`
+  match. A receipt body routinely contains several dollar figures — a
+  subtotal, a tax line, a discount — and blindly taking the first one risks
+  picking the wrong amount, which (combined with a coincidental merchant
+  match) could produce a real amount-extraction miss even where an email
+  does exist. Falls back to the first bare match when no labelled figure is
+  present, so existing behavior for simple one-figure bodies is unchanged.
 """
 
 import base64
@@ -53,11 +66,21 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 
 from .base import Receipt, SourceUnavailable, normalize_merchant
 
 AMOUNT = re.compile(r"\$\s?([0-9][0-9,]*\.[0-9]{2})")
+# A dollar figure explicitly labelled as the actual charged/total amount,
+# e.g. "Total $99.91", "Amount paid: $99.91". \b before the label prevents
+# matching "Subtotal" (no word boundary exists between "Sub" and "Total").
+LABELED_AMOUNT = re.compile(
+    r"\b(?:Total(?:\s+(?:amount|due))?|Amount\s+(?:charged|paid)|Grand\s+Total)\b"
+    r"\s*:?\s*\$\s?([0-9][0-9,]*\.[0-9]{2})",
+    re.IGNORECASE,
+)
 GWS = shutil.which("gws") or os.path.expanduser("~/bin/gws")
+PAGE_GUARD = 50  # pages (100 messages/page = 5,000 messages) — see fetch()
 
 # Normalized candidate (sender domain label, or display name, whichever is
 # tried and comes up short) -> Ramp's normalized merchant_name. Populate only
@@ -124,7 +147,13 @@ class GmailSource:
     MERCHANTS: tuple[str, ...] = ()
 
     def parse_amount(self, text: str) -> int | None:
-        m = AMOUNT.search(text or "")
+        text = text or ""
+        # Prefer the LAST labelled total — receipts commonly list a subtotal
+        # and/or tax line before the final "Total"/"Amount paid", and the
+        # final one is the one that was actually charged. Fall back to the
+        # first bare $ match when no label is present at all.
+        labeled = list(LABELED_AMOUNT.finditer(text))
+        m = labeled[-1] if labeled else AMOUNT.search(text)
         return round(float(m.group(1).replace(",", "")) * 100) if m else None
 
     def build_query(self, since: str, until: str) -> str:
@@ -157,16 +186,18 @@ class GmailSource:
 
     def fetch(self, since: str, until: str) -> list[Receipt]:
         # `list` paginates via nextPageToken and must be followed to the end.
-        # Measured live 2026-08-01: the query below matched 516 messages over
-        # a 2-month window (subject:receipt/invoice/payment are common words
+        # Measured live 2026-08-01: a real query matched 516 messages over a
+        # 2-month window (subject:receipt/invoice/payment are common words
         # across ordinary NSLS mail, not just vendor receipts) — a single
-        # 100-result page misses real receipts entirely. Concretely, the
-        # actual Asana receipt for the outstanding $937.33 charge only turned
-        # up on page 4; stopping at page 1 would silently drop it. Guarded at
-        # 50 pages (5,000 messages) as a sane upper bound.
+        # 100-result page misses real receipts entirely; a real vendor
+        # receipt matching an outstanding transaction only turned up on page
+        # 4. Guarded at PAGE_GUARD pages as a sane upper bound. If the guard
+        # is hit while more pages remain, that's a silent truncation unless
+        # we say so — print a visible warning rather than letting results
+        # quietly vanish.
         stubs: list[dict] = []
         page_token = None
-        for _ in range(50):
+        for _ in range(PAGE_GUARD):
             params = {"userId": "me", "q": self.build_query(since, until), "maxResults": 100}
             if page_token:
                 params["pageToken"] = page_token
@@ -175,6 +206,15 @@ class GmailSource:
             page_token = listing.get("nextPageToken")
             if not page_token:
                 break
+        else:
+            if page_token:
+                print(
+                    f"WARNING: gmail source hit the {PAGE_GUARD}-page pagination cap "
+                    f"({len(stubs)} messages fetched) with more results still available "
+                    f"(nextPageToken present) — receipts beyond page {PAGE_GUARD} were "
+                    f"NOT scanned. Results are incomplete.",
+                    file=sys.stderr,
+                )
 
         out = []
         for stub in stubs:

@@ -14,7 +14,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
-from sources.gmail import SOURCE, _domain_label, _merchant_from_header
+from sources.gmail import SOURCE, PAGE_GUARD, _domain_label, _merchant_from_header
 from sources.base import SourceUnavailable
 
 
@@ -32,6 +32,32 @@ def test_parse_amount_plain():
 
 def test_parse_amount_absent():
     assert SOURCE.parse_amount("used 75% of its credits") is None
+
+
+def test_parse_amount_prefers_total_over_subtotal_tax_and_discount():
+    # Realistic receipt shape: several dollar figures, only one of which is
+    # the actual charged amount. Blindly taking the first "$" match would
+    # grab the subtotal ($50.00) instead of what was actually charged.
+    text = "Subtotal $50.00 Tax $4.13 Discount -$5.00 Total $49.13"
+    assert SOURCE.parse_amount(text) == 4913
+
+
+def test_parse_amount_prefers_amount_paid_over_subtotal_and_tax_lines():
+    # Reproduces the real Anthropic receipt body structure (verified live,
+    # message 19f94f2f9efe8c87): a per-unit price, a subtotal, a
+    # "Total excluding tax" line, and a tax line all precede the actual
+    # "Total" / "Amount paid" figure that was charged.
+    text = ("Qty 1 $95.02 Subtotal $95.02 Total excluding tax $95.02 "
+            "Tax - Colorado (5.15%) $4.89 Total $99.91 Amount paid $99.91")
+    assert SOURCE.parse_amount(text) == 9991
+
+
+def test_parse_amount_does_not_match_subtotal_as_total():
+    # "Subtotal" must never satisfy the "Total" label match — there is no
+    # word boundary between "Sub" and "Total", so \b protects against it.
+    # Falls back to the first bare "$" match when nothing is labelled.
+    text = "Subtotal $50.00"
+    assert SOURCE.parse_amount(text) == 5000
 
 
 def test_build_query_scopes_by_date():
@@ -321,6 +347,60 @@ def test_fetch_follows_next_page_token_to_the_end():
     assert len(list_calls) == 2, "must follow nextPageToken to a second page"
     assert list_calls[1]["pageToken"] == "TOK2"
     assert len(receipts) == 2, "receipts from both pages must be returned"
+
+
+def test_fetch_warns_when_pagination_cap_is_hit_with_more_pages_pending():
+    # If nextPageToken is still set after PAGE_GUARD pages, results beyond
+    # that point are silently dropped unless we say so. This must be a
+    # visible signal (printed warning), not just a code comment — a
+    # degradation that reads as a clean result is the exact recurring bug
+    # this codebase is built to avoid.
+    call_count = {"n": 0}
+
+    def run(cmd, capture_output=True, text=True, timeout=120):
+        sub = tuple(cmd[1:5])
+        if sub[:4] == ("gmail", "users", "messages", "list"):
+            call_count["n"] += 1
+            # Every page still has a nextPageToken — never exhausts on its own.
+            return _proc({"messages": [{"id": f"m{call_count['n']}", "threadId": "t"}],
+                           "nextPageToken": f"TOK{call_count['n']}"})
+        if sub[:4] == ("gmail", "users", "messages", "get"):
+            return _proc({"payload": {"headers": [], "mimeType": "text/plain",
+                                       "body": {"data": ""}},
+                          "snippet": "no dollar figure", "internalDate": "1784943600000"})
+        raise AssertionError(f"unexpected gws subcommand: {cmd}")
+
+    import io
+    captured_stderr = io.StringIO()
+    with patch("sources.gmail.os.path.exists", return_value=True), \
+         patch("sources.gmail.subprocess.run", side_effect=run), \
+         patch("sources.gmail.sys.stderr", captured_stderr):
+        SOURCE.fetch("2026-01-01", "2026-12-31")
+
+    assert call_count["n"] == PAGE_GUARD, (
+        f"must stop at the {PAGE_GUARD}-page guard, not loop forever"
+    )
+    warning = captured_stderr.getvalue()
+    assert "WARNING" in warning
+    assert str(PAGE_GUARD) in warning
+    assert "incomplete" in warning.lower() or "not scanned" in warning.lower()
+
+
+def test_fetch_does_not_warn_when_pagination_ends_within_the_cap():
+    # The warning must be specific to truly hitting the cap — a normal run
+    # that finishes in a couple of pages must stay silent.
+    responses = {
+        "list": LIST_PAYLOAD,  # single page, no nextPageToken
+        "get": GET_PAYLOAD_TWO_PDFS,
+        "attachments": _attachment_payload(PDF_BYTES),
+    }
+    import io
+    captured_stderr = io.StringIO()
+    with patch("sources.gmail.os.path.exists", return_value=True), \
+         patch("sources.gmail.subprocess.run", side_effect=_dispatch(responses)), \
+         patch("sources.gmail.sys.stderr", captured_stderr):
+        SOURCE.fetch("2026-01-01", "2026-12-31")
+    assert captured_stderr.getvalue() == ""
 
 
 def test_fetch_provenance_is_stable_and_keyed_on_message_id():
