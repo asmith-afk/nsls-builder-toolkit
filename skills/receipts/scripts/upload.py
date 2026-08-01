@@ -26,6 +26,11 @@ class Ledger:
     def __init__(self, path: Path):
         self.path = Path(path)
         self.entries: dict[str, list[dict]] = {}
+        # True once record() has added something that is not yet on disk. A run
+        # that recorded nothing — every dry run — has no reason to touch the
+        # file at all, and must not fail (or even create it) because the home
+        # directory is read-only or the disk is full. See save().
+        self.dirty = False
         if self.path.exists():
             try:
                 loaded = json.loads(self.path.read_text())
@@ -73,6 +78,18 @@ class Ledger:
                         f"row {i} for transaction {txn_id!r} is missing "
                         f"{', '.join(missing)}"
                     )
+                # `transient` is read as a truth value by attempts(), so any
+                # non-boolean that happens to be truthy — the string "false"
+                # is the obvious one — silently excludes a genuine failure
+                # from the attempt count. MAX_ATTEMPTS then never fires and a
+                # permanently-failing receipt is retried forever. The type is
+                # checked here so a hand-edited ledger fails loudly at load
+                # time instead of quietly disabling the escalation cap.
+                if "transient" in row and not isinstance(row["transient"], bool):
+                    raise ValueError(
+                        f"row {i} for transaction {txn_id!r} has a non-boolean "
+                        f"'transient' ({row['transient']!r}); it must be true or false"
+                    )
 
     def record(self, txn_id: str, provenance: str, status: str, transient: bool = False) -> None:
         entry = {"provenance": provenance, "status": status}
@@ -81,6 +98,7 @@ class Ledger:
             # does not count against the escalation cap. See attempts().
             entry["transient"] = True
         self.entries.setdefault(txn_id, []).append(entry)
+        self.dirty = True
 
     def attempts(self, txn_id: str, provenance: str) -> int:
         """Attempts already spent on ONE receipt candidate for this transaction.
@@ -115,6 +133,7 @@ class Ledger:
             with os.fdopen(fd, 'w') as f:
                 f.write(json.dumps(self.entries, indent=2))
             os.replace(tmp_path, str(self.path))
+            self.dirty = False
         except Exception:
             try:
                 os.unlink(tmp_path)

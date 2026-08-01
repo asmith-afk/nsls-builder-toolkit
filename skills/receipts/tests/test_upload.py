@@ -1,6 +1,7 @@
 #!/usr/bin/env python3.12
 """Tests for upload.py — idempotency, escalation cap, dry-run safety."""
 
+import json
 import os
 import subprocess
 import sys
@@ -279,6 +280,85 @@ def test_genuine_ramp_rejections_still_count_toward_the_cap():
         with patch("upload.run") as r:
             assert upload(PAIR, led, dry_run=False) == "ESCALATED"
             r.assert_not_called()
+
+
+def test_non_boolean_transient_is_rejected_as_corrupt():
+    # attempts() reads `transient` as a truth value. A row carrying the STRING
+    # "false" passed validation (which only checked that provenance and status
+    # were present), and then counted as truthy — excluding a genuine failure
+    # from the attempt count. The type has to be checked at load time.
+    p = Path(tempfile.mkdtemp()) / "ledger.json"
+    p.write_text('{"t1": [{"provenance": "p", "status": "FAILED", "transient": "false"}]}')
+    try:
+        Ledger(p)
+    except Ledger.CorruptLedger as e:
+        msg = str(e)
+        assert str(p.resolve()) in msg, f"error must name the path: {msg}"
+        assert "delete" in msg.lower(), f"must say deletion is safe: {msg}"
+        assert "idempotent" in msg.lower(), f"must say why: {msg}"
+    else:
+        raise AssertionError(
+            "a non-boolean 'transient' must raise CorruptLedger, not load cleanly "
+            "and silently disable the escalation cap"
+        )
+
+
+def test_a_string_transient_never_silently_defeats_the_escalation_cap():
+    # The consequence, stated operationally: MAX_ATTEMPTS genuine failures on
+    # one candidate must escalate. With `"transient": "false"` accepted, every
+    # one of those rows is skipped by attempts(), the count reads 0, and the
+    # transaction is retried forever — the cap defeated by a string.
+    p = Path(tempfile.mkdtemp()) / "ledger.json"
+    p.write_text(json.dumps({"t1": [
+        {"provenance": R.provenance, "status": "FAILED", "transient": "false"}
+        for _ in range(MAX_ATTEMPTS)
+    ]}))
+    try:
+        led = Ledger(p)
+    except Ledger.CorruptLedger:
+        return  # rejected at load — the cap can never be reached with this file
+
+    with patch("upload.needs_receipt", return_value=True):
+        with patch("upload.run", return_value=[{"id": "r1"}]):
+            result = upload(PAIR, led, dry_run=False)
+    raise AssertionError(
+        f"{MAX_ATTEMPTS} genuine failures must escalate; a string 'transient' made "
+        f"attempts() read {led.attempts('t1', R.provenance)} and upload returned {result}"
+    )
+
+
+def test_boolean_transient_still_escalates_after_a_disk_round_trip():
+    # The fix must not overcorrect: a real boolean `transient` is legal, and
+    # non-transient FAILED rows loaded from disk must still hit the cap.
+    p = Path(tempfile.mkdtemp()) / "ledger.json"
+    led = Ledger(p)
+    led.record("t1", R.provenance, "FAILED", transient=True)
+    for _ in range(MAX_ATTEMPTS):
+        led.record("t1", R.provenance, "FAILED")
+    led.save()
+
+    reloaded = Ledger(p)
+    assert reloaded.attempts("t1", R.provenance) == MAX_ATTEMPTS, (
+        "the transient row must not count, the genuine failures must"
+    )
+    with patch("upload.needs_receipt", return_value=True):
+        with patch("upload.run") as r:
+            assert upload(PAIR, reloaded, dry_run=False) == "ESCALATED"
+            r.assert_not_called()
+
+
+def test_ledger_is_not_dirty_until_something_is_recorded():
+    # run.py skips the ledger write entirely when nothing was recorded, so a
+    # dry run never touches the file. That gate is only correct if `dirty`
+    # tracks record() faithfully — and clears once the write lands.
+    p = Path(tempfile.mkdtemp()) / "ledger.json"
+    led = Ledger(p)
+    assert led.dirty is False, "a freshly loaded ledger has nothing to persist"
+    led.record("t1", "inv-A", "UPLOADED")
+    assert led.dirty is True, "a recorded entry must mark the ledger dirty"
+    led.save()
+    assert led.dirty is False, "a successful write clears the dirty flag"
+    assert Ledger(p).dirty is False
 
 
 if __name__ == "__main__":

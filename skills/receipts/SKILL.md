@@ -250,7 +250,18 @@ for the rest.
 - **`CorruptLedger`** — the error message names the exact ledger file path.
   It's safe to delete it: every upload carries an idempotency key derived
   from the transaction + receipt provenance, so a fresh ledger just re-does
-  the bookkeeping, it never double-uploads.
+  the bookkeeping, it never double-uploads. This fires for any ledger that
+  isn't the shape every reader assumes — including a hand-edited row whose
+  `transient` flag is a string (`"false"`) instead of a real boolean, which
+  would otherwise read as truthy and silently disable the 2-attempt
+  escalation cap for that transaction.
+- **`ERROR: could not write the receipts ledger at …`** — uploads that
+  reached Ramp this run were not recorded locally (read-only home, bad
+  permissions, full disk). The full report prints first and the run exits
+  non-zero; re-running is safe (uploads are idempotent), but the retry counts
+  and escalations from that run are gone. A **dry run never writes the
+  ledger at all** — it records nothing, so an unwritable path can't affect
+  it.
 - **`ESCALATED`** — this transaction hit the retry cap (2 attempts) without
   uploading. The skill will not retry it again. Attach the receipt manually
   in Ramp.

@@ -190,6 +190,7 @@ def main(argv: list[str]) -> int:
 
     results = {}
     exit_code = 0
+    ledger_error: Exception | None = None
     try:
         for p in pairings:
             if p.outcome not in ACTIONABLE:
@@ -221,18 +222,53 @@ def main(argv: list[str]) -> int:
     finally:
         # Uploads already happened in Ramp. The ledger is the only record that
         # they did — it gets written whether the loop finished or not.
-        ledger.save()
+        #
+        # Two conditions on that write, both about not turning a bookkeeping
+        # problem into the user's whole result:
+        #
+        # 1. Only if something was actually recorded. A dry run attempts no
+        #    upload and adds no entry, so it has nothing to persist — and a
+        #    read-only home or a full disk must not make an otherwise perfect
+        #    dry run die on a file it had no reason to open.
+        # 2. Never as an escaping exception. An OSError out of save() here
+        #    would replace the report with a traceback, and — worse — would
+        #    fire from inside the `finally` while the auth-abort path is
+        #    unwinding, replacing a controlled exit 2 with a crash. It is
+        #    captured and reported below instead, after the report prints.
+        if ledger.dirty:
+            try:
+                ledger.save()
+            except OSError as exc:
+                ledger_error = exc
+
+    def _report_ledger_error() -> None:
+        print(f"\nERROR: could not write the receipts ledger at {ledger.path}: "
+              f"{type(ledger_error).__name__}: {ledger_error}\n"
+              f"Uploads that reached Ramp this run are NOT recorded locally. Re-running is "
+              f"safe — uploads are idempotent — but retry counts and escalations for this "
+              f"run were lost. Fix write access to that path and re-run.", file=sys.stderr)
 
     # An auth abort is terminal: everything after it was skipped, so there is
     # no run to report on. A failed individual upload is not — the rest of the
     # run really happened and the user needs to see it, so the report still
     # prints and the nonzero code rides out alongside it.
     if exit_code == 2:
+        # A failed ledger write is reported, but it must not downgrade (or
+        # upgrade) the auth abort — exit 2 is what the caller is watching for.
+        if ledger_error is not None:
+            _report_ledger_error()
         return exit_code
 
     print(build_report(pairings, results, skipped, loaded, searched))
     if not args.send:
         print("\nDry run — nothing uploaded. Re-run with --send to execute.")
+
+    # After the report, never instead of it. The run's findings are the thing
+    # the user came for; a ledger the tool could not write is a real failure
+    # that has to show up in the exit code, but it does not erase the results.
+    if ledger_error is not None:
+        _report_ledger_error()
+        exit_code = exit_code or 1
     return exit_code
 
 

@@ -2,6 +2,7 @@
 """Tests for the report. Degraded sources must be announced, never silent."""
 
 import io
+import os
 import sys
 import tempfile
 from contextlib import redirect_stderr, redirect_stdout
@@ -464,6 +465,105 @@ def test_zero_sources_searched_with_no_transactions_is_not_a_false_alarm():
             code = main([])
     assert code == 0, "no transactions were in the queue, so there is nothing to fail about"
     assert "Nothing missing a receipt" in out.getvalue()
+
+
+def _unwritable_ledger_path():
+    """A ledger path whose parent directory cannot be created.
+
+    Returns (path, restore) or (None, None) when the filesystem can't be made
+    unwritable for this process (running as root), so the caller can skip.
+    """
+    if hasattr(os, "geteuid") and os.geteuid() == 0:
+        return None, None
+    parent = Path(tempfile.mkdtemp())
+    os.chmod(parent, 0o500)  # r-x: mkdir inside fails with EACCES
+    return parent / "nested" / "ledger.json", lambda: os.chmod(parent, 0o700)
+
+
+def test_dry_run_does_not_write_the_ledger_and_survives_an_unwritable_path():
+    # ledger.save() lives in a finally block so a mid-loop failure can't lose
+    # already-recorded uploads. Running it unconditionally made a DRY RUN —
+    # which attempts no upload and records nothing — depend on being able to
+    # write a file it has no reason to touch. On a read-only home or a full
+    # disk that raised an uncaught OSError *before* the report printed: the
+    # user got a traceback instead of their results, from a run that changed
+    # nothing.
+    ledger_path, restore = _unwritable_ledger_path()
+    if ledger_path is None:
+        return
+
+    saves = []
+    real_save = Ledger.save
+
+    def spy(self):
+        saves.append(self.path)
+        return real_save(self)
+
+    try:
+        with patch("run.missing_receipts", return_value=[T1]), \
+             patch("run.load_sources", return_value=[_OkSource()]), \
+             patch("run.LEDGER_PATH", ledger_path), \
+             patch.object(Ledger, "save", spy):
+            out, err = io.StringIO(), io.StringIO()
+            with redirect_stdout(out), redirect_stderr(err):
+                code = main([])
+    finally:
+        restore()
+
+    text = out.getvalue()
+    assert code == 0, f"a dry run that changed nothing must exit 0, got {code}"
+    assert "Receipts → Ramp" in text and "Anthropic" in text, (
+        "the full report must still print: " + text + err.getvalue()
+    )
+    assert "Dry run" in text
+    assert saves == [], "a dry run records nothing — it must not write the ledger at all"
+    assert not ledger_path.exists()
+
+
+def test_ledger_write_failure_on_send_still_prints_the_report_and_exits_nonzero():
+    # The other half: on --send an upload really was recorded, so the write is
+    # attempted — and if it fails, that is a genuine failure the exit code has
+    # to carry. It still must not eat the report or escape as a traceback.
+    ledger_path, restore = _unwritable_ledger_path()
+    if ledger_path is None:
+        return
+
+    try:
+        code, text = _send_run(lambda txn_id: True, ledger_path)
+    finally:
+        restore()
+
+    assert code != 0, "a ledger the tool could not write is not a clean run"
+    assert "Ready" in text, "the report must still print: " + text
+    assert "Anthropic" in text
+    assert str(ledger_path) in text, "the failure must name the ledger path: " + text
+    assert "Traceback" not in text
+
+
+def test_ledger_write_failure_does_not_downgrade_the_auth_abort():
+    # The auth abort is the exit code automation watches for. An OSError out
+    # of save() inside the finally, while that abort is unwinding, must not
+    # replace exit 2 with a crash or with a different code.
+    from ramp import RampAuthError
+
+    ledger_path, restore = _unwritable_ledger_path()
+    if ledger_path is None:
+        return
+
+    def fake_needs_receipt(txn_id):
+        if txn_id == "t3":
+            raise RampAuthError("Ramp auth failed — run `ramp auth login`")
+        return True
+
+    try:
+        code, text = _send_run(fake_needs_receipt, ledger_path)
+    finally:
+        restore()
+
+    assert code == 2, f"the auth abort must still exit 2, got {code}"
+    assert "ramp auth login" in text
+    assert str(ledger_path) in text, "the ledger failure must still be reported: " + text
+    assert "Traceback" not in text
 
 
 if __name__ == "__main__":
