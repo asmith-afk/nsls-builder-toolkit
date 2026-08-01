@@ -12,7 +12,7 @@ import shutil
 import subprocess
 
 RAMP_BIN = shutil.which("ramp") or os.path.expanduser("~/.local/bin/ramp")
-AMOUNT = re.compile(r"-?\$?\s?([0-9][0-9,]*\.[0-9]{2})")
+AMOUNT = re.compile(r"(-?\$?\s?[0-9][0-9,]*\.[0-9]{2})")
 AUTH_HINTS = ("not authenticated", "unauthorized", "401", "auth", "login")
 
 
@@ -28,7 +28,8 @@ def parse_amount(text: str) -> int:
     m = AMOUNT.search(str(text or ""))
     if not m:
         raise RampError(f"Cannot parse amount from {text!r}")
-    return round(float(m.group(1).replace(",", "")) * 100)
+    amount_str = m.group(1).replace("$", "").replace(" ", "").replace(",", "")
+    return round(float(amount_str) * 100)
 
 
 def run(args: list[str], rationale: str) -> list[dict]:

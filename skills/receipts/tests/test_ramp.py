@@ -23,6 +23,12 @@ def test_parse_amount_handles_thousands_and_cents():
     assert parse_amount("$50.00") == 5000
 
 
+def test_parse_amount_handles_negative_amounts():
+    assert parse_amount("-$50.00") == -5000
+    assert parse_amount("-$1,085.00") == -108500
+    assert parse_amount("-$214.56") == -21456
+
+
 def test_parse_amount_rejects_unparseable():
     try:
         parse_amount("n/a")
@@ -39,8 +45,9 @@ def test_run_injects_rationale():
         seen["cmd"] = cmd
         return FakeProc(payload)
 
-    with patch("subprocess.run", side_effect=fake):
-        out = run(["users", "me"], rationale="why I am calling")
+    with patch("os.path.exists", return_value=True):
+        with patch("subprocess.run", side_effect=fake):
+            out = run(["users", "me"], rationale="why I am calling")
 
     assert out == [{"ok": True}]
     assert "--rationale" in seen["cmd"]
@@ -50,29 +57,43 @@ def test_run_injects_rationale():
 
 def test_run_raises_on_error_object_despite_exit_zero():
     payload = json.dumps({"error": {"code": 2, "message": "Missing required flags: ID"}, "data": []})
-    with patch("subprocess.run", return_value=FakeProc(payload)):
-        try:
-            run(["transactions", "missing"], rationale="x")
-        except RampError as exc:
-            assert "Missing required flags" in str(exc)
-            return
+    with patch("os.path.exists", return_value=True):
+        with patch("subprocess.run", return_value=FakeProc(payload)):
+            try:
+                run(["transactions", "missing"], rationale="x")
+            except RampError as exc:
+                assert "Missing required flags" in str(exc)
+                return
     raise AssertionError("error object with exit 0 must still raise")
 
 
 def test_run_raises_auth_error_distinctly():
     payload = json.dumps({"error": {"code": 2, "message": "not authenticated"}, "data": []})
-    with patch("subprocess.run", return_value=FakeProc(payload)):
-        try:
-            run(["users", "me"], rationale="x")
-        except RampAuthError:
-            return
+    with patch("os.path.exists", return_value=True):
+        with patch("subprocess.run", return_value=FakeProc(payload)):
+            try:
+                run(["users", "me"], rationale="x")
+            except RampAuthError:
+                return
     raise AssertionError("auth failures must raise RampAuthError, not bare RampError")
 
 
 def test_run_tolerates_leading_banner_before_json():
     payload = "Using keyring backend: keyring\n" + json.dumps({"data": [{"ok": 1}]})
-    with patch("subprocess.run", return_value=FakeProc(payload)):
-        assert run(["x"], rationale="y") == [{"ok": 1}]
+    with patch("os.path.exists", return_value=True):
+        with patch("subprocess.run", return_value=FakeProc(payload)):
+            assert run(["x"], rationale="y") == [{"ok": 1}]
+
+
+def test_run_raises_when_binary_missing():
+    with patch("os.path.exists", return_value=False):
+        try:
+            run(["users", "me"], rationale="x")
+        except RampError as exc:
+            assert "ramp` CLI not found" in str(exc)
+            assert "install.sh" in str(exc)
+            return
+    raise AssertionError("run() must raise RampError when binary is missing")
 
 
 if __name__ == "__main__":
