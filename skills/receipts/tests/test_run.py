@@ -33,6 +33,20 @@ def test_no_skip_line_when_nothing_skipped():
     assert "SKIPPED" not in text
 
 
+def test_truncated_note_renders_as_truncated_not_skipped():
+    # A source that hit its pagination cap ran successfully and returned
+    # partial results — it was never skipped. Rendering it as "SKIPPED"
+    # tells the user something untrue about what happened, and a user has
+    # little reason to read past that word once they see it. The report
+    # must say TRUNCATED, not wrap it inside SKIPPED (...).
+    text = build_report(
+        [], {},
+        ["GMAIL: TRUNCATED (hit the 50-page cap, 5000 messages fetched, results incomplete)"],
+    )
+    assert "SOURCE GMAIL: TRUNCATED (hit the 50-page cap" in text
+    assert "SKIPPED" not in text
+
+
 def test_unfound_listed_with_merchant_and_amount():
     text = build_report([Pairing(T2, None, UNFOUND, "no receipt")], {}, [])
     assert "Neon Tech" in text and "$550.76" in text

@@ -22,7 +22,15 @@ def build_report(pairings, results, skipped_sources) -> str:
 
     for note in skipped_sources:
         name, _, reason = note.partition(": ")
-        lines.append(f"SOURCE {name}: SKIPPED ({reason})")
+        # A TRUNCATED note means the source ran successfully and returned
+        # partial results — it was never skipped. Wrapping it as
+        # "SKIPPED (TRUNCATED (...))" tells the user something untrue about
+        # what happened, and "SKIPPED" is exactly the word that stops most
+        # readers from reading further. Render it plainly instead.
+        if reason.startswith("TRUNCATED"):
+            lines.append(f"SOURCE {name}: {reason}")
+        else:
+            lines.append(f"SOURCE {name}: SKIPPED ({reason})")
     if skipped_sources:
         lines.append("")
 
