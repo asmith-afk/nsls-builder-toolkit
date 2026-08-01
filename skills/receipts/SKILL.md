@@ -92,11 +92,17 @@ skipped and announced; the rest of the run proceeds normally.
 Every outstanding transaction gets exactly one outcome. **Only the first two
 ever upload anything to Ramp.**
 
+A charge that appears in two sources at once (Anthropic subscription charges
+arrive as both a billing-portal invoice and a receipt email) is not two
+charges: receipts identical on merchant, amount, and date collapse to the
+number of transactions before the counts are compared. Fewer receipts than
+transactions never collapses — that gap is real and stays `AMBIGUOUS`.
+
 | Outcome | Meaning | Uploads? |
 |---|---|---|
 | `CONFIDENT` | Exactly one receipt matches exactly one transaction (merchant + amount + within the date window) | Yes |
 | `BALANCED` | N receipts match N transactions with the same merchant/amount (e.g. four identical $214.56 charges) — sorted by date and zipped 1:1 | Yes |
-| `AMBIGUOUS` | The receipt and transaction counts don't line up at a given merchant/amount (e.g. 3 transactions, 2 receipts) | No — listed for you to resolve by hand |
+| `AMBIGUOUS` | The receipt and transaction counts don't line up at a given merchant/amount (e.g. 3 transactions, 2 receipts), or the date-ordered assignment would hand some transaction a receipt outside the window | No — listed for you to resolve by hand |
 | `UNFOUND` | No receipt in any configured source | No — listed as a gap |
 
 ## Coverage — the known ceiling, not a defect
@@ -130,6 +136,16 @@ for the rest.
   with more results still pending. This is not a skip — the source ran and
   returned partial results. Results are incomplete; narrow the date window
   (`--since`/`--until`) and re-run to get a query small enough to finish.
+- **`SOURCES: 0 loaded (none)` + exit 2** — no receipt source loaded at all,
+  so nothing was searched. The run refuses to list transactions as "no
+  receipt found" when it never looked. The `SOURCE …: SKIPPED (...)` lines
+  printed above it say why (a source that fails at *import* — missing
+  dependency, syntax error — is reported and skipped, never fatal to the
+  others). Every report states how many sources loaded, every run.
+- **`ERROR uploading <id> …`** — that one upload failed; the rest of the run
+  continued and the ledger was still saved. Transport-level failures
+  (timeouts, reset connections) are recorded but do **not** count toward the
+  2-attempt escalation cap; only failures Ramp itself rejected do.
 - **`CorruptLedger`** — the error message names the exact ledger file path.
   It's safe to delete it: every upload carries an idempotency key derived
   from the transaction + receipt provenance, so a fresh ledger just re-does

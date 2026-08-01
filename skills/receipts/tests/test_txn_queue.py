@@ -11,7 +11,8 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
-from txn_queue import Transaction, missing_receipts
+from ramp import RampError
+from txn_queue import Transaction, missing_receipts, needs_receipt
 
 PAGE = {
     "transactions": [
@@ -91,6 +92,33 @@ def test_follows_pagination_cursor():
 
     assert len(out) == 2
     assert any("CUR" in a for a in calls[1]), "second page must pass next_page_cursor"
+
+
+def test_empty_data_from_list_raises_rampe_error_not_indexerror():
+    # `run()` returns payload["data"], which can legitimately be []. Indexing
+    # [0] on it is a raw IndexError — a traceback main() does not catch, and
+    # inside the send loop it also aborts the run mid-upload.
+    with patch("txn_queue.run", return_value=[]):
+        try:
+            missing_receipts("2026-01-01", "2026-08-01")
+        except RampError as exc:
+            assert "no data" in str(exc).lower(), f"message must say what happened: {exc}"
+            return
+        except IndexError:
+            raise AssertionError("empty data must raise RampError, not IndexError")
+    raise AssertionError("empty data must raise RampError")
+
+
+def test_empty_data_from_missing_check_raises_ramp_error():
+    with patch("txn_queue.run", return_value=[]):
+        try:
+            needs_receipt("t1")
+        except RampError as exc:
+            assert "no data" in str(exc).lower()
+            return
+        except IndexError:
+            raise AssertionError("empty data must raise RampError, not IndexError")
+    raise AssertionError("empty data must raise RampError")
 
 
 if __name__ == "__main__":

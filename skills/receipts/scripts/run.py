@@ -17,9 +17,8 @@ LEDGER_PATH = Path(os.path.expanduser("~/.claude-receipts-ledger.json"))
 ACTIONABLE = (CONFIDENT, BALANCED)
 
 
-def build_report(pairings, results, skipped_sources) -> str:
-    lines = ["# Receipts → Ramp", ""]
-
+def _source_lines(skipped_sources, sources_loaded) -> list[str]:
+    lines = []
     for note in skipped_sources:
         name, _, reason = note.partition(": ")
         # A TRUNCATED note means the source ran successfully and returned
@@ -31,8 +30,19 @@ def build_report(pairings, results, skipped_sources) -> str:
             lines.append(f"SOURCE {name}: {reason}")
         else:
             lines.append(f"SOURCE {name}: SKIPPED ({reason})")
-    if skipped_sources:
-        lines.append("")
+
+    # Stated every run, not just when something went wrong. "No receipt in any
+    # source" and "there were no sources" print identically otherwise, and the
+    # second one is a broken install reading as a clean audit.
+    names = list(sources_loaded or [])
+    lines.append(f"SOURCES: {len(names)} loaded ({', '.join(names) if names else 'none'})")
+    lines.append("")
+    return lines
+
+
+def build_report(pairings, results, skipped_sources, sources_loaded=None) -> str:
+    lines = ["# Receipts → Ramp", ""]
+    lines.extend(_source_lines(skipped_sources, sources_loaded))
 
     # A pairing only counts as outstanding if its receipt did NOT successfully
     # upload — regardless of outcome. A BALANCED pairing (e.g. one of four
@@ -92,9 +102,16 @@ def main(argv: list[str]) -> int:
         return 2
     print("", file=sys.stderr)
 
-    receipts, skipped = [], []
-    for src in load_sources():
+    receipts, skipped, loaded = [], [], []
+    # A source that fails at import (missing dependency, syntax error) is
+    # reported and skipped — it must not end discovery for the others.
+    import_errors: list[str] = []
+    sources = load_sources(import_errors) or []
+    skipped.extend(import_errors)
+
+    for src in sources:
         name = type(src).__name__.replace("Source", "").upper()
+        loaded.append(name)
         try:
             receipts.extend(src.fetch(args.since, until))
             # A source can hit an internal cap (e.g. Gmail's pagination
@@ -116,6 +133,21 @@ def main(argv: list[str]) -> int:
 
     pairings = match(txns, receipts)
 
+    # Zero sources loaded means nothing was searched. Every transaction would
+    # come back UNFOUND — "no receipt in any source" — and the run would exit 0
+    # looking like a completed audit that simply found nothing. That is an
+    # empty result that means we didn't look, and it must not be reported as a
+    # finding. (With no transactions in the window there is no UNFOUND to
+    # misreport, so that case still exits 0 — but the SOURCES line above always
+    # says zero loaded.)
+    if not loaded and pairings:
+        print("\n".join(["# Receipts → Ramp", ""] + _source_lines(skipped, loaded)))
+        print(f"\nERROR: no receipt sources loaded — {len(pairings)} transactions are "
+              f"missing a receipt and none of them were searched. Refusing to report them "
+              f"as 'no receipt found'. Fix source setup (see the SOURCE lines above and "
+              f"the Setup section of SKILL.md) and re-run.", file=sys.stderr)
+        return 2
+
     try:
         ledger = Ledger(LEDGER_PATH)
     except Ledger.CorruptLedger as exc:
@@ -123,12 +155,38 @@ def main(argv: list[str]) -> int:
         return 2
 
     results = {}
-    for p in pairings:
-        if p.outcome in ACTIONABLE:
-            results[p.transaction.id] = upload(p, ledger, dry_run=not args.send)
-    ledger.save()
+    exit_code = 0
+    try:
+        for p in pairings:
+            if p.outcome not in ACTIONABLE:
+                continue
+            try:
+                results[p.transaction.id] = upload(p, ledger, dry_run=not args.send)
+            except RampAuthError:
+                # The session died mid-run. Nothing after this can succeed —
+                # stop, but through the same clean exit-2 path as an auth
+                # failure at queue-build time, with the ledger saved.
+                raise
+            except Exception as exc:
+                # One transaction's upload blowing up must not discard the
+                # ledger records of the ones that already worked, or suppress
+                # the report for everything else.
+                results[p.transaction.id] = "ERROR"
+                print(f"\nERROR uploading {p.transaction.id} "
+                      f"({p.transaction.merchant}): {type(exc).__name__}: {exc}",
+                      file=sys.stderr)
+    except RampAuthError as exc:
+        print(f"\nERROR: {exc}", file=sys.stderr)
+        exit_code = 2
+    finally:
+        # Uploads already happened in Ramp. The ledger is the only record that
+        # they did — it gets written whether the loop finished or not.
+        ledger.save()
 
-    print(build_report(pairings, results, skipped))
+    if exit_code:
+        return exit_code
+
+    print(build_report(pairings, results, skipped, loaded))
     if not args.send:
         print("\nDry run — nothing uploaded. Re-run with --send to execute.")
     return 0

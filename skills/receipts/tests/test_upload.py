@@ -2,6 +2,7 @@
 """Tests for upload.py — idempotency, escalation cap, dry-run safety."""
 
 import os
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -10,6 +11,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 from match import CONFIDENT, Pairing
+from ramp import RampAuthError, RampError
 from txn_queue import Transaction
 from sources.base import Receipt
 from upload import MAX_ATTEMPTS, Ledger, idempotency_key, upload
@@ -25,6 +27,32 @@ def _ledger():
 
 def test_idempotency_key_stable():
     assert idempotency_key("t1", "inv-A") == idempotency_key("t1", "inv-A")
+
+
+# sha256(b"t1|inv-A") — pinned. Comparing two calls inside one process cannot
+# tell a real digest apart from sha256(str(hash(...))), which is stable
+# in-process and different on every run under hash randomization. That is
+# exactly the failure that defeats Ramp's duplicate collapsing: the retry of
+# a half-failed upload arrives with a fresh key and attaches a second copy.
+EXPECTED_KEY_T1_INV_A = "014250b3e10fbd8f6847034232cf6d9f370dcdd0458965c25877b36db796c61a"
+
+
+def test_idempotency_key_matches_the_pinned_digest():
+    assert idempotency_key("t1", "inv-A") == EXPECTED_KEY_T1_INV_A
+
+
+def test_idempotency_key_is_stable_across_processes():
+    scripts = str(Path(__file__).resolve().parent.parent / "scripts")
+    code = (
+        "import sys; sys.path.insert(0, %r);"
+        "from upload import idempotency_key; print(idempotency_key('t1', 'inv-A'))" % scripts
+    )
+    env = {**os.environ, "PYTHONHASHSEED": "random"}
+    proc = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=env)
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.strip() == idempotency_key("t1", "inv-A"), (
+        "the key must be identical in a fresh process, or every retry is a new upload"
+    )
 
 
 def test_idempotency_key_differs_per_transaction():
@@ -110,6 +138,48 @@ def test_save_is_atomic_no_temp_files_left():
     # Verify round-trip works
     led2 = Ledger(p)
     assert led2.status("t1") == "UPLOADED"
+
+
+def test_auth_error_is_raised_not_recorded_as_failed():
+    # Recording FAILED for an auth expiry burns an escalation attempt on a
+    # transaction that was never actually rejected, and hides a dead session
+    # behind a per-transaction failure. It must abort the run instead.
+    led = _ledger()
+    with patch("upload.needs_receipt", return_value=True):
+        with patch("upload.run", side_effect=RampAuthError("auth dead")):
+            try:
+                upload(PAIR, led, dry_run=False)
+            except RampAuthError:
+                pass
+            else:
+                raise AssertionError("RampAuthError must propagate out of upload()")
+    assert led.attempts("t1") == 0, "an auth expiry must not count as an attempt"
+
+
+def test_transport_failures_do_not_burn_the_escalation_cap():
+    # MAX_ATTEMPTS is 2. Two network blips used to retire a transaction
+    # permanently, with no way to clear it but deleting the ledger.
+    led = _ledger()
+    with patch("upload.needs_receipt", return_value=True):
+        with patch("upload.run", side_effect=ConnectionResetError("connection reset")):
+            for _ in range(MAX_ATTEMPTS + 1):
+                assert upload(PAIR, led, dry_run=False) == "FAILED"
+
+        with patch("upload.run", return_value=[{"id": "r1"}]):
+            assert upload(PAIR, led, dry_run=False) == "UPLOADED", (
+                "transport blips must not escalate a transaction out of reach"
+            )
+
+
+def test_genuine_ramp_rejections_still_count_toward_the_cap():
+    led = _ledger()
+    with patch("upload.needs_receipt", return_value=True):
+        with patch("upload.run", side_effect=RampError("ramp receipts upload: invalid file")):
+            for _ in range(MAX_ATTEMPTS):
+                assert upload(PAIR, led, dry_run=False) == "FAILED"
+        with patch("upload.run") as r:
+            assert upload(PAIR, led, dry_run=False) == "ESCALATED"
+            r.assert_not_called()
 
 
 if __name__ == "__main__":

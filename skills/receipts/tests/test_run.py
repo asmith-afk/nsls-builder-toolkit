@@ -191,6 +191,145 @@ def test_one_broken_source_does_not_take_down_the_run():
     assert "Anthropic" in text, "the OK source's receipt must still produce a result"
 
 
+def test_report_always_says_how_many_sources_loaded():
+    # "0 receipts found" and "we never looked" render identically unless the
+    # report states, every run, how many sources actually loaded.
+    text = build_report([], {}, [], ["ANTHROPIC", "GMAIL"])
+    assert "SOURCES: 2 loaded (ANTHROPIC, GMAIL)" in text
+
+
+def test_zero_sources_refuses_to_report_unfound_and_exits_nonzero():
+    # With no source loaded, every transaction is UNFOUND with "no receipt in
+    # any source" and the tool exits 0 — an empty result that means we didn't
+    # look, reported as a clean run. It must say so plainly and fail.
+    with patch("run.missing_receipts", return_value=[T1]), \
+         patch("run.load_sources", return_value=[]), \
+         patch("run.Ledger", return_value=Ledger(Path(tempfile.mkdtemp()) / "l.json")):
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            code = main([])
+
+    combined = out.getvalue() + err.getvalue()
+    assert code != 0, "a run with zero sources loaded is not a clean run"
+    assert "No receipt found" not in out.getvalue(), (
+        "must not report UNFOUND when nothing was searched: " + out.getvalue()
+    )
+    assert "SOURCES: 0 loaded" in combined
+    assert "no receipt sources loaded" in combined.lower()
+
+
+def test_load_sources_skips_a_module_that_fails_to_import():
+    # One source raising at import time (missing dependency, syntax error)
+    # must not kill discovery for every other source — and the failure must
+    # be reported, not swallowed.
+    from types import SimpleNamespace
+
+    import sources.base as base
+
+    good = SimpleNamespace(SOURCE=object())
+
+    def fake_import(name):
+        if name.endswith("broken"):
+            raise ImportError("No module named 'playwright'")
+        return good
+
+    errors: list[str] = []
+    with patch.object(base.pkgutil, "iter_modules",
+                      return_value=[SimpleNamespace(name="alpha"), SimpleNamespace(name="broken")]), \
+         patch.object(base.importlib, "import_module", side_effect=fake_import):
+        found = base.load_sources(errors)
+
+    assert found == [good.SOURCE], "the healthy source must still load"
+    assert len(errors) == 1 and "BROKEN" in errors[0].upper()
+    assert "playwright" in errors[0], "the reason must survive into the report"
+
+
+def test_import_failure_is_announced_in_the_report():
+    def fake_load_sources(errors=None):
+        if errors is not None:
+            errors.append("BROKEN: import failed — boom")
+        return [_OkSource()]
+
+    with patch("run.missing_receipts", return_value=[T1]), \
+         patch("run.load_sources", side_effect=fake_load_sources), \
+         patch("run.Ledger", return_value=Ledger(Path(tempfile.mkdtemp()) / "l.json")):
+        out = io.StringIO()
+        with redirect_stdout(out):
+            code = main([])
+    text = out.getvalue()
+    assert code == 0
+    assert "SOURCE BROKEN: SKIPPED (import failed — boom)" in text
+
+
+class _OkSource:
+    def fetch(self, since, until):
+        return [R1]
+
+
+class _SecondSource:
+    """Holds the receipt for T3 so both transactions are actionable."""
+
+    def fetch(self, since, until):
+        return [R1, R3]
+
+
+def _send_run(fake_needs_receipt, ledger_path):
+    # The failure is injected into needs_receipt() — the live Ramp re-check
+    # upload() makes per transaction, OUTSIDE its own try/except. That is the
+    # call that took the whole loop down mid-run.
+    with patch("run.missing_receipts", return_value=[T1, T3]), \
+         patch("run.load_sources", return_value=[_SecondSource()]), \
+         patch("run.LEDGER_PATH", ledger_path), \
+         patch("upload.needs_receipt", side_effect=fake_needs_receipt), \
+         patch("upload.run", return_value=[{"id": "r1"}]):
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            code = main(["--send"])
+    return code, out.getvalue() + err.getvalue()
+
+
+def test_mid_loop_upload_failure_still_persists_earlier_successes():
+    # upload() calls needs_receipt() — a live Ramp call — per transaction
+    # inside the send loop. One raise there used to abort the loop, suppress
+    # the report, and lose every UPLOADED record from the run.
+    ledger_path = Path(tempfile.mkdtemp()) / "l.json"
+
+    def fake_needs_receipt(txn_id):
+        if txn_id == "t3":
+            raise RuntimeError("connection reset by peer")
+        return True
+
+    code, text = _send_run(fake_needs_receipt, ledger_path)
+
+    assert Ledger(ledger_path).status("t1") == "UPLOADED", (
+        "the upload that succeeded must survive a later failure"
+    )
+    assert code == 0
+    assert "Ready" in text, "the report must still print after a mid-loop failure"
+
+
+def test_mid_loop_auth_expiry_exits_2_and_keeps_the_ledger():
+    # A live auth expiry mid-run must abort cleanly through the same exit-2
+    # path as an auth failure at queue-build time — not a raw traceback that
+    # takes the ledger with it.
+    from ramp import RampAuthError
+
+    ledger_path = Path(tempfile.mkdtemp()) / "l.json"
+
+    def fake_needs_receipt(txn_id):
+        if txn_id == "t3":
+            raise RampAuthError("Ramp auth failed — run `ramp auth login`")
+        return True
+
+    code, text = _send_run(fake_needs_receipt, ledger_path)
+
+    assert code == 2, "auth expiry must exit 2, not traceback"
+    assert "ramp auth login" in text
+    assert Ledger(ledger_path).status("t1") == "UPLOADED", (
+        "the ledger must be saved even when the run aborts"
+    )
+
+
 if __name__ == "__main__":
     print("Running run tests")
     for n, f in sorted(globals().items()):

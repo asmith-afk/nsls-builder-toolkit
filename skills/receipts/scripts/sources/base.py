@@ -24,15 +24,28 @@ def normalize_merchant(name: str) -> str:
     return re.sub(r"[^a-z0-9]", "", (name or "").lower())
 
 
-def load_sources() -> list:
-    """Every sources/*.py module exposing a SOURCE singleton."""
+def load_sources(errors: list | None = None) -> list:
+    """Every sources/*.py module exposing a SOURCE singleton.
+
+    One source failing at import — a missing dependency, a syntax error, a
+    module-level side effect that raises — must not end discovery for the
+    others. Failures are appended to `errors` as "NAME: reason" so the caller
+    can announce them the same way it announces a source that was skipped at
+    fetch time. Swallowing them silently would leave a run that found fewer
+    receipts than it should looking exactly like a clean one.
+    """
     import sources
 
     found = []
     for mod in pkgutil.iter_modules(sources.__path__):
         if mod.name == "base":
             continue
-        module = importlib.import_module(f"sources.{mod.name}")
+        try:
+            module = importlib.import_module(f"sources.{mod.name}")
+        except Exception as exc:
+            if errors is not None:
+                errors.append(f"{mod.name.upper()}: import failed — {type(exc).__name__}: {exc}")
+            continue
         if hasattr(module, "SOURCE"):
             found.append(module.SOURCE)
     return found

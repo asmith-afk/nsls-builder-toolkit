@@ -9,7 +9,7 @@ import tempfile
 from pathlib import Path
 
 from txn_queue import needs_receipt
-from ramp import run
+from ramp import RampAuthError, RampError, run
 
 MAX_ATTEMPTS = 2
 WHY = "Attach the receipt I located for this transaction so it clears Ramp's missing-items queue"
@@ -36,11 +36,20 @@ class Ledger:
                     f"Error: {e}"
                 ) from e
 
-    def record(self, txn_id: str, provenance: str, status: str) -> None:
-        self.entries.setdefault(txn_id, []).append({"provenance": provenance, "status": status})
+    def record(self, txn_id: str, provenance: str, status: str, transient: bool = False) -> None:
+        entry = {"provenance": provenance, "status": status}
+        if transient:
+            # Kept in the ledger so the failure is visible, but flagged so it
+            # does not count against the escalation cap. See attempts().
+            entry["transient"] = True
+        self.entries.setdefault(txn_id, []).append(entry)
 
     def attempts(self, txn_id: str) -> int:
-        return len(self.entries.get(txn_id, []))
+        # Transient entries (network blips, a dead session, anything that never
+        # reached Ramp's judgment) don't count. MAX_ATTEMPTS is 2 — counting
+        # them means two unlucky timeouts retire a transaction permanently,
+        # clearable only by deleting the ledger by hand.
+        return sum(1 for e in self.entries.get(txn_id, []) if not e.get("transient"))
 
     def status(self, txn_id: str) -> str | None:
         rows = self.entries.get(txn_id)
@@ -88,8 +97,20 @@ def upload(pairing, ledger: Ledger, dry_run: bool) -> str:
     ]
     try:
         run(args, rationale=WHY)
-    except Exception:
+    except RampAuthError:
+        # Not this transaction's fault and not a rejection — the session died.
+        # Let it out so the caller aborts the whole run cleanly; recording it
+        # here would burn an escalation attempt and bury a dead login inside a
+        # per-transaction FAILED line.
+        raise
+    except RampError:
+        # Ramp looked at the request and refused it. That is a real attempt.
         ledger.record(txn.id, rec.provenance, "FAILED")
+        return "FAILED"
+    except Exception:
+        # Transport-level: timeout, reset connection, unparseable response.
+        # Reported as FAILED, but not counted toward MAX_ATTEMPTS.
+        ledger.record(txn.id, rec.provenance, "FAILED", transient=True)
         return "FAILED"
 
     ledger.record(txn.id, rec.provenance, "UPLOADED")

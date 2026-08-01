@@ -9,7 +9,7 @@ transaction. Slow, but correct.
 
 from dataclasses import dataclass
 
-from ramp import parse_amount, run
+from ramp import RampError, parse_amount, run
 
 LIST_WHY = "Audit which of my transactions still need a receipt, to attach them automatically"
 CHECK_WHY = "Verify whether this specific transaction still needs a receipt before attaching one"
@@ -21,6 +21,21 @@ class Transaction:
     merchant: str
     amount_cents: int
     date: str  # ISO yyyy-mm-dd
+
+
+def _one(args: list[str], rationale: str) -> dict:
+    """Run a Ramp command that must return exactly one result object.
+
+    `run()` hands back `payload["data"]`, which can legitimately be empty —
+    that is its contract, and list endpoints rely on it. Indexing [0] here
+    without a guard turns an empty response into a raw IndexError: uncaught by
+    main(), which only handles RampError, and fatal to the whole send loop
+    when it happens on the per-transaction re-check.
+    """
+    rows = run(args, rationale=rationale)
+    if not rows:
+        raise RampError(f"ramp {' '.join(args)} returned no data")
+    return rows[0]
 
 
 def list_transactions(since: str, until: str) -> list[Transaction]:
@@ -35,7 +50,7 @@ def list_transactions(since: str, until: str) -> list[Transaction]:
         if cursor:
             args += ["--next_page_cursor", cursor]
 
-        page = run(args, rationale=LIST_WHY)[0]
+        page = _one(args, LIST_WHY)
         for t in page.get("transactions", []):
             out.append(
                 Transaction(
@@ -51,7 +66,7 @@ def list_transactions(since: str, until: str) -> list[Transaction]:
 
 
 def needs_receipt(txn_id: str) -> bool:
-    row = run(["transactions", "missing", txn_id], rationale=CHECK_WHY)[0]
+    row = _one(["transactions", "missing", txn_id], CHECK_WHY)
     return bool(row.get("missing_receipt"))
 
 
