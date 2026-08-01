@@ -1,6 +1,7 @@
 #!/usr/bin/env python3.12
 """Tests for upload.py — idempotency, escalation cap, dry-run safety."""
 
+import os
 import sys
 import tempfile
 from pathlib import Path
@@ -82,6 +83,33 @@ def test_ledger_persists():
     p = Path(tempfile.mkdtemp()) / "l.json"
     a = Ledger(p); a.record("t1", "pr", "UPLOADED"); a.save()
     assert Ledger(p).status("t1") == "UPLOADED"
+
+
+def test_corrupt_ledger_raises_clear_error():
+    p = Path(tempfile.mkdtemp()) / "corrupt.json"
+    p.write_text("{invalid json")
+    try:
+        Ledger(p)
+        assert False, "should have raised CorruptLedger"
+    except Ledger.CorruptLedger as e:
+        error_msg = str(e)
+        assert str(p.resolve()) in error_msg, f"error must name the path: {error_msg}"
+        assert "delete" in error_msg.lower(), f"error must mention deleting: {error_msg}"
+        assert "idempotent" in error_msg.lower(), f"error must mention idempotency: {error_msg}"
+
+
+def test_save_is_atomic_no_temp_files_left():
+    tmpdir = Path(tempfile.mkdtemp())
+    p = tmpdir / "ledger.json"
+    led = Ledger(p)
+    led.record("t1", "inv-A", "UPLOADED")
+    led.save()
+    # Verify no stray temp files (mkstemp creates files matching 'tmp*')
+    stray = [f for f in tmpdir.iterdir() if f.name.startswith("tmp")]
+    assert stray == [], f"stray temp files left: {stray}"
+    # Verify round-trip works
+    led2 = Ledger(p)
+    assert led2.status("t1") == "UPLOADED"
 
 
 if __name__ == "__main__":

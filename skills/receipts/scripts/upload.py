@@ -4,6 +4,8 @@
 import base64
 import hashlib
 import json
+import os
+import tempfile
 from pathlib import Path
 
 from txn_queue import needs_receipt
@@ -18,11 +20,21 @@ def idempotency_key(transaction_id: str, provenance: str) -> str:
 
 
 class Ledger:
+    class CorruptLedger(Exception):
+        """The ledger file is corrupted and cannot be loaded."""
+
     def __init__(self, path: Path):
         self.path = Path(path)
         self.entries: dict[str, list[dict]] = {}
         if self.path.exists():
-            self.entries = json.loads(self.path.read_text())
+            try:
+                self.entries = json.loads(self.path.read_text())
+            except json.JSONDecodeError as e:
+                raise self.CorruptLedger(
+                    f"Ledger corrupted at {self.path.resolve()}\n"
+                    f"It is safe to delete this file — uploads are idempotent and will retry.\n"
+                    f"Error: {e}"
+                ) from e
 
     def record(self, txn_id: str, provenance: str, status: str) -> None:
         self.entries.setdefault(txn_id, []).append({"provenance": provenance, "status": status})
@@ -36,7 +48,19 @@ class Ledger:
 
     def save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(json.dumps(self.entries, indent=2))
+        # Atomic write: write to temp file in same directory, then replace.
+        # os.replace() is atomic on both POSIX and Windows.
+        fd, tmp_path = tempfile.mkstemp(dir=str(self.path.parent), text=True)
+        try:
+            with os.fdopen(fd, 'w') as f:
+                f.write(json.dumps(self.entries, indent=2))
+            os.replace(tmp_path, str(self.path))
+        except Exception:
+            try:
+                os.unlink(tmp_path)
+            except Exception:
+                pass
+            raise
 
 
 def upload(pairing, ledger: Ledger, dry_run: bool) -> str:
