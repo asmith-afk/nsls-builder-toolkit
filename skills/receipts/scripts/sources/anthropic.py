@@ -20,7 +20,27 @@ import json
 import os
 import urllib.request
 
-from .base import Receipt, SourceUnavailable
+try:
+    from .base import Receipt, SourceUnavailable
+except ImportError:
+    # Running this file directly (`python3.12 sources/anthropic.py --login`)
+    # gives it no parent package, so the relative import above fails with
+    # "attempted relative import with no known parent package" — before this
+    # module's own `if __name__ == "__main__":` block at the bottom ever
+    # runs. That command used to be exactly what the SourceUnavailable
+    # message below and SKILL.md told a user to run for a dead claude.ai
+    # session, so the fix for the failure was itself unreachable. `run.py
+    # --login` is the documented entry point now (it already resolves
+    # imports correctly), but this direct-script form may still be in
+    # someone's notes or muscle memory — make it work too: put this file's
+    # parent directory (the `scripts/` dir) on sys.path so `sources` is
+    # importable as a real top-level package, then import the same module
+    # absolutely. `python3.12 -m sources.anthropic --login` already runs with
+    # a package context, so this branch never triggers there.
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from sources.base import Receipt, SourceUnavailable
 
 LISTING = "https://claude.ai/api/stripe/{org}/invoices?limit=100&page={page}"
 PROFILE = os.path.expanduser("~/.claude-receipts-profile")
@@ -99,7 +119,7 @@ class AnthropicSource:
                 if resp is None or resp.status != 200:
                     raise SourceUnavailable(
                         "claude.ai session expired. Run: python3.12 "
-                        "skills/receipts/scripts/sources/anthropic.py --login"
+                        "skills/receipts/scripts/run.py --login"
                     )
                 return json.loads(pg.inner_text("pre") or "{}")
             finally:
@@ -185,6 +205,21 @@ SOURCE = AnthropicSource()
 
 
 def _login():
+    """Open a real browser, let the user sign in, and save the persistent
+    Playwright profile at PROFILE. Called by `run.py --login` (the
+    documented entry point) and by this module's own `--login` when invoked
+    directly — both call this same function so the interactive login logic
+    lives in exactly one place.
+
+    RECEIPTS_LOGIN_TEST_NOOP short-circuits before Playwright or a browser is
+    ever touched. Tests that need to prove the --login dispatch path — import
+    succeeds, argument parsing reaches this call — actually works set this to
+    prove it without opening a real browser, which would not be hermetic.
+    """
+    if os.environ.get("RECEIPTS_LOGIN_TEST_NOOP"):
+        print("RECEIPTS_LOGIN_TEST_NOOP set — dispatch reached _login(), skipping real browser login")
+        return
+
     from playwright.sync_api import sync_playwright
 
     with sync_playwright() as p:

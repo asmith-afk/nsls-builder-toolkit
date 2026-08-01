@@ -31,6 +31,9 @@ changes nothing in Ramp. Nothing is ever uploaded without `--send`.
 - `/receipts --send` — execute (upload the confident + balanced matches)
 - `/receipts --since 2026-01-01` — widen the window (default: `2026-01-01`)
 - `/receipts --until 2026-06-30` — narrow the window (default: today)
+- `/receipts --login` — log in to the Anthropic billing source (opens a
+  browser) and exit; does not build the queue, fetch, or upload anything.
+  Not combinable with `--send`.
 
 ## Execution
 
@@ -137,7 +140,7 @@ but then every `python3.12` invocation in this skill has to run inside it.
 Then log in once (opens a real browser window):
 
 ```bash
-python3.12 skills/receipts/scripts/sources/anthropic.py --login
+python3.12 skills/receipts/scripts/run.py --login
 ```
 
 This source is how usage-credit auto-recharge charges get a receipt at
@@ -203,7 +206,7 @@ for the rest.
 - **`RampAuthError`** — Ramp auth is dead. Run `ramp auth login`.
 - **`SOURCE ANTHROPIC: SKIPPED (...)`** — the reason is in the message: set
   `ANTHROPIC_ORG_UUID`, install Playwright, or re-run
-  `python3.12 skills/receipts/scripts/sources/anthropic.py --login` if the
+  `python3.12 skills/receipts/scripts/run.py --login` if the
   claude.ai session expired.
 - **`SOURCE ANTHROPIC: SKIPPED (… HTTP 403 … not an org admin …)`** — a
   different failure that looks similar and is not fixable the same way. The

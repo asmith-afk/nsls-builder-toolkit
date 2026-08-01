@@ -10,6 +10,7 @@ from pathlib import Path
 from match import AMBIGUOUS, BALANCED, CONFIDENT, UNFOUND, match
 from txn_queue import missing_receipts
 from ramp import RampAuthError, RampError
+from sources.anthropic import _login as anthropic_login
 from sources.base import SourceUnavailable, load_sources
 from upload import Ledger, upload
 
@@ -105,7 +106,31 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--send", action="store_true", help="execute (default is dry run)")
     ap.add_argument("--since", default="2026-01-01", help="ISO date; backlog reaches to 2026-02")
     ap.add_argument("--until", default=None, help="ISO date; default today")
+    ap.add_argument("--login", action="store_true",
+                     help="log in to the Anthropic billing source (opens a browser) and exit — "
+                          "does not build the queue, fetch, or upload anything")
     args = ap.parse_args(argv)
+
+    # `run.py` is the single documented entry point for everything this tool
+    # does, login included — it already resolves imports correctly (unlike
+    # running sources/anthropic.py as a bare script, which used to crash with
+    # an ImportError on exactly the command SKILL.md told a user to run for a
+    # dead claude.ai session). --login does ONE thing — save a browser
+    # session — and returns immediately: no Ramp queue, no source fetch, no
+    # upload. Combining it with --send is almost certainly a mistake (the
+    # user meant "log in, then separately send"), so it's rejected explicitly
+    # rather than silently picking one or doing both.
+    if args.login:
+        if args.send:
+            print("ERROR: --login and --send cannot be combined. --login only opens a "
+                  "browser to save a claude.ai session, then exits — it does not build "
+                  "the queue, fetch receipts, or upload anything, so there is nothing "
+                  "for --send to act on in the same invocation. Run --login by itself "
+                  "first, then run the tool again (add --send once you're ready to "
+                  "execute).", file=sys.stderr)
+            return 2
+        anthropic_login()
+        return 0
 
     until = args.until or dt.date.today().isoformat()
 

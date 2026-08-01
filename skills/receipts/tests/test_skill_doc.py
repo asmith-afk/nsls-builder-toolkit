@@ -98,6 +98,24 @@ def test_playwright_browser_install_step_is_still_documented():
     assert "python3.12 -m playwright install chromium" in TEXT
 
 
+def test_login_is_documented_as_the_run_py_invocation():
+    # `sources/anthropic.py --login` used to be the documented login command,
+    # and it crashed with an ImportError (relative import, no package
+    # context) before argument dispatch ever ran — the fix for a dead
+    # claude.ai session was unreachable through the instructions telling a
+    # user how to fix it. `run.py` is the single documented entry point for
+    # everything else this tool does; login must be documented the same way.
+    assert f"{RUN_CMD} --login" in TEXT, (
+        "SKILL.md must document `run.py --login` as the way to authenticate "
+        "the Anthropic source"
+    )
+    assert "sources/anthropic.py --login" not in TEXT, (
+        "the direct-script login form must not be documented as the fix — "
+        "even though it also works now, run.py --login is the one form "
+        "users should be told to run: " + TEXT
+    )
+
+
 def _section(title: str) -> str:
     """Text of the `## <title>` section, up to the next same-or-higher heading."""
     m = re.search(rf"^##+\s+{re.escape(title)}\b(.*?)(?=^##\s|\Z)", TEXT,

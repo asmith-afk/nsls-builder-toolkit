@@ -596,6 +596,40 @@ def test_ledger_write_failure_on_send_still_prints_the_report_and_exits_nonzero(
     assert "Traceback" not in text
 
 
+def test_login_flag_calls_anthropic_login_and_touches_nothing_else():
+    # --login is the single documented entry point for authenticating the
+    # Anthropic source. It must do exactly one thing — save a browser
+    # session via sources.anthropic._login() — and exit, never reaching the
+    # Ramp queue, source fetch, or ledger.
+    with patch("run.anthropic_login") as login, \
+         patch("run.missing_receipts") as missing, \
+         patch("run.load_sources") as loaded, \
+         patch("run.Ledger") as ledger:
+        code = main(["--login"])
+
+    assert code == 0
+    login.assert_called_once()
+    missing.assert_not_called()
+    loaded.assert_not_called()
+    ledger.assert_not_called()
+
+
+def test_login_and_send_together_is_rejected_explicitly():
+    # --login only saves a browser session and exits; it never builds the
+    # queue, fetches, or uploads, so there is nothing for --send to act on in
+    # the same invocation. Silently picking one (or doing both) would be a
+    # surprise either way — reject the combination with a clear message
+    # instead.
+    with patch("run.anthropic_login") as login:
+        err = io.StringIO()
+        with redirect_stderr(err):
+            code = main(["--login", "--send"])
+
+    assert code == 2
+    login.assert_not_called()
+    assert "--login" in err.getvalue() and "--send" in err.getvalue()
+
+
 def test_ledger_write_failure_does_not_downgrade_the_auth_abort():
     # The auth abort is the exit code automation watches for. An OSError out
     # of save() inside the finally, while that abort is unwinding, must not
