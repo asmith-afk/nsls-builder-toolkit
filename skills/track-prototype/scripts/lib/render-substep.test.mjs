@@ -468,14 +468,19 @@ test("renderSubstep: banner-multiple prompt also renders markdown", () => {
 // ---------------------------------------------------------------------------
 // resume-upload discloses that it is a stand-in (track-studio walkthrough gap).
 //
-// The stub itself is correct — a static prototype has no backend to receive a
-// file and no LinkedIn lookup. What was wrong is that it didn't SAY so, while
-// the comment above it claimed "no ignite-next component exists for this
-// fieldType yet". That stopped being true once OnboardingResumeUploadSubstep
-// shipped (resume-upload is in the manifest under both `declared` and
-// `rendered`), and the combination is why walkthroughs of Welcome were read as
-// showing the real screen: a reviewer saw a grey file input and concluded the
-// LinkedIn flow wasn't in the track at all.
+// The real screen is LIVE in production (welcome v6, getting-started/
+// upload-resume) and is a THREE-OPTION CHOOSER, not a file input: import from
+// LinkedIn (the member runs a self-search), upload a resume, or start from
+// scratch. There is no automatic lookup and no candidate list — the component
+// says so itself ("no longer a sign-in auto-scrape, candidate list, or draft
+// path") and LinkedinCandidatePicker is gone from main.
+//
+// The stub is still correct: a static prototype can host none of the three.
+// What was wrong is that it didn't SAY so, while the comment above it claimed
+// no ignite-next component existed for this fieldType. Worse, a bare file input
+// resembles ONE of the three options, so it reads as the whole screen rather
+// than a fragment — which is why walkthroughs of Welcome were taken as showing
+// the real thing and the LinkedIn path was assumed absent from the track.
 //
 // The player already has this convention — .tp-ai-placeholder tells a viewer
 // when a generate screen is showing a stand-in rather than a baked sample.
@@ -498,10 +503,12 @@ test("resume-upload still renders a real file input, not the text-box fallback",
 test("resume-upload discloses that it is a stand-in for the real screen", () => {
   const html = renderSubstep(resumeSub);
   assert.match(html, /tp-stub-note/);
-  // Name what the member actually gets, so a walkthrough viewer knows what is
-  // missing rather than only that something is.
+  // Name what the member actually gets, so a walkthrough viewer knows WHAT is
+  // missing rather than only that something is. All three paths, because
+  // omitting any of them is how the bare file input misled in the first place.
   assert.match(html, /LinkedIn/);
   assert.match(html, /resume/i);
+  assert.match(html, /scratch/i);
 });
 
 test("the disclosure survives an authored textFieldLabel", () => {

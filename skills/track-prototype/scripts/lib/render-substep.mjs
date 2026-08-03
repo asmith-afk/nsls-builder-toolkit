@@ -524,27 +524,38 @@ function multiSelectListField(sub, slug) {
   return `<div class="tp-options space-y-3" data-slug="${slug}" data-multi="true"${entryForm}>${rows}${otherRow}</div>`;
 }
 
-// resume-upload — the real component EXISTS and does considerably more than a
-// file input. `OnboardingResumeUploadSubstep` looks the member up on LinkedIn
-// (via the crustdata router), offers the candidate profiles it found
-// ("We found N jobs…"), and parses an uploaded resume; the capability manifest
-// lists resume-upload under BOTH `declared` and `rendered`.
+// resume-upload — the real component EXISTS, is LIVE in production (welcome v6,
+// getting-started/upload-resume), and is not a file input at all.
+// `OnboardingResumeUploadSubstep` renders a THREE-OPTION CHOOSER:
+//
+//   Import from LinkedIn  — the member runs a self-search, sees the single
+//                           inline result, and imports it
+//   Upload my resume      — the upload sub-flow, which parses the file
+//   Start from scratch    — skip both
+//
+// Read off the component on origin/main, not inferred. Note in particular that
+// there is NO automatic LinkedIn lookup and NO candidate list to pick from:
+// the component's own comment says "there is no longer a sign-in auto-scrape,
+// candidate list, or draft path", and LinkedinCandidatePicker is gone from
+// main. (`.claude/rules/selectable-surfaces.md` still cites that picker, which
+// is how an earlier version of this comment got it wrong.)
 //
 // This comment used to say "no ignite-next component exists for this fieldType
-// yet". That was true when #51 shipped the stub and is not true now, and the
-// stale version is why walkthroughs of the Welcome track were read as showing
-// the real screen: a reviewer saw a grey file input, had no reason to doubt it,
-// and concluded the LinkedIn flow simply wasn't in the track.
+// yet". True when #51 shipped the stub; false since. That staleness is why
+// walkthroughs of the Welcome track were read as showing the real screen — a
+// reviewer saw a grey file input, had no reason to doubt it, and concluded the
+// LinkedIn path simply wasn't in the track.
 //
-// A static prototype still cannot host any of it — no backend to receive the
-// file, no LinkedIn lookup — so a stub remains correct. What was wrong is that
-// the stub did not SAY it was a stub. It now discloses, following the
-// .tp-ai-placeholder precedent used for generate screens with no baked sample:
-// the player already tells a viewer when it is showing a stand-in rather than
-// the real thing, and this is the same situation.
+// A static prototype can host none of the three paths (no backend for the file,
+// no LinkedIn search), so a stub remains correct. What was wrong is that the
+// stub did not SAY so — and worse, a bare file input silently resembles ONE of
+// the three options, so it reads as the whole screen rather than a fragment of
+// it. It now discloses, following the .tp-ai-placeholder precedent: the player
+// already tells a viewer when it is showing a stand-in rather than the real
+// thing, and this is the same situation.
 function resumeUploadField(sub) {
   const label = sub.textFieldLabel || "Upload your resume";
-  return `<div class="space-y-2"><label class="block text-sm font-medium text-dark">${esc(label)}</label><input type="file" class="step-input w-full" accept=".pdf,.doc,.docx"><div class="tp-stub-note text-xs text-grey pt-1">Stand-in for the real screen: members are looked up on LinkedIn and can pick a found profile, or upload a resume to be parsed. Not reproducible in a static prototype.</div></div>`;
+  return `<div class="space-y-2"><label class="block text-sm font-medium text-dark">${esc(label)}</label><input type="file" class="step-input w-full" accept=".pdf,.doc,.docx"><div class="tp-stub-note text-xs text-grey pt-1">Stand-in, not the real screen. Members choose one of three paths: import from LinkedIn (they run a self-search), upload a resume, or start from scratch. A static prototype can host none of them.</div></div>`;
 }
 
 // Education / Work entry forms — SubStepRenderer EducationInput/WorkInput.
