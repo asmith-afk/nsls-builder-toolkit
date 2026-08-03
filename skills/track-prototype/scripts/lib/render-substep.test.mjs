@@ -464,3 +464,50 @@ test("renderSubstep: banner-multiple prompt also renders markdown", () => {
   const html = renderSubstep({ id: "x", type: "say", fieldType: "banner-multiple", prompt: "**Nice work**", bannerTexts: [] }, {});
   assert.match(html, /<strong>Nice work<\/strong>/);
 });
+
+// ---------------------------------------------------------------------------
+// resume-upload discloses that it is a stand-in (track-studio walkthrough gap).
+//
+// The stub itself is correct — a static prototype has no backend to receive a
+// file and no LinkedIn lookup. What was wrong is that it didn't SAY so, while
+// the comment above it claimed "no ignite-next component exists for this
+// fieldType yet". That stopped being true once OnboardingResumeUploadSubstep
+// shipped (resume-upload is in the manifest under both `declared` and
+// `rendered`), and the combination is why walkthroughs of Welcome were read as
+// showing the real screen: a reviewer saw a grey file input and concluded the
+// LinkedIn flow wasn't in the track at all.
+//
+// The player already has this convention — .tp-ai-placeholder tells a viewer
+// when a generate screen is showing a stand-in rather than a baked sample.
+// ---------------------------------------------------------------------------
+
+const resumeSub = {
+  id: "ss-resume", slug: "upload-resume", title: "Resume",
+  type: "collect", fieldType: "resume-upload", prompt: "Have a resume?",
+};
+
+test("resume-upload still renders a real file input, not the text-box fallback", () => {
+  const html = renderSubstep(resumeSub);
+  assert.match(html, /type="file"/);
+  assert.match(html, /accept="\.pdf,\.doc,\.docx"/);
+  // The #51 protection: an unhandled fieldType degrades to a plain text box,
+  // which is the failure this renderer exists to prevent.
+  assert.ok(!/data-input/.test(html) || /type="file"/.test(html));
+});
+
+test("resume-upload discloses that it is a stand-in for the real screen", () => {
+  const html = renderSubstep(resumeSub);
+  assert.match(html, /tp-stub-note/);
+  // Name what the member actually gets, so a walkthrough viewer knows what is
+  // missing rather than only that something is.
+  assert.match(html, /LinkedIn/);
+  assert.match(html, /resume/i);
+});
+
+test("the disclosure survives an authored textFieldLabel", () => {
+  // Authors can relabel the control; the stand-in note is not part of the label
+  // and must not be replaceable by authoring.
+  const html = renderSubstep({ ...resumeSub, textFieldLabel: "Drop your CV here" });
+  assert.match(html, /Drop your CV here/);
+  assert.match(html, /tp-stub-note/);
+});
