@@ -76,6 +76,23 @@ def test_every_source_exposes_fetch():
         assert callable(getattr(s, "fetch", None)), f"{type(s).__name__} missing fetch()"
 
 
+def test_all_three_shipped_sources_are_discovered():
+    # Discovery is by module scan, so a source that fails to import — a typo,
+    # a missing dependency, a module-level side effect that raises — simply
+    # stops appearing, and every transaction it would have covered comes back
+    # UNFOUND with no sign anything was wrong. Name what must be there.
+    names = {type(s).__name__ for s in load_sources()}
+    assert {"AnthropicSource", "GmailSource", "NeonSource"} <= names, names
+
+
+def test_source_names_do_not_collide_in_the_report():
+    # run.py labels each source `type(src).__name__.replace("Source", "").upper()`
+    # — two sources folding to the same label would make one source's SKIPPED
+    # or TRUNCATED line read as the other's.
+    labels = [type(s).__name__.replace("Source", "").upper() for s in load_sources()]
+    assert len(labels) == len(set(labels)), labels
+
+
 if __name__ == "__main__":
     print("Running source contract tests")
     for n, f in sorted(globals().items()):

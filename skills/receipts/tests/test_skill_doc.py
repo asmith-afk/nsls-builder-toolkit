@@ -130,6 +130,69 @@ def test_skill_md_treats_the_session_as_a_credential():
     )
 
 
+def test_skill_md_documents_the_neon_source_and_its_setup():
+    # A source nobody knows exists is a source nobody configures — and an
+    # unconfigured source is indistinguishable, in the report, from a vendor
+    # with no source at all.
+    text = TEXT.lower()
+    assert "neon" in text, "the Neon billing source must be documented"
+    assert f"{RUN_CMD} --set-neon-key" in TEXT, (
+        "SKILL.md must document `run.py --set-neon-key` as the way to "
+        "authenticate the Neon source"
+    )
+    assert "NEON_ORG_ID" in TEXT, "name the org-id variable the source needs"
+    assert "~/.claude-receipts-neon-key" in TEXT, "name the credential file"
+    assert "NEON_API_KEY" in TEXT, "name the environment-variable alternative"
+
+
+def test_skill_md_no_longer_claims_neon_has_no_automated_source():
+    # The coverage note used to group Neon Tech with the vendors that have
+    # neither an email nor a portal API. Half of that is still true (no
+    # email); the other half is now false, and a doc that says a working
+    # source doesn't exist is worse than no doc.
+    coverage = _section("Coverage — the known ceiling, not a defect")
+    assert coverage, "the coverage section must still exist"
+    # Bullets wrap across source lines, so flatten each one before reading it
+    # — and stop at the blank line that ends the list, or the prose after it
+    # gets read as part of the final bullet.
+    bullets = [" ".join(b.split("\n\n")[0].split()).lower()
+               for b in re.split(r"^\s*[-*]\s+", coverage, flags=re.MULTILINE)[1:]]
+    assert bullets, coverage
+    for b in bullets:
+        if "neon" in b:
+            assert "no portal api" not in b, (
+                "Neon has a portal API now — this bullet says it doesn't: " + b
+            )
+            assert not ("supabase" in b and "zoom" in b), (
+                "Neon must no longer be grouped with the vendors that have no "
+                "source at all: " + b
+            )
+    # And the genuinely uncovered vendors must still be named honestly.
+    uncovered = [b for b in bullets if "supabase" in b and "zoom" in b]
+    assert uncovered, "Supabase and Zoom must still be named as uncovered: " + coverage
+
+
+def test_skill_md_states_the_credential_handling_guarantees_plainly():
+    # This ships org-wide and every builder runs it with their own live
+    # claude.ai session and Neon key. "Where does my credential go" is a
+    # question they are entitled to a plain answer to, in the one file the
+    # skill actually shows them — and it is a claim they can check, so it has
+    # to keep matching what sources/ does.
+    section = _section("What happens to your credentials").lower()
+    assert section, "SKILL.md must state where credentials live and where they go"
+
+    assert "0600" in section, "say the file mode"
+    assert "$home" in section or "home directory" in section, "say where it lives"
+    assert "commit" in section, "say it cannot be committed"
+
+    assert "redirect" in section, (
+        "the redirect guarantee is the one a reader cannot infer: " + section
+    )
+    assert "third-party" in section or "third party" in section, section
+    for claim in ("report", "log", "ledger"):
+        assert claim in section, f"say it never reaches the {claim}: {section}"
+
+
 def _section(title: str) -> str:
     """Text of the `## <title>` section, up to the next same-or-higher heading."""
     m = re.search(rf"^##+\s+{re.escape(title)}\b(.*?)(?=^##\s|\Z)", TEXT,

@@ -14,8 +14,17 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
-from sources.gmail import SOURCE, PAGE_GUARD, _domain_label, _merchant_from_header
-from sources.base import SourceUnavailable
+from sources.gmail import (
+    SOURCE,
+    BILLING_RELAY_DOMAINS,
+    PAGE_GUARD,
+    UNRESOLVED_RELAY_MERCHANT,
+    _domain_label,
+    _is_billing_relay,
+    _merchant_from_header,
+    _sender_domain,
+)
+from sources.base import SourceUnavailable, normalize_merchant
 
 
 # ---------------------------------------------------------------------------
@@ -120,6 +129,104 @@ def test_merchant_from_header_falls_back_to_display_name_when_no_alias():
     # never a wrong match.
     assert _merchant_from_header('"Totally Unknown Co" <hello@nowhere-in-particular.example>') == \
         "nowhereinparticular"
+
+
+# ---------------------------------------------------------------------------
+# Billing relays — a sender whose DOMAIN is not the vendor
+#
+# Many vendors never send their own receipts: Stripe sends on their behalf, so
+# the From header carries the vendor in the display name and the relay in the
+# domain. Resolving on the domain gives "stripe" for every one of them, which
+# matches no Ramp transaction, so every relayed receipt was silently dropped.
+# ---------------------------------------------------------------------------
+
+# The exact senders this fix is about, plus two direct senders that must keep
+# resolving exactly as they do today. Account segments are synthetic.
+MERCHANT_RESOLUTION_CASES = [
+    # (From header, expected resolved merchant, why)
+    ("Macroscope <invoice+statements+acct_TESTRELAY0001@stripe.com>",
+     "macroscope", "relayed by Stripe — display name is the vendor"),
+    ("SendBird <invoice+statements+acct_TESTRELAY0002@stripe.com>",
+     "sendbird", "relayed by Stripe — display name is the vendor"),
+    ("Clay Labs Inc <invoice+statements+acct_TESTRELAY0003@stripe.com>",
+     "claylabsinc", "relayed by Stripe — display name is the vendor"),
+    ('"Anthropic, PBC" <invoice+statements@mail.anthropic.com>',
+     "anthropic", "direct sender — domain wins, unchanged"),
+    ("Asana <customer-service@asana.com>",
+     "asana", "direct sender — domain wins, unchanged"),
+]
+
+
+def test_merchant_resolution_table_covers_relayed_and_direct_senders():
+    # Table-driven so the relayed and direct cases are asserted side by side:
+    # the whole point of the fix is that ONE rule change fixes the first three
+    # without touching the last two.
+    for header, expected, why in MERCHANT_RESOLUTION_CASES:
+        got = _merchant_from_header(header)
+        assert got == expected, f"{header!r} -> {got!r}, expected {expected!r} ({why})"
+
+
+def test_billing_relay_domains_is_a_named_one_line_extension_point():
+    # The concept has a name and lives in one place, so adding the next relay
+    # (Paddle, Chargebee, FastSpring…) is a single-line change rather than a
+    # rewrite of merchant resolution.
+    assert "stripe.com" in BILLING_RELAY_DOMAINS
+    assert _is_billing_relay("stripe.com")
+    assert not _is_billing_relay("asana.com")
+    assert not _is_billing_relay("mail.anthropic.com")
+
+
+def test_relay_match_is_on_the_full_domain_not_a_bare_label():
+    # "stripe" as a second-level label would also match a hypothetical
+    # stripe.example — the relay set holds full domains, and subdomains of a
+    # relay (Stripe does send from several) still count.
+    assert _sender_domain("Macroscope <invoice+acct_TESTRELAY0001@stripe.com>") == "stripe.com"
+    assert _is_billing_relay("email.stripe.com")
+    assert not _is_billing_relay("notstripe.com")
+
+
+def test_relay_display_name_may_be_quoted_and_contain_commas():
+    # Display names arrive quoted when they contain a comma — the quotes and
+    # the comma are part of the header syntax, not the merchant.
+    assert _merchant_from_header(
+        '"Clay Labs, Inc." <invoice+statements+acct_TESTRELAY0003@stripe.com>'
+    ) == "claylabsinc"
+
+
+def test_relay_with_no_display_name_resolves_to_a_key_that_cannot_match():
+    # A relay with no display name carries NO authoritative vendor anywhere in
+    # the header. Guessing "stripe" invents a merchant; guessing "" would
+    # compare equal to any other blank merchant. Resolve to a sentinel that
+    # only ever equals itself.
+    got = _merchant_from_header("<invoice+statements+acct_TESTRELAY0004@stripe.com>")
+    assert got == UNRESOLVED_RELAY_MERCHANT
+    assert got not in ("stripe", "", "macroscope")
+    # normalize_merchant still applies to whatever we resolve — the sentinel
+    # must survive it unchanged, or match.py's re-normalization would alter it.
+    assert normalize_merchant(got) == got
+
+
+def test_bare_relay_address_with_no_angle_brackets_also_resolves_to_the_sentinel():
+    assert _merchant_from_header(
+        "invoice+statements+acct_TESTRELAY0005@stripe.com"
+    ) == UNRESOLVED_RELAY_MERCHANT
+
+
+def test_aliases_still_apply_to_a_relayed_display_name():
+    # The alias map bridges display-vs-Ramp naming. With display names now
+    # reaching matching for relayed senders, it must apply on that path too —
+    # a relayed "Neon" is the same vendor Ramp calls "Neon Tech".
+    assert _merchant_from_header(
+        "Neon <invoice+statements+acct_TESTRELAY0006@stripe.com>"
+    ) == "neontech"
+
+
+def test_direct_senders_are_untouched_by_the_relay_rule():
+    # Regression guard on the deliberate, measured domain-first choice: a
+    # direct sender whose display name differs from its domain must still
+    # resolve on the domain.
+    assert _merchant_from_header('"Zoom Communications, Inc." <billing@zoom.us>') == "zoom"
+    assert _merchant_from_header("Neon <changelog@neon.tech>") == "neontech"
 
 
 # ---------------------------------------------------------------------------
@@ -291,6 +398,88 @@ def test_fetch_resolves_merchant_from_sender_domain():
          patch("sources.gmail.subprocess.run", side_effect=_dispatch(responses)):
         receipts = SOURCE.fetch("2026-01-01", "2026-12-31")
     assert receipts[0].merchant == "anthropic"
+
+
+def _relay_get_payload(from_value: str) -> dict:
+    """A Stripe-relayed receipt message: vendor in the display name (if any),
+    relay in the domain, one Receipt-* PDF, amount only in the body."""
+    return {
+        "payload": {
+            "headers": [
+                {"name": "Subject", "value": "Your receipt from Macroscope"},
+                {"name": "From", "value": from_value},
+            ],
+            "mimeType": "multipart/mixed",
+            "parts": [
+                {"mimeType": "text/plain", "body": {
+                    "data": _b64url_nopad(b"Receipt Total $50.00 Paid July 24, 2026")
+                }},
+                {"mimeType": "application/pdf", "filename": "Receipt-relayed.pdf",
+                 "body": {"attachmentId": "ATT_RECEIPT", "size": 1234}},
+            ],
+        },
+        "snippet": "Your receipt from Macroscope",
+        "internalDate": "1784943600000",
+    }
+
+
+def test_fetch_resolves_relayed_merchant_from_the_display_name():
+    responses = {
+        "list": LIST_PAYLOAD,
+        "get": _relay_get_payload("Macroscope <invoice+statements+acct_TESTRELAY0001@stripe.com>"),
+        "attachments": _attachment_payload(PDF_BYTES),
+    }
+    with patch("sources.gmail.os.path.exists", return_value=True), \
+         patch("sources.gmail.subprocess.run", side_effect=_dispatch(responses)):
+        receipts = SOURCE.fetch("2026-01-01", "2026-12-31")
+
+    assert len(receipts) == 1
+    assert receipts[0].merchant == "macroscope", (
+        "a Stripe-relayed receipt must bind to the vendor, not to 'stripe'"
+    )
+    assert not SOURCE.notes, "a fully resolved relayed receipt is not a miss"
+
+
+def test_fetch_counts_unresolvable_relay_senders_instead_of_dropping_them_silently():
+    # A relay with no display name is a real receipt we cannot attribute. It
+    # must not quietly vanish: it resolves to a non-matching sentinel AND the
+    # source reports the count so the miss is visible in the run.
+    responses = {
+        "list": LIST_PAYLOAD,
+        "get": _relay_get_payload("<invoice+statements+acct_TESTRELAY0004@stripe.com>"),
+        "attachments": _attachment_payload(PDF_BYTES),
+    }
+    with patch("sources.gmail.os.path.exists", return_value=True), \
+         patch("sources.gmail.subprocess.run", side_effect=_dispatch(responses)):
+        receipts = SOURCE.fetch("2026-01-01", "2026-12-31")
+
+    assert len(receipts) == 1
+    assert receipts[0].merchant == UNRESOLVED_RELAY_MERCHANT
+    assert SOURCE.notes, "an unattributable relayed receipt must be reported, not dropped silently"
+    joined = " ".join(SOURCE.notes)
+    assert "1" in joined and "relay" in joined.lower(), joined
+
+
+def test_fetch_clears_notes_between_runs():
+    # A stale note from a previous run would report a miss that did not happen.
+    unresolved = {
+        "list": LIST_PAYLOAD,
+        "get": _relay_get_payload("<invoice+acct_TESTRELAY0004@stripe.com>"),
+        "attachments": _attachment_payload(PDF_BYTES),
+    }
+    clean = {
+        "list": LIST_PAYLOAD,
+        "get": GET_PAYLOAD_TWO_PDFS,
+        "attachments": _attachment_payload(PDF_BYTES),
+    }
+    with patch("sources.gmail.os.path.exists", return_value=True), \
+         patch("sources.gmail.subprocess.run", side_effect=_dispatch(unresolved)):
+        SOURCE.fetch("2026-01-01", "2026-12-31")
+    assert SOURCE.notes
+    with patch("sources.gmail.os.path.exists", return_value=True), \
+         patch("sources.gmail.subprocess.run", side_effect=_dispatch(clean)):
+        SOURCE.fetch("2026-01-01", "2026-12-31")
+    assert SOURCE.notes == [], "a clean run must not carry a previous run's note"
 
 
 def test_fetch_skips_message_with_no_pdf_attachment():

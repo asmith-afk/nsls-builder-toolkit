@@ -48,6 +48,59 @@ def test_truncated_note_renders_as_truncated_not_skipped():
     assert "SKIPPED" not in text
 
 
+def test_source_note_renders_plainly_and_is_not_reported_as_a_skip():
+    # A source can run cleanly and still have something the user needs to
+    # know — e.g. Gmail found a Stripe-relayed receipt with no vendor display
+    # name, so it could not attribute it to a merchant. That is neither a skip
+    # nor a truncation, and it must not be dressed up as either.
+    text = build_report(
+        [], {},
+        ["GMAIL: NOTE (1 relayed receipt had no vendor display name)"],
+    )
+    assert "SOURCE GMAIL: NOTE (1 relayed receipt had no vendor display name)" in text
+    assert "SKIPPED" not in text
+
+
+def test_source_notes_reach_the_report():
+    # The visibility contract: a source exposes `notes`, main() surfaces them
+    # through the same channel as a skip/truncation. Internal state nobody can
+    # see is exactly the silent-degradation failure this codebase guards.
+    class NotingSource:
+        def __init__(self):
+            self.notes = ["2 relayed receipts had no vendor display name"]
+
+        def fetch(self, since, until):
+            return [R1]
+
+    with patch("run.missing_receipts", return_value=[T1]), \
+         patch("run.load_sources", return_value=[NotingSource()]), \
+         patch("run.Ledger", return_value=Ledger(Path(tempfile.mkdtemp()) / "l.json")):
+        out = io.StringIO()
+        with redirect_stdout(out):
+            code = main([])
+
+    text = out.getvalue()
+    assert code == 0
+    assert "NOTE" in text
+    assert "no vendor display name" in text
+    assert "Anthropic" in text, "the source's receipts must still be used"
+
+
+def test_no_note_line_when_source_has_no_notes_attribute():
+    # getattr(..., None) must default safely for every existing source.
+    class PlainSource:
+        def fetch(self, since, until):
+            return [R1]
+
+    with patch("run.missing_receipts", return_value=[T1]), \
+         patch("run.load_sources", return_value=[PlainSource()]), \
+         patch("run.Ledger", return_value=Ledger(Path(tempfile.mkdtemp()) / "l.json")):
+        out = io.StringIO()
+        with redirect_stdout(out):
+            main([])
+    assert "NOTE" not in out.getvalue()
+
+
 def test_unfound_listed_with_merchant_and_amount():
     text = build_report([Pairing(T2, None, UNFOUND, "no receipt")], {}, [])
     assert "Neon Tech" in text and "$550.76" in text

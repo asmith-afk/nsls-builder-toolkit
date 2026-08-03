@@ -1,6 +1,6 @@
 ---
 name: receipts
-description: Find Ramp transactions missing receipts, fetch each receipt from Anthropic's billing API or Gmail, and upload it to Ramp against the exact transaction. Use when the user says "receipts", "/receipts", "missing receipts", "Ramp needs a receipt", "receipt cleanup", or forwards a Ramp "transaction needs a receipt" nag. Dry run by default.
+description: Find Ramp transactions missing receipts, fetch each receipt from Anthropic's billing API, Neon's billing API, or Gmail, and upload it to Ramp against the exact transaction. Use when the user says "receipts", "/receipts", "missing receipts", "Ramp needs a receipt", "receipt cleanup", or forwards a Ramp "transaction needs a receipt" nag. Dry run by default.
 ---
 
 # Receipts → Ramp
@@ -14,7 +14,7 @@ Clears Ramp's missing-receipt queue automatically instead of the manual
    a missing receipt (this is a per-transaction API call — see
    [Troubleshooting](#troubleshooting) for why).
 2. Fetches candidate receipts from every configured source (Anthropic
-   billing, Gmail) — each source degrades independently, see
+   billing, Neon billing, Gmail) — each source degrades independently, see
    [Setup](#setup).
 3. Matches receipts to transactions on merchant + amount + date
    (see [Match outcomes](#the-four-match-outcomes)).
@@ -36,6 +36,11 @@ changes nothing in Ramp. Nothing is ever uploaded without `--send`.
   or upload anything. Not combinable with `--send`. (`--login` is the old
   name for this and still works — it now stores a cookie instead of opening a
   browser, and says so.)
+- `/receipts --set-neon-key` — store the Neon API key the Neon billing source
+  needs, then exit; does not build the queue, fetch, or upload anything. Not
+  combinable with `--send`, and not combinable with `--set-session` (they are
+  two different credentials for two different sources — run one, then the
+  other).
 
 ## Execution
 
@@ -83,9 +88,9 @@ explicitly and tell the user that `--send` is what executes it.
 
 ## Setup
 
-Three independent prerequisites. **None of them are required for the other
-two to work** — a missing prerequisite skips only that piece and says so in
-the report; it never fails the whole run.
+Four independent prerequisites. **None of them are required for the others
+to work** — a missing prerequisite skips only that piece and says so in the
+report; it never fails the whole run.
 
 ### 1. Ramp (required — this is the queue itself)
 
@@ -111,9 +116,12 @@ gws auth login -s gmail
 ```
 
 Covers vendors that email a receipt PDF: Asana, Groq, OpenAI, Hex, and
-others as your inbox has them. If `gws` isn't authenticated, the Gmail
-source is skipped and announced in the report; every other source still
-runs.
+others as your inbox has them — including vendors whose receipts are sent
+**by Stripe on their behalf** (Macroscope, SendBird, Clay Labs, and similar),
+where the vendor's name is in the sender's display name rather than its
+domain. See [Coverage](#stripe-relayed-vendors--a-ceiling-that-turned-out-to-be-a-bug).
+If `gws` isn't authenticated, the Gmail source is skipped and announced in
+the report; every other source still runs.
 
 ### 3. Anthropic source (optional)
 
@@ -168,6 +176,72 @@ all — Anthropic does **not** email those (see the coverage note below). If
 `ANTHROPIC_ORG_UUID` isn't set or no session is stored, this source is
 skipped and announced; the rest of the run proceeds normally.
 
+### 4. Neon source (optional)
+
+**No browser, nothing to install, and no cookie.** Neon's billing API takes
+a plain long-lived API key, so unlike the Anthropic source there is no
+session here to expire. Two things are required:
+
+```bash
+export NEON_ORG_ID=org-your-organization-id
+python3.12 skills/receipts/scripts/run.py --set-neon-key
+```
+
+`NEON_ORG_ID` is the `org-…` segment in the Neon Console URL
+(`console.neon.tech/app/projects?org_id=org-…`). Run the second command from
+the root of your checkout, same as [Execution](#execution) — every
+Neon-recovery message `/receipts` prints later quotes the command as an
+**absolute path** resolved at runtime, so it works from wherever you are.
+
+`--set-neon-key` asks for a Neon API key. To create one:
+
+1. Open the **Neon Console** (https://console.neon.tech) and sign in.
+2. **Organization settings** → **API keys**.
+3. Create an **organization** API key. A personal key cannot read the
+   organization's billing invoices — this is the single most likely setup
+   mistake, and it shows up as an HTTP 401/403 in the report.
+4. Copy it (Neon shows it once) and paste it at the prompt.
+
+The paste is hidden — it isn't echoed to the terminal and never enters your
+shell history. The key is validated against Neon *before* it is stored, so
+you find out immediately whether it works instead of on some later run.
+
+**Treat that key like a password.** It is written to
+`~/.claude-receipts-neon-key` with mode `0600` (only your account can read
+it), outside this repository so it cannot be committed. If the file's
+permissions are ever loosened, this skill **refuses to use it** and tells you
+to fix or re-store it. `NEON_API_KEY` in the environment takes precedence over
+the file if you'd rather supply it that way (from a password manager, say).
+
+This source is the only way Neon charges get a receipt: Neon sends **no
+invoice email at all** — the mailbox was searched unrestricted on 2026-08-01
+and Neon sends product updates and usage recaps only. If `NEON_ORG_ID` isn't
+set or no key is stored, this source is skipped and announced; the rest of
+the run proceeds normally.
+
+## What happens to your credentials
+
+Two of these sources need a long-lived secret of yours (a claude.ai session, a
+Neon API key). Three guarantees, all of them checkable in `skills/receipts/`:
+
+- **They stay in your `$HOME`.** Each is read from an environment variable if
+  you set one, otherwise from a file in your home directory at mode `0600` —
+  never inside this repository, so neither can be committed. A file any other
+  account can read is refused, not used.
+- **They never reach a report, log, or the ledger.** No error message, report
+  line, or ledger entry ever contains a credential; the value is stripped from
+  any text that came from elsewhere (an OS error, an HTTP error body) before
+  you see it.
+- **They are never forwarded to a third-party host.** Python's `urllib`
+  re-sends `Authorization` and `Cookie` headers when it follows a redirect to
+  another origin ([CPython #77842](https://github.com/python/cpython/issues/77842)),
+  so one redirect off `console.neon.tech` or `claude.ai` would hand your
+  credential to whatever host the `Location` header names. Neon refuses
+  redirects on the authenticated request outright. claude.ai has to follow
+  same-origin redirects — its 302 to `/login` is how an expired session is
+  detected — so it follows them with the cookie intact and strips the cookie on
+  any hop to a different scheme, host, or port.
+
 ## The four match outcomes
 
 Every outstanding transaction gets exactly one outcome. **Only the first two
@@ -209,17 +283,52 @@ transactions,
 - **~15** are Anthropic usage-credit auto-recharge charges — Anthropic sends
   no receipt email for these; they're only reachable through the Anthropic
   billing source.
+- **3** are Neon Tech charges ($1,293.73 total, billed monthly and growing:
+  $317.61 → $425.36 → $550.76). Neon sends no receipt email either, but it
+  *does* expose a billing API, so these are covered by the Neon source.
 - **1** (Asana) binds through the Gmail source.
-- **~6** (Neon Tech, Supabase, Zoom, and similar) send **no receipt email at
-  all** — no portal API, no email, nothing this skill can fetch
-  automatically. These need manual handling: download from the vendor's own
-  billing portal and attach in Ramp directly.
+- **~3** (Supabase, Zoom, and similar) have **neither an email nor a
+  reachable billing API** — nothing this skill can fetch automatically. These
+  need manual handling: download from the vendor's own billing portal and
+  attach in Ramp directly.
 
-That last group is the honest ceiling of what `/receipts` can do today, not
-a bug to chase — there's no automated source for them because the vendor
-doesn't produce one. Don't expect the skill to close 22/22; expect it to
-close what has a source, and leave a short, correctly-labeled manual list
-for the rest.
+"Sends no receipt email" and "has no automated source" are two different
+statements, and only the second one is a ceiling. Neon is the worked example:
+no email, but a portal API that takes a plain API key, so it's automated.
+Supabase and Zoom are the honest remainder — not a bug to chase, because
+there's no source to build against. Don't expect the skill to close 22/22;
+expect it to close what has a source, and leave a short, correctly-labeled
+manual list for the rest.
+
+### Stripe-relayed vendors — a ceiling that turned out to be a bug
+
+That snapshot understated the Gmail source, and the gap is worth naming
+because it looked exactly like a ceiling. Vendors that don't send their own
+receipts — Stripe sends on their behalf — arrive as
+`Macroscope <invoice+statements+acct_…@stripe.com>`: the vendor is the
+**display name**, the domain is the relay's. Merchant resolution read the
+domain, got `stripe` for every one of them, matched no Ramp transaction, and
+the receipt was discarded without a word. Four vendors were affected, one of
+them the highest-volume vendor in the account by a wide margin.
+
+Fixed 2026-08-01: when the sending domain is a known **billing relay**
+(`BILLING_RELAY_DOMAINS` in `sources/gmail.py`, currently just `stripe.com`),
+the display name is the authoritative half of the header and is used instead.
+Direct senders are unchanged — domain first, then the alias map — so Anthropic,
+Zoom, and Asana resolve exactly as before. Adding the next relay (Paddle,
+Chargebee, …) is a one-line change to that set.
+
+These vendors were on the manual list and no longer need to be. Read the
+22-transaction snapshot above as the measurement it was, not as a permanent
+floor: "no receipt found" is sometimes a source bug wearing a ceiling's
+clothes, and the way to tell them apart is to check what the source actually
+did with the mail rather than trusting that it found nothing.
+
+One residual case stays manual by design. A relayed message with **no display
+name** names its vendor nowhere in the header, so there is nothing
+authoritative to resolve and nothing is guessed — it resolves to a key that
+can only equal itself, never binds, and is **counted and reported** as a
+`SOURCE GMAIL: NOTE (…)` line so the miss is visible rather than silent.
 
 ## Troubleshooting
 
@@ -257,18 +366,100 @@ whatever directory you're in, not just the repository root.
   `python3.12 skills/receipts/scripts/run.py --set-session`. There is no
   browser in this path any more, so there is nothing to install and no
   "verify you are human" box to tick.
+- **`SOURCE NEON: SKIPPED (No Neon API key is stored …)`** — nothing has been
+  stored yet and `NEON_API_KEY` isn't set either. Run
+  `python3.12 skills/receipts/scripts/run.py --set-neon-key`.
+- **`SOURCE NEON: SKIPPED (NEON_ORG_ID is not set …)`** — a different, cheaper
+  fix: the key may be perfectly fine, the source just doesn't know which
+  organization to read. `export NEON_ORG_ID=org-…`, taken from the `org_id`
+  segment of the Neon Console URL.
+- **`SOURCE NEON: SKIPPED (Neon refused … HTTP 401/403 …)`** — the stored key
+  is invalid or is a **personal** key. Organization billing invoices need an
+  **organization** API key (Neon Console → Organization settings → API keys).
+  Re-issue it as one and store the new key with `--set-neon-key`. Setting
+  `NEON_ORG_ID` will not fix this.
+- **`SOURCE NEON: SKIPPED (Neon answered HTTP 400 'method is deprecated' …)`**
+  — **not your credentials.** This means the skill called the retired
+  `/api/v2/billing/invoices?org_id=…` form instead of the org-scoped
+  `/api/v2/organizations/<org>/billing/invoices`. It is a bug in
+  `sources/neon.py` and needs a code change; re-issuing an API key will do
+  nothing.
+- **`SOURCE NEON: SKIPPED (Refusing to use the stored Neon API key … its mode
+  is …)`** — the credential file became readable by other accounts. `chmod 600
+  ~/.claude-receipts-neon-key`, or re-run `--set-neon-key`, which always
+  writes it back at `0600`.
+- **`SOURCE NEON: SKIPPED (console.neon.tech … tried to redirect … was NOT
+  followed)`** — also **not your credentials**, and nothing was leaked. The
+  authenticated Neon request does not follow redirects, because `urllib`
+  forwards the `Authorization` header to the new host when it does — one
+  redirect would hand your long-lived API key to whatever that host is. This
+  endpoint has never redirected, so seeing this means something changed: the
+  message names the target. If Neon really did move the endpoint,
+  `sources/neon.py` needs the new URL.
+- **`ERROR: Refusing to prompt for the … no controlling terminal`** (from
+  `--set-neon-key` or `--set-session`) — you're running in something with no
+  terminal at all: a CI job, an agent shell, `docker exec` without `-t`.
+  Python's hidden-input prompt silently falls back to reading with **echo on**
+  in that state, which would print your credential to the screen and into that
+  job's log, so these commands refuse instead. Nothing was read and nothing
+  was stored; any previously stored value is untouched.
+
+  Note what this is *not*: a redirected stdin is fine. `--set-neon-key
+  < /dev/null` run from a real terminal still gets a properly hidden prompt,
+  because Python opens `/dev/tty` for it — only the absence of a terminal
+  triggers this refusal.
+
+  Either re-run from a terminal, or supply the value through the environment
+  (`NEON_API_KEY` / `CLAUDE_SESSION_KEY`), which both sources check ahead of
+  the stored file. Set it **without putting it in the command**, so it doesn't
+  land in your shell history (works in zsh and bash):
+
+  ```bash
+  printf 'Neon API key: '; read -rs NEON_API_KEY; echo; export NEON_API_KEY
+  ```
+
+  Exporting it with the value written inline in the command would work too,
+  and would also write the credential verbatim into `~/.zsh_history` and any
+  shell audit log — a longer-lived leak than the echoed prompt this refusal
+  exists to prevent. Use the form above. (Non-secrets like `NEON_ORG_ID` and
+  `ANTHROPIC_ORG_UUID` are fine to `export` inline — there's nothing to leak.)
 - **`SOURCE <NAME>: TRUNCATED (...)`** — the source ran and returned
   **partial** results. This is not a skip and not a failure; it is an
   incomplete search, and any `UNFOUND` below it may be an artifact of what
-  wasn't searched. Both sources report it the same way:
+  wasn't searched. All three sources report it the same way:
   - Gmail — the 50-page pagination cap was hit with more results pending.
   - Anthropic — the 20-page cap was hit, or the invoice listing claimed more
     pages while returning no cursor, or one or more invoice PDFs failed to
     download (those are named, with date and amount, in the message).
+  - Neon — an invoice PDF failed to download, a paid invoice couldn't be read
+    from the listing, a paid invoice was **not in USD**, the listing came back
+    without a usable `invoices` array, or the response grew a
+    pagination-shaped field. Neon's listing is **not** paginated today (all
+    invoices come back in one call), so that last one means the API changed
+    shape and `sources/neon.py` needs updating — the skill notices rather than
+    returning a quietly short list.
+
+    Two of those want a word. A **non-USD** invoice is excluded on purpose:
+    matching compares amounts as plain cents and never looks at currency, so a
+    paid €550.76 invoice would happily attach itself to an unrelated $550.76
+    Ramp charge. Attach those manually. And **no usable `invoices` array**
+    means nothing was searched at all — every `UNFOUND` under it is
+    meaningless, not evidence that a receipt is missing.
 
   Narrow the date window (`--since`/`--until`) and re-run to get a query small
   enough to finish. Download failures are usually transient — re-running is
   often enough.
+- **`SOURCE <NAME>: NOTE (...)`** — the source ran **completely** (not a skip,
+  not a truncation) and still found something you have to handle by hand.
+  Today there is one: Gmail found a receipt sent by a billing relay
+  (`stripe.com`) whose `From` header carried **no vendor display name**. The
+  vendor is named nowhere in that message, so the skill refuses to guess one —
+  guessing would risk attaching a receipt to the wrong merchant's charge —
+  and the receipt is counted and reported here instead of vanishing. Find it
+  in Gmail (search `from:stripe.com` over the same window), open the PDF to
+  see which vendor it's for, and attach it in Ramp directly. If a whole vendor
+  keeps landing here, that vendor is sending without a display name and
+  nothing in `sources/gmail.py` can fix it.
 - **`SOURCES: N loaded, 0 searched (...)` + exit 2** — zero sources actually
   searched, even though `N` loaded. "Loaded" only means the module imported
   cleanly; it says nothing about whether `fetch()` ever ran. On a fresh,
@@ -316,6 +507,15 @@ whatever directory you're in, not just the repository root.
 - **`ESCALATED`** — this transaction hit the retry cap (2 attempts) without
   uploading. The skill will not retry it again. Attach the receipt manually
   in Ramp.
+- **A `~/.claude-receipts-profile/` directory exists.** Left over from an
+  older version of this skill, which drove a real Chrome through Playwright to
+  collect the Anthropic invoices. That path is gone — nothing in this skill
+  reads or writes it any more — and the directory is a dead Chrome profile
+  taking up roughly 40 MB. **It is safe to delete** (`rm -rf
+  ~/.claude-receipts-profile`). It holds no credential this skill uses: the
+  ones it does use are `~/.claude-receipts-session` and
+  `~/.claude-receipts-neon-key`, which you should *not* delete unless you
+  intend to re-store them.
 - **The queue comes back empty, but the Ramp UI shows outstanding
   items.** This was a real bug during development and is the single most
   likely regression to reintroduce by accident: `transactions list`'s

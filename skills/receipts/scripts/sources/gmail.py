@@ -22,8 +22,10 @@ against real mail rather than assumed:
   this, the source would extract zero amounts, including from its own
   reference example.
 * Merchant resolution prefers the sender's email domain (second-level label)
-  over the display name, plus a small alias map for the cases that still
-  don't line up with Ramp's `merchant_name`. Measured live 2026-08-01:
+  over the display name — EXCEPT when the sending domain is a billing relay,
+  where that preference is exactly backwards (see BILLING_RELAY_DOMAINS
+  below) — plus a small alias map for the cases that still don't line up with
+  Ramp's `merchant_name`. Measured live 2026-08-01:
     - "Anthropic, PBC" <invoice+statements@mail.anthropic.com> -> domain
       label "anthropic" already equals Ramp's "Anthropic" -> "anthropic".
     - "Zoom Communications, Inc." <billing@zoom.us> -> domain label "zoom"
@@ -38,6 +40,16 @@ against real mail rather than assumed:
   transaction stays UNFOUND (see match.py). This never produces a wrong
   binding, so the alias map is intentionally small — add entries only when
   a real, measured gap shows up, not preemptively.
+* Billing relays invert that preference. Many vendors never send their own
+  receipts — Stripe sends on their behalf — so the From header reads
+  `Macroscope <invoice+statements+acct_…@stripe.com>`: the vendor is in the
+  DISPLAY NAME and the domain is the relay's. Resolving on the domain gives
+  "stripe" for every such vendor, which matches no Ramp transaction, so every
+  relayed receipt was silently discarded. Measured 2026-08-01 against the
+  reference account, this affected the single highest-volume vendor in it
+  (41 charges in ~6 weeks) plus three others. When the sending domain is a
+  known relay, the display name is the authoritative one and the domain is
+  not, so the order flips — and only then. Direct senders are untouched.
 * `list` follows `nextPageToken` to the end instead of reading only the
   first 100 results. Measured live 2026-08-01: the query below matched 516
   messages over a 2-month window (subject:receipt/invoice/payment are
@@ -62,6 +74,7 @@ against real mail rather than assumed:
 
 import base64
 import datetime as dt
+import email.utils
 import json
 import os
 import re
@@ -86,10 +99,39 @@ PAGE_GUARD = 50  # pages (100 messages/page = 5,000 messages) — see fetch()
 # Normalized candidate (sender domain label, or display name, whichever is
 # tried and comes up short) -> Ramp's normalized merchant_name. Populate only
 # from measured mismatches — see module docstring.
+#
+# Deliberately NOT added for the Stripe-relayed vendors: their display names
+# already normalize to Ramp's own merchant strings (Macroscope -> "macroscope",
+# SendBird -> "sendbird", Clay Labs Inc -> "claylabsinc"), so an alias would be
+# a no-op at best. Have I Been Pwned is left out because its Ramp merchant
+# string has not been verified — and a WRONG alias is the one failure mode this
+# map can produce that a missing one cannot: a miss leaves a transaction
+# UNFOUND, a false mapping attaches a receipt to somebody else's charge.
 ALIASES: dict[str, str] = {
     "neon": "neontech",  # sender domain neon.tech; Ramp calls it "Neon Tech"
     "anthropicpbc": "anthropic",  # belt-and-suspenders if domain lookup ever fails
 }
+
+# Domains that send receipts ON BEHALF OF other vendors ("billing relay",
+# "payment processor sending as the merchant"). For these — and ONLY these —
+# the sender's domain names the relay, not the vendor, so merchant resolution
+# reads the display name instead. Add another relay (Paddle, Chargebee,
+# FastSpring, Lemon Squeezy…) by adding one line here; nothing else changes.
+# Subdomains of a listed domain count, so `email.stripe.com` is covered too.
+BILLING_RELAY_DOMAINS: frozenset[str] = frozenset({
+    "stripe.com",
+})
+
+# What a relayed message resolves to when it carries NO display name. There is
+# no authoritative vendor anywhere in such a header, so nothing is guessed:
+# "stripe" would invent a merchant, and "" would compare EQUAL to any other
+# blank merchant (the collision normalize_merchant exists to prevent). This
+# sentinel is [a-z0-9] only — normalize_merchant is a no-op on it, so match.py
+# re-normalizing a Receipt.merchant cannot change it — and no real vendor
+# normalizes to it, so it can only ever equal itself. The receipt is still
+# returned and the count is reported (see GmailSource.notes): an unattributable
+# receipt is a visible miss, not a silent drop.
+UNRESOLVED_RELAY_MERCHANT = "xunresolvedbillingrelaysender"
 
 
 def _gws(args: list[str], params: dict) -> dict:
@@ -116,6 +158,32 @@ def _gws(args: list[str], params: dict) -> dict:
     return payload
 
 
+def _sender_domain(from_header: str) -> str:
+    """The FULL, lower-cased domain of the address in a From header, e.g.
+    '"X" <invoice+statements+acct_1@stripe.com>' -> 'stripe.com'.
+
+    `email.utils.parseaddr` handles the header syntax properly — quoted
+    display names, commas inside them, angle brackets, a bare address with no
+    display name at all. The regex is kept only as a fallback for a header too
+    malformed for parseaddr to find an address in, since a wrong answer here
+    is harmless (it just fails to bind).
+    """
+    _, addr = email.utils.parseaddr(from_header or "")
+    if "@" not in addr:
+        m = re.search(r"@([\w.-]+)", from_header or "")
+        return m.group(1).strip().lower().rstrip(".") if m else ""
+    return addr.rsplit("@", 1)[1].strip().lower().rstrip(".")
+
+
+def _display_name(from_header: str) -> str:
+    """The display-name half of a From header, unquoted and with the address
+    removed: '"Clay Labs, Inc." <a@stripe.com>' -> 'Clay Labs, Inc.'. Empty
+    when the sender gave none ('a@stripe.com', '<a@stripe.com>').
+    """
+    display, _ = email.utils.parseaddr(from_header or "")
+    return display.strip()
+
+
 def _domain_label(from_header: str) -> str:
     """Second-level domain label from the address in a From header, e.g.
     'billing@zoom.us' -> 'zoom', '"X" <invoice@mail.anthropic.com>' -> 'anthropic'.
@@ -123,15 +191,44 @@ def _domain_label(from_header: str) -> str:
     public-suffix lookup — good enough for the vendor domains actually seen
     in this inbox. A wrong label is harmless: it just fails to bind.
     """
-    m = re.search(r"@([\w.-]+)", from_header or "")
-    if not m:
+    domain = _sender_domain(from_header)
+    if not domain:
         return ""
-    labels = m.group(1).split(".")
+    labels = domain.split(".")
     return labels[-2] if len(labels) >= 2 else labels[0]
 
 
+def _is_billing_relay(domain: str) -> bool:
+    """True when this sending domain relays receipts for other vendors.
+
+    Matched on the FULL domain, not a second-level label: "stripe" as a label
+    would also claim a hypothetical `stripe.example` that has nothing to do
+    with the payment processor. Subdomains of a listed relay count, because a
+    relay legitimately sends from several.
+    """
+    domain = (domain or "").lower()
+    return any(domain == relay or domain.endswith("." + relay)
+               for relay in BILLING_RELAY_DOMAINS)
+
+
 def _merchant_from_header(from_header: str) -> str:
-    display = normalize_merchant(re.sub(r"<.*?>", "", from_header or ""))
+    """Resolve a Ramp-comparable merchant key from a From header.
+
+    Domain first, display name second — except for a billing relay, where the
+    domain names the processor and the display name names the vendor, so the
+    order flips. See the module docstring; this is the one case where the
+    display name is the authoritative half of the header.
+    """
+    display = normalize_merchant(_display_name(from_header))
+
+    if _is_billing_relay(_sender_domain(from_header)):
+        # No display name on a relayed message means the vendor appears
+        # nowhere in the header. Don't guess — resolve to a key that cannot
+        # match anything (the caller counts these; see GmailSource.fetch).
+        if not display:
+            return UNRESOLVED_RELAY_MERCHANT
+        return ALIASES.get(display, display)
+
     domain = normalize_merchant(_domain_label(from_header))
     for candidate in (domain, display):
         if candidate in ALIASES:
@@ -153,6 +250,18 @@ class GmailSource:
     # stderr warning below is necessary but not sufficient, since it never
     # reaches the markdown report a user actually reads.
     truncated: str | None = None
+    # Things that happened during a SUCCESSFUL fetch that a user still needs
+    # to know — currently: receipts from a billing relay that carried no
+    # vendor display name, so no merchant could be resolved and they cannot
+    # bind. Neither a skip nor a truncation (the search was complete), so it
+    # gets its own channel rather than being dressed up as either. run.py
+    # reads it via getattr, so sources that never set it are unaffected.
+    # Rebuilt on every fetch() — a stale note reports a miss that didn't
+    # happen.
+    notes: list[str]
+
+    def __init__(self) -> None:
+        self.notes = []
 
     def parse_amount(self, text: str) -> int | None:
         text = text or ""
@@ -210,6 +319,8 @@ class GmailSource:
         # we say so — print a visible warning rather than letting results
         # quietly vanish.
         self.truncated = None
+        self.notes = []
+        unresolved_relay = 0
         stubs: list[dict] = []
         page_token = None
         for _ in range(PAGE_GUARD):
@@ -270,13 +381,31 @@ class GmailSource:
                 int(msg["internalDate"]) / 1000, _dt.UTC
             ).date().isoformat()
 
+            merchant = _merchant_from_header(hdrs.get("From", ""))
+            # A real receipt PDF, with a real amount, that we cannot attribute
+            # to any vendor. It is returned (it can only ever fail to bind,
+            # never bind wrongly) but it is also COUNTED — dropping it on the
+            # floor would leave a run that missed a receipt looking exactly
+            # like a run that had nothing to find.
+            if merchant == UNRESOLVED_RELAY_MERCHANT:
+                unresolved_relay += 1
+
             out.append(Receipt(
-                merchant=_merchant_from_header(hdrs.get("From", "")),
+                merchant=merchant,
                 amount_cents=cents,
                 date=date,
                 pdf_bytes=pdf,
                 provenance=f"gmail:msg {stub['id']}",
             ))
+
+        if unresolved_relay:
+            self.notes.append(
+                f"{unresolved_relay} receipt(s) came from a billing relay "
+                f"({', '.join(sorted(BILLING_RELAY_DOMAINS))}) with no vendor "
+                f"display name in the From header — the vendor is not named "
+                f"anywhere in the message, so no merchant could be resolved "
+                f"and these cannot bind to a transaction. Attach them by hand."
+            )
         return out
 
 

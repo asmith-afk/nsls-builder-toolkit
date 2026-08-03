@@ -12,6 +12,7 @@ from txn_queue import missing_receipts
 from ramp import RampAuthError, RampError
 from sources.anthropic import _set_session as anthropic_set_session
 from sources.base import SourceUnavailable, load_sources
+from sources.neon import _set_neon_key as neon_set_key
 from upload import Ledger, upload
 
 LEDGER_PATH = Path(os.path.expanduser("~/.claude-receipts-ledger.json"))
@@ -27,11 +28,13 @@ def _source_lines(skipped_sources, sources_loaded, sources_searched=None) -> lis
     for note in skipped_sources:
         name, _, reason = note.partition(": ")
         # A TRUNCATED note means the source ran successfully and returned
-        # partial results — it was never skipped. Wrapping it as
-        # "SKIPPED (TRUNCATED (...))" tells the user something untrue about
-        # what happened, and "SKIPPED" is exactly the word that stops most
-        # readers from reading further. Render it plainly instead.
-        if reason.startswith("TRUNCATED"):
+        # partial results — it was never skipped. A NOTE means it ran
+        # completely and still has something the user needs (e.g. Gmail found
+        # a relayed receipt with no vendor display name). Wrapping either as
+        # "SKIPPED (...)" tells the user something untrue about what happened,
+        # and "SKIPPED" is exactly the word that stops most readers from
+        # reading further. Render them plainly instead.
+        if reason.startswith(("TRUNCATED", "NOTE")):
             lines.append(f"SOURCE {name}: {reason}")
         else:
             lines.append(f"SOURCE {name}: SKIPPED ({reason})")
@@ -114,7 +117,36 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--login", action="store_true",
                      help="deprecated alias for --set-session (there is no browser step "
                           "any more — the Anthropic source uses a stored session cookie)")
+    ap.add_argument("--set-neon-key", action="store_true",
+                     help="store a Neon API key for the Neon billing source and exit — "
+                          "prompts for the value (hidden), validates it live against "
+                          "NEON_ORG_ID, and writes it 0600; does not build the queue, "
+                          "fetch, or upload anything")
     args = ap.parse_args(argv)
+
+    # Each credential command does ONE thing and returns immediately. Asking
+    # for two at once is ambiguous about which one the user meant to run
+    # first, and doing both from one invocation would prompt for two secrets
+    # in a row with no way to tell which prompt is which.
+    if (args.set_session or args.login) and args.set_neon_key:
+        print("ERROR: --set-neon-key stores a Neon API key and --set-session stores a "
+              "claude.ai session — they are different credentials for different "
+              "sources. Run one, then the other.", file=sys.stderr)
+        return 2
+
+    # Storing the Neon API key: same contract as --set-session. It only stores
+    # a credential and exits — no Ramp queue, no source fetch, no upload — so
+    # combining it with --send is almost certainly a mistake.
+    if args.set_neon_key:
+        if args.send:
+            print("ERROR: --set-neon-key and --send cannot be combined. --set-neon-key "
+                  "only stores a Neon API key, then exits — it does not build the "
+                  "queue, fetch receipts, or upload anything, so there is nothing for "
+                  "--send to act on in the same invocation. Run --set-neon-key by "
+                  "itself first, then run the tool again (add --send once you're ready "
+                  "to execute).", file=sys.stderr)
+            return 2
+        return neon_set_key()
 
     # `run.py` is the single documented entry point for everything this tool
     # does, authentication included — it already resolves imports correctly
@@ -189,6 +221,13 @@ def main(argv: list[str]) -> int:
             truncated = getattr(src, "truncated", None)
             if truncated:
                 skipped.append(f"{name}: TRUNCATED ({truncated})")
+            # A source can also complete a full search and still have found
+            # something the user has to act on by hand — a receipt it could
+            # not attribute to a merchant, say. That is neither a skip nor a
+            # truncation, but it is still a gap, and a gap nobody is told
+            # about is the same silent degradation in a different costume.
+            for note in getattr(src, "notes", None) or []:
+                skipped.append(f"{name}: NOTE ({note})")
         except SourceUnavailable as exc:
             skipped.append(f"{name}: {exc}")
         except Exception as exc:
