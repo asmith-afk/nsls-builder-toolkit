@@ -375,3 +375,184 @@ test("a well-formed manifest is still accepted", async () => {
   assert.equal(note, null);
   assert.deepEqual(caps.fieldTypes.rendered, ["text"]);
 });
+
+// ---------------------------------------------------------------------------
+// Celebration fields suppressed by a sibling field (track-studio#41).
+//
+// Julia reported three celebration authoring fields as having "hardcoded
+// defaults" because copy rendered in their positions that no JSON supplied.
+// The fields are in fact all wired. What she hit is a layout branch:
+// CelebrationContent renders two mutually exclusive layouts, and setting
+// `celebrationCompletedSection` selects the one that gates out the whole
+// next-steps card — the only renderer for nextStepsTitle, nextStepsDescription
+// and celebrationTasks. Independently, setting `celebrationNextSection` makes
+// the button read "Up Next: <section>", so celebrationButtonText is never read.
+//
+// One authoring choice silently disables five other fields. Same class as the
+// option-array rules above — populate a field, member never sees it — but the
+// cause is a layout branch, not a fieldType accessor, so no manifest is needed.
+// ---------------------------------------------------------------------------
+
+const celebration = (fields) => [{
+  id: "t", title: "T",
+  steps: [{ id: "s", title: "S", substeps: [{ id: "sub-1", slug: "done", title: "Done", type: "say", fieldType: "celebration", prompt: "p", ...fields }] }],
+}];
+
+const suppressionWarnings = (tracks) =>
+  validateTracks(tracks, { assumeClarity: true }).warnings.filter((w) => /never shown to the member/.test(w));
+
+test("the section-completion layout warns about next-steps fields it will not render", () => {
+  const hits = suppressionWarnings(celebration({
+    celebrationCompletedSection: "Getting Started",
+    celebrationNextStepsTitle: "Onboarding",
+    celebrationNextStepsDescription: "What we learned about you:",
+  }));
+  assert.equal(hits.length, 1, `expected one warning, got ${JSON.stringify(hits)}`);
+  assert.match(hits[0], /sub-1/);
+  assert.match(hits[0], /celebrationNextStepsTitle/);
+  assert.match(hits[0], /celebrationNextStepsDescription/);
+  assert.match(hits[0], /celebrationCompletedSection/);
+});
+
+test("celebrationTasks is suppressed by the same layout branch", () => {
+  // The task checklist lives inside the same gated card, so it disappears too —
+  // easy to miss, because it renders fine the moment completedSection is cleared.
+  const hits = suppressionWarnings(celebration({
+    celebrationCompletedSection: "Getting Started",
+    celebrationTasks: ["Told us your name", "Rated your clarity"],
+  }));
+  assert.equal(hits.length, 1);
+  assert.match(hits[0], /celebrationTasks/);
+});
+
+test("celebrationNextSection overrides celebrationButtonText", () => {
+  const hits = suppressionWarnings(celebration({
+    celebrationNextSection: "Personality Type",
+    celebrationButtonText: "Okay, got it!",
+  }));
+  assert.equal(hits.length, 1);
+  assert.match(hits[0], /celebrationButtonText/);
+  assert.match(hits[0], /Up Next/);
+});
+
+test("both suppressions can fire independently on one substep", () => {
+  const hits = suppressionWarnings(celebration({
+    celebrationCompletedSection: "Getting Started",
+    celebrationNextSection: "Personality Type",
+    celebrationNextStepsTitle: "Onboarding",
+    celebrationButtonText: "Okay, got it!",
+  }));
+  assert.equal(hits.length, 2, `expected both, got ${JSON.stringify(hits)}`);
+});
+
+test("live Welcome's celebration shape produces NO warning", () => {
+  // The no-false-positive check, and the reason this rule is safe to ship.
+  // Live Welcome sets exactly these two fields and none of the suppressed ones,
+  // which is precisely why the screen works and why Julia's report was about
+  // fields she COULDN'T make take effect rather than a broken screen.
+  assert.deepEqual(suppressionWarnings(celebration({
+    celebrationCompletedSection: "Getting Started",
+    celebrationNextSection: "Personality Type",
+  })), []);
+});
+
+test("without completedSection the next-steps fields are legitimate", () => {
+  // The regular layout DOES render the card, so these are real authoring there.
+  // A rule that fired here would push authors away from a working pattern.
+  assert.deepEqual(suppressionWarnings(celebration({
+    celebrationNextStepsTitle: "Onboarding",
+    celebrationNextStepsDescription: "What we learned about you:",
+    celebrationTasks: ["a", "b"],
+  })), []);
+});
+
+test("without nextSection the button text is legitimate", () => {
+  assert.deepEqual(suppressionWarnings(celebration({ celebrationButtonText: "Okay, got it!" })), []);
+});
+
+test("empty suppressed fields do not warn", () => {
+  // Clearing a field in the editor leaves "" or [], not undefined. Warning on
+  // those would fire on every celebration that had ever been edited.
+  //
+  // Note "   " is deliberately NOT in this list any more — see the whitespace
+  // tests below. The first version of this test asserted a whitespace-only
+  // string was silent, which encoded the bug Macroscope caught.
+  assert.deepEqual(suppressionWarnings(celebration({
+    celebrationCompletedSection: "Getting Started",
+    celebrationNextStepsTitle: "",
+    celebrationTasks: [],
+  })), []);
+});
+
+// ---------------------------------------------------------------------------
+// Whitespace must be judged the way the RENDERER judges it, not the way a
+// human reads it (found by Macroscope on nsls-builder-toolkit#124).
+//
+// The predicate used to trim, so `celebrationCompletedSection: "   "` counted
+// as unset and stayed silent — while CelebrationContent selects its layout with
+// `!!completedSection`, for which "   " is TRUTHY. So the exact input the rule
+// exists to catch was the one it waved through: three fields suppressed, no
+// warning. A validator more forgiving than the renderer reports success on
+// precisely the input that fails.
+// ---------------------------------------------------------------------------
+
+test("a whitespace-only trigger still suppresses, so it still warns", () => {
+  // Macroscope's repro, verbatim.
+  const hits = suppressionWarnings(celebration({
+    celebrationCompletedSection: "   ",
+    celebrationNextStepsTitle: "Onboarding",
+    celebrationTasks: ["Told us your name"],
+  }));
+  assert.equal(hits.length, 1, `expected a warning, got ${JSON.stringify(hits)}`);
+  assert.match(hits[0], /celebrationNextStepsTitle/);
+  assert.match(hits[0], /celebrationTasks/);
+});
+
+test("a whitespace-only celebrationNextSection still overrides the button text", () => {
+  // Same asymmetry on the other rule: "   " makes the button read "Up Next:    ".
+  const hits = suppressionWarnings(celebration({
+    celebrationNextSection: "   ",
+    celebrationButtonText: "Okay, got it!",
+  }));
+  assert.equal(hits.length, 1, `expected a warning, got ${JSON.stringify(hits)}`);
+  assert.match(hits[0], /celebrationButtonText/);
+});
+
+test("a whitespace-only SUPPRESSED field counts as populated too", () => {
+  // The renderer would render it (`{nextStepsDescription && …}`), so an author
+  // who typed spaces into a field the layout drops should still hear about it.
+  const hits = suppressionWarnings(celebration({
+    celebrationCompletedSection: "Getting Started",
+    celebrationNextStepsDescription: "   ",
+  }));
+  assert.equal(hits.length, 1, `expected a warning, got ${JSON.stringify(hits)}`);
+  assert.match(hits[0], /celebrationNextStepsDescription/);
+});
+
+test("an empty task array is still not populated, even under a raw-truthiness rule", () => {
+  // The trap in the suggested one-line fix: `[] !== undefined && [] !== null &&
+  // [] !== ""` is all true, so a bare raw-truthiness check would warn on every
+  // cleared task list. Arrays need the length test.
+  assert.deepEqual(suppressionWarnings(celebration({
+    celebrationCompletedSection: "   ",
+    celebrationTasks: [],
+  })), []);
+});
+
+test("a blank trigger field does not suppress anything", () => {
+  // completedSection: "" takes the regular layout, so the card renders.
+  assert.deepEqual(suppressionWarnings(celebration({
+    celebrationCompletedSection: "",
+    celebrationNextStepsTitle: "Onboarding",
+  })), []);
+});
+
+test("the rule is scoped to celebration substeps only", () => {
+  // These field names are meaningless elsewhere; warning about them on a text
+  // field would be noise.
+  assert.deepEqual(suppressionWarnings(withFields({
+    fieldType: "text",
+    celebrationCompletedSection: "Getting Started",
+    celebrationNextStepsTitle: "Onboarding",
+  })), []);
+});

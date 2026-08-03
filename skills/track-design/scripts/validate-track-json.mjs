@@ -7,6 +7,37 @@ const VALID_TYPES = new Set(["say", "collect", "generate", "chat", "ai-process"]
 /** The three arrays an author can put an option list in. Each fieldType reads at most
  *  one of them; the others are silently discarded (track-studio#60). */
 const OPTION_ARRAYS = ["options", "checkboxOptions", "dropdownOptions"];
+
+/** Celebration fields that a SIBLING field silently switches off (track-studio#41).
+ *
+ *  CelebrationContent.tsx renders two mutually exclusive layouts, chosen by
+ *  `isSectionCompletion = !!completedSection`. Setting `celebrationCompletedSection`
+ *  selects the section-completion layout, which gates out the entire next-steps card —
+ *  and that card is the ONLY renderer for nextStepsTitle, nextStepsDescription and
+ *  celebrationTasks. Separately, the button reads
+ *  `effectiveNextSection ? "Up Next: <section>" : buttonText`, so once
+ *  `celebrationNextSection` is set, `celebrationButtonText` is never consulted.
+ *
+ *  So the reported symptom ("copy renders that no JSON supplies, so it must be a
+ *  hardcoded default") had a different cause: the fields ARE wired, and one authoring
+ *  choice makes five others unreachable. Read off the component, not assumed. */
+const CELEBRATION_SUPPRESSIONS = [
+  {
+    when: "celebrationCompletedSection",
+    suppresses: [
+      "celebrationNextStepsTitle",
+      "celebrationNextStepsDescription",
+      "celebrationTasks",
+    ],
+    because:
+      "selects the section-completion layout, which does not render the next-steps card",
+  },
+  {
+    when: "celebrationNextSection",
+    suppresses: ["celebrationButtonText"],
+    because: 'makes the button read "Up Next: <celebrationNextSection>"',
+  },
+];
 // Fallback ONLY for when no capability manifest is available. The manifest
 // (generated from ignite-next) is the source of truth; this list is known to go
 // stale — it once omitted wheel/multi-select-list/resume-upload while all three
@@ -112,6 +143,13 @@ export function validateTracks(tracks, opts = {}) {
         // member sees the literal "New sub step — edit me in the editor panel"
         // placeholder. A null-only check let that through, which is the symptom reported
         // in track-studio#49.
+        //
+        // This one TRIMS on purpose, and must keep trimming — do not "unify" it with the
+        // celebration `populated` helper below, which deliberately does not. The two ask
+        // different questions. Here: "is there usable content for the model?", and a
+        // whitespace-only prompt gives it nothing, so "   " is an error. There: "does the
+        // renderer treat this field as set?", and the renderer's raw truthiness makes
+        // "   " very much set. Making either match the other reintroduces a real bug.
         if (sub.prompt === undefined || sub.prompt === null) errors.push(`${blabel} missing required "prompt".`);
         else if (sub.type === "generate" && String(sub.prompt).trim() === "")
           errors.push(`${blabel} has an empty "prompt" — a generate substep needs one, or the member sees the editor placeholder.`);
@@ -171,6 +209,47 @@ export function validateTracks(tracks, opts = {}) {
                   : `${blabel} populates "${k}", but fieldType "${ft}" reads "${reads}" — "${k}" is never read. Move the list.`,
               );
             }
+          }
+        }
+        // Celebration fields suppressed by a sibling field (track-studio#41). Same class
+        // as the option-array rules above — an author populates a field and the member
+        // never sees it — but the cause is a layout branch rather than a fieldType
+        // accessor, so it needs no capability manifest: both suppressions are visible in
+        // CelebrationContent.tsx and hold for every fieldType that renders it.
+        if (ft === "celebration") {
+          // "Did the author set this" must mirror the RENDERER's own test for that field's
+          // shape — per shape, because CelebrationContent does not use one test for all of
+          // them:
+          //   completedSection    `!!completedSection`            → raw truthiness
+          //   nextStepsTitle      `{nextStepsTitle && …}`         → raw truthiness
+          //   nextStepsDescription`{nextStepsDescription && …}`   → raw truthiness
+          //   celebrationTasks    `celebrationTasks.length > 0`   → length
+          //   buttonText          `buttonText || "Continue"`      → raw truthiness
+          //
+          // This originally trimmed strings, which under-warned in the one case the rule
+          // exists for: `celebrationCompletedSection: "   "` is falsy after a trim, so no
+          // warning — but it is TRUTHY to the renderer, which then suppresses three fields
+          // silently. A validator that is more forgiving than the renderer reports success
+          // on exactly the input that fails.
+          //
+          // Note it cannot be a single raw-truthiness check either: `[]` is truthy in JS,
+          // so an array needs the length test or every cleared task list warns.
+          const populated = (k) => {
+            const v = sub[k];
+            if (v === undefined || v === null) return false;
+            if (Array.isArray(v)) return v.length > 0;
+            if (typeof v === "string") return v !== "";
+            return Boolean(v);
+          };
+          for (const rule of CELEBRATION_SUPPRESSIONS) {
+            if (!populated(rule.when)) continue;
+            const dead = rule.suppresses.filter(populated);
+            if (dead.length === 0) continue;
+            warnings.push(
+              `${blabel} sets ${dead.join(", ")}, but "${rule.when}" ${rule.because} — ` +
+                `${dead.length > 1 ? "those fields are" : "that field is"} never shown to the member. ` +
+                `Either clear "${rule.when}" or drop ${dead.length > 1 ? "them" : "it"}.`,
+            );
           }
         }
         for (const f of Object.keys(sub)) if (AUTO_FIELDS.has(f)) errors.push(`${blabel} has auto-managed field "${f}" — remove it.`);
