@@ -1,5 +1,5 @@
 # NSLS Org Chart
-_Last synced: 2026-07-27_
+_Last synced: 2026-08-03_
 
 ## Business Intelligence
 
@@ -18,7 +18,7 @@ _Last synced: 2026-07-27_
 | Alyssa Placeres | Chapter Success Manager (Gold) | James Corriveau | aplaceres@nsls.org | U07TSQZ4THT |
 | Amy Aguirre | Strategic Chapter Manager | Marissa Curry | aaguirre@nsls.org |  |
 | Arianne Stinson | Chapter Success Manager (Silver) | James Corriveau | astinson@nsls.org | U0393VBME00 |
-| Ashleigh Smith | Vice President, Client Services | Gary Tuerack | asmith@nsls.org | UEWBC2R08 |
+| Ashleigh Smith | Chief Revenue Officer | Gary Tuerack | asmith@nsls.org | UEWBC2R08 |
 | Brielle Jones | Chapter Success Manager (Silver) | James Corriveau | bjones@nsls.org | U091ZV57M29 |
 | Dejeahn Brown | Chapter Success Manager (Silver) | James Corriveau | dbrown@nsls.org | U098M2E1M5X |
 | Dillon Cook | Chapter Success Manager (Silver) | James Corriveau | dcook@nsls.org | U0A2A9Q95JN |
@@ -26,7 +26,6 @@ _Last synced: 2026-07-27_
 | Isaia Cirillo |  | Royce Rowan | icirillo@nsls.org | U09K0NK755M |
 | Jakita Cofer | Senior Strategic Chapter Manager | Marissa Curry | jcofer@nsls.org | U03K8GYD6MC |
 | James Corriveau | Director of Chapter Management (Mid-Market) | Melvin Rosal | jcorriveau@nsls.org | U096ZFUQU7M |
-| Karissa Tedesco | Senior Strategic Chapter Manager | Marissa Curry | ktedesco@nsls.org | U02TCTTGLF3 |
 | Liliana Gonzalez | Strategic Chapter Manager | Marissa Curry | lgonzalez@nsls.org | U02CXBF0Z9P |
 | Linda Condon | Senior Strategic Chapter Manager | Marissa Curry | lcondon@nsls.org | U05KSGWT73R |
 | Marissa Curry | Director, Enterprise Chapter Management | Melvin Rosal | mcurry@nsls.org | UBSGLD1T6 |

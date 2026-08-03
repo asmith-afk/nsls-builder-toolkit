@@ -95,7 +95,6 @@
       "Allyson Trachtenberg",
       "Amy Aguirre",
       "Jakita Cofer",
-      "Karissa Tedesco",
       "Liliana Gonzalez",
       "Linda Condon",
       "Maryanna Laferriere",
@@ -149,15 +148,6 @@
     "manages": []
   },
   {
-    "name": "Karissa Tedesco",
-    "title": "Senior Strategic Chapter Manager",
-    "manager": "Marissa Curry",
-    "email": "ktedesco@nsls.org",
-    "slack": "U02TCTTGLF3",
-    "department": "Client Services",
-    "manages": []
-  },
-  {
     "name": "Zoe Wallis",
     "title": "Chapter Manager, First Year Specialist",
     "manager": "Marissa Curry",
@@ -186,7 +176,7 @@
   },
   {
     "name": "Ashleigh Smith",
-    "title": "Vice President, Client Services",
+    "title": "Chief Revenue Officer",
     "manager": "Gary Tuerack",
     "email": "asmith@nsls.org",
     "slack": "UEWBC2R08",
