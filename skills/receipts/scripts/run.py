@@ -10,6 +10,7 @@ from pathlib import Path
 from match import AMBIGUOUS, BALANCED, CONFIDENT, UNFOUND, match
 from txn_queue import missing_receipts
 from ramp import RampAuthError, RampError
+from sources.anthropic import _set_session as anthropic_set_session
 from sources.base import SourceUnavailable, load_sources
 from upload import Ledger, upload
 
@@ -105,7 +106,47 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--send", action="store_true", help="execute (default is dry run)")
     ap.add_argument("--since", default="2026-01-01", help="ISO date; backlog reaches to 2026-02")
     ap.add_argument("--until", default=None, help="ISO date; default today")
+    ap.add_argument("--set-session", action="store_true",
+                     help="store a claude.ai session cookie for the Anthropic billing "
+                          "source and exit — prompts for the value (hidden), validates "
+                          "it live, and writes it 0600; does not build the queue, "
+                          "fetch, or upload anything")
+    ap.add_argument("--login", action="store_true",
+                     help="deprecated alias for --set-session (there is no browser step "
+                          "any more — the Anthropic source uses a stored session cookie)")
     args = ap.parse_args(argv)
+
+    # `run.py` is the single documented entry point for everything this tool
+    # does, authentication included — it already resolves imports correctly
+    # (unlike running sources/anthropic.py as a bare script, which used to
+    # crash with an ImportError on exactly the command SKILL.md told a user to
+    # run for a dead claude.ai session).
+    #
+    # --login is kept as an alias because it is in shipped docs, in old error
+    # strings, and in muscle memory — an unknown-flag error would be a dead
+    # end for anyone following those. It explains the change and does the new
+    # thing rather than silently accepting the old name.
+    #
+    # Either flag does ONE thing — store a session — and returns immediately:
+    # no Ramp queue, no source fetch, no upload. Combining it with --send is
+    # almost certainly a mistake (the user meant "authenticate, then
+    # separately send"), so it's rejected explicitly rather than silently
+    # picking one or doing both.
+    if args.set_session or args.login:
+        flag = "--set-session" if args.set_session else "--login"
+        if args.send:
+            print(f"ERROR: {flag} and --send cannot be combined. {flag} only stores a "
+                  f"claude.ai session, then exits — it does not build the queue, fetch "
+                  f"receipts, or upload anything, so there is nothing for --send to act "
+                  f"on in the same invocation. Run {flag} by itself first, then run the "
+                  f"tool again (add --send once you're ready to execute).",
+                  file=sys.stderr)
+            return 2
+        if args.login:
+            print("NOTE: --login is now --set-session. There is no browser step any more "
+                  "— the Anthropic billing source authenticates with a stored session "
+                  "cookie. Running --set-session for you.", file=sys.stderr)
+        return anthropic_set_session()
 
     until = args.until or dt.date.today().isoformat()
 

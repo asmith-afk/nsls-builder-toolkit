@@ -6,9 +6,9 @@ the two most likely ways this skill breaks in production, silently, between
 runs.
 
 Not every machine that runs this has every prerequisite: a live `ramp auth
-login` session is required, but `ANTHROPIC_ORG_UUID` + Playwright are not
-always present (e.g. a fresh laptop, CI, a colleague who only uses the Gmail
-source). A missing prerequisite is reported as SKIPPED and does not fail the
+login` session is required, but `ANTHROPIC_ORG_UUID` + a stored claude.ai
+session are not always present (e.g. a fresh laptop, CI, a colleague who only
+uses the Gmail source). A missing prerequisite is reported as SKIPPED and does not fail the
 run — that's an environment gap, not a code regression. Only a genuinely
 unexpected failure (auth alive but rejected, a shape that changed, a PDF that
 isn't a PDF) exits non-zero. Every check prints exactly what it verified, or
@@ -44,9 +44,11 @@ def check_anthropic() -> bool:
     """The Anthropic half: confirm the invoices endpoint shape and that a
     returned PDF URL still resolves to an actual PDF.
 
-    Requires ANTHROPIC_ORG_UUID and Playwright (chromium). Either being
-    absent is SourceUnavailable, which is a prerequisite gap, not a failure
-    of this test — it prints the remedy and returns True (nothing to fail).
+    Requires ANTHROPIC_ORG_UUID and a stored claude.ai session (`run.py
+    --set-session`). Either being absent is SourceUnavailable, which is a
+    prerequisite gap, not a failure of this test — it prints the remedy and
+    returns True (nothing to fail). An expired session lands here too, which
+    is the point: that message is exactly what a user needs to see.
     """
     try:
         payload = SOURCE._listing()

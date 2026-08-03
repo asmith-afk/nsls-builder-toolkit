@@ -596,6 +596,86 @@ def test_ledger_write_failure_on_send_still_prints_the_report_and_exits_nonzero(
     assert "Traceback" not in text
 
 
+def test_set_session_flag_stores_the_session_and_touches_nothing_else():
+    # --set-session is the single documented entry point for authenticating
+    # the Anthropic source. It must do exactly one thing — store a claude.ai
+    # session via sources.anthropic._set_session() — and exit, never reaching
+    # the Ramp queue, source fetch, or ledger.
+    with patch("run.anthropic_set_session", return_value=0) as set_session, \
+         patch("run.missing_receipts") as missing, \
+         patch("run.load_sources") as loaded, \
+         patch("run.Ledger") as ledger:
+        code = main(["--set-session"])
+
+    assert code == 0
+    set_session.assert_called_once()
+    missing.assert_not_called()
+    loaded.assert_not_called()
+    ledger.assert_not_called()
+
+
+def test_set_session_returns_the_stores_own_exit_code():
+    # A refused or unvalidatable session is a failed invocation. Swallowing
+    # its exit code would report "stored" for a credential that was rejected.
+    with patch("run.anthropic_set_session", return_value=2):
+        with redirect_stderr(io.StringIO()):
+            assert main(["--set-session"]) == 2
+
+
+def test_login_still_works_as_an_alias_and_explains_the_change():
+    # --login is in shipped docs, in old error strings, and in muscle memory.
+    # An "unrecognized arguments" error would be a dead end for anyone
+    # following those, so the old name keeps working — and says what changed.
+    with patch("run.anthropic_set_session", return_value=0) as set_session, \
+         patch("run.missing_receipts") as missing, \
+         patch("run.load_sources") as loaded, \
+         patch("run.Ledger") as ledger:
+        err = io.StringIO()
+        with redirect_stderr(err):
+            code = main(["--login"])
+
+    assert code == 0
+    set_session.assert_called_once()
+    missing.assert_not_called()
+    loaded.assert_not_called()
+    ledger.assert_not_called()
+    note = err.getvalue()
+    assert "--set-session" in note, "the alias must name its replacement: " + note
+    assert "browser" in note.lower(), (
+        "say the browser step is gone — that is the change a --login user "
+        "needs to know about: " + note
+    )
+
+
+def test_set_session_and_send_together_is_rejected_explicitly():
+    # --set-session only stores a session and exits; it never builds the
+    # queue, fetches, or uploads, so there is nothing for --send to act on in
+    # the same invocation. Silently picking one (or doing both) would be a
+    # surprise either way — reject the combination with a clear message
+    # instead.
+    with patch("run.anthropic_set_session") as set_session:
+        err = io.StringIO()
+        with redirect_stderr(err):
+            code = main(["--set-session", "--send"])
+
+    assert code == 2
+    set_session.assert_not_called()
+    assert "--set-session" in err.getvalue() and "--send" in err.getvalue()
+
+
+def test_login_and_send_together_is_still_rejected_the_same_way():
+    # The --login-era rejection must not regress just because the flag became
+    # an alias.
+    with patch("run.anthropic_set_session") as set_session:
+        err = io.StringIO()
+        with redirect_stderr(err):
+            code = main(["--login", "--send"])
+
+    assert code == 2
+    set_session.assert_not_called()
+    assert "--login" in err.getvalue() and "--send" in err.getvalue()
+
+
 def test_ledger_write_failure_does_not_downgrade_the_auth_abort():
     # The auth abort is the exit code automation watches for. An OSError out
     # of save() inside the finally, while that abort is unwinding, must not

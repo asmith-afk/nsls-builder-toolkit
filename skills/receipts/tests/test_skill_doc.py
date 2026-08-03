@@ -74,28 +74,60 @@ def test_frontmatter_still_declares_name_and_description():
     assert re.search(r"^description:\s*\S", FRONTMATTER, re.MULTILINE)
 
 
-def test_playwright_install_command_works_on_homebrew_python():
-    # `python3.12 -m pip install playwright` fails on Homebrew Python with
-    # PEP 668 "externally-managed-environment". Documenting the command that
-    # cannot work sends every reader into the same dead end.
-    assert "python3.12 -m pip install --user --break-system-packages playwright" in TEXT, (
-        "the documented Playwright install must carry the PEP 668 escape flags"
+def test_no_install_step_is_documented_for_this_skill():
+    # The Anthropic source is stdlib HTTP now. Leaving a Playwright install in
+    # the prerequisites would send every new reader through a browser setup
+    # this skill no longer uses — and, worse, imply the browser path still
+    # exists to fall back on when a session fails.
+    # Checked against the commands the doc actually hands a reader — the
+    # fenced blocks — not the prose, which is allowed (and encouraged) to say
+    # "there is no pip install step".
+    commands = "\n".join(re.findall(r"```(?:bash)?\n(.*?)```", TEXT, re.DOTALL)).lower()
+    for dead in ("pip install", "playwright", "chromium"):
+        assert dead not in commands, (
+            f"{dead!r} is still handed to the reader as a setup command, but "
+            f"the browser path was removed:\n{commands}"
+        )
+
+
+def test_set_session_is_documented_as_the_run_py_invocation():
+    # `sources/anthropic.py --login` used to be the documented auth command,
+    # and it crashed with an ImportError (relative import, no package
+    # context) before argument dispatch ever ran — the fix for a dead
+    # claude.ai session was unreachable through the instructions telling a
+    # user how to fix it. `run.py` is the single documented entry point for
+    # everything else this tool does; authentication must be the same way.
+    assert f"{RUN_CMD} --set-session" in TEXT, (
+        "SKILL.md must document `run.py --set-session` as the way to "
+        "authenticate the Anthropic source"
     )
-    assert not re.search(r"pip install playwright\b", TEXT), (
-        "the bare `pip install playwright` form fails on Homebrew Python and "
-        "must not be documented"
+    assert "sources/anthropic.py --login" not in TEXT, (
+        "the direct-script form must not be documented as the fix — even "
+        "though it also works, run.py is the one form users should be told "
+        "to run"
     )
 
 
-def test_playwright_install_names_the_pep668_error_a_reader_will_see():
-    assert "externally-managed-environment" in TEXT, (
-        "name the exact error text so someone who hits it recognises it"
+def test_skill_md_says_where_to_get_the_cookie():
+    # "Store a session cookie" is not actionable on its own. The exact click
+    # path is the whole difference between a 30-second setup and a support
+    # question.
+    text = TEXT.lower()
+    for needle in ("devtools", "application", "cookies", "sessionkey", "value"):
+        assert needle in text, f"the cookie instructions must name {needle!r}"
+
+
+def test_skill_md_treats_the_session_as_a_credential():
+    text = TEXT.lower()
+    assert "0600" in text or "`0600`" in text, (
+        "say the file is 0600 so a reader knows what 'refused' means later"
     )
-    assert "PEP 668" in TEXT
-
-
-def test_playwright_browser_install_step_is_still_documented():
-    assert "python3.12 -m playwright install chromium" in TEXT
+    assert "~/.claude-receipts-session" in TEXT, "name the file"
+    assert "commit" in text, "say it must not be committed"
+    assert "expire" in text, (
+        "say the session expires periodically — otherwise the first expiry "
+        "reads as the skill breaking"
+    )
 
 
 def _section(title: str) -> str:
