@@ -524,14 +524,27 @@ function multiSelectListField(sub, slug) {
   return `<div class="tp-options space-y-3" data-slug="${slug}" data-multi="true"${entryForm}>${rows}${otherRow}</div>`;
 }
 
-// resume-upload — no ignite-next component exists for this fieldType yet;
-// it ships ahead of the real upload UI. A static prototype can't host a
-// real file upload (no backend to receive it), so this is a deliberate stub:
-// a plain file input + label so a focus-group participant understands what
-// the screen asks for, with no JS behind it (see task brief for issue #51).
+// resume-upload — the real component EXISTS and does considerably more than a
+// file input. `OnboardingResumeUploadSubstep` looks the member up on LinkedIn
+// (via the crustdata router), offers the candidate profiles it found
+// ("We found N jobs…"), and parses an uploaded resume; the capability manifest
+// lists resume-upload under BOTH `declared` and `rendered`.
+//
+// This comment used to say "no ignite-next component exists for this fieldType
+// yet". That was true when #51 shipped the stub and is not true now, and the
+// stale version is why walkthroughs of the Welcome track were read as showing
+// the real screen: a reviewer saw a grey file input, had no reason to doubt it,
+// and concluded the LinkedIn flow simply wasn't in the track.
+//
+// A static prototype still cannot host any of it — no backend to receive the
+// file, no LinkedIn lookup — so a stub remains correct. What was wrong is that
+// the stub did not SAY it was a stub. It now discloses, following the
+// .tp-ai-placeholder precedent used for generate screens with no baked sample:
+// the player already tells a viewer when it is showing a stand-in rather than
+// the real thing, and this is the same situation.
 function resumeUploadField(sub) {
   const label = sub.textFieldLabel || "Upload your resume";
-  return `<div class="space-y-2"><label class="block text-sm font-medium text-dark">${esc(label)}</label><input type="file" class="step-input w-full" accept=".pdf,.doc,.docx"></div>`;
+  return `<div class="space-y-2"><label class="block text-sm font-medium text-dark">${esc(label)}</label><input type="file" class="step-input w-full" accept=".pdf,.doc,.docx"><div class="tp-stub-note text-xs text-grey pt-1">Stand-in for the real screen: members are looked up on LinkedIn and can pick a found profile, or upload a resume to be parsed. Not reproducible in a static prototype.</div></div>`;
 }
 
 // Education / Work entry forms — SubStepRenderer EducationInput/WorkInput.
