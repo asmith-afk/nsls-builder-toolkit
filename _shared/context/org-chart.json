@@ -107,7 +107,7 @@
     "title": "Strategic Chapter Manager",
     "manager": "Marissa Curry",
     "email": "aaguirre@nsls.org",
-    "slack": "",
+    "slack": "U0BM85P7KQX",
     "department": "Client Services",
     "manages": []
   },
@@ -681,15 +681,6 @@
     "manages": []
   },
   {
-    "name": "Jorge Alberto",
-    "title": "Trainer",
-    "manager": "Edgar Segura",
-    "email": "jalberto@nsls.org",
-    "slack": "U0A7AHB67UM",
-    "department": "Member Experience",
-    "manages": []
-  },
-  {
     "name": "Alejandro Gabriel",
     "title": "QA Specialist",
     "manager": "Kimberly Campbell",
@@ -697,14 +688,14 @@
     "slack": "U0A7E0JCNBU",
     "department": "Member Experience",
     "manages": [
-      "Alex Arias",
       "Franklin Ortega",
+      "Jennifer Arias",
       "Mia Vasquez",
       "Samantha Montas"
     ]
   },
   {
-    "name": "Alex Arias",
+    "name": "Jennifer Arias",
     "title": "Member Experience Specialist",
     "manager": "Alejandro Gabriel",
     "email": "apeguero@nsls.org",
@@ -841,9 +832,7 @@
     "email": "esegura@nsls.org",
     "slack": "U0A3PH5EA3G",
     "department": "Member Experience",
-    "manages": [
-      "Jorge Alberto"
-    ]
+    "manages": []
   },
   {
     "name": "Rauly Villar",

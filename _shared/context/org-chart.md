@@ -1,5 +1,5 @@
 # NSLS Org Chart
-_Last synced: 2026-08-03_
+_Last synced: 2026-08-10_
 
 ## Business Intelligence
 
@@ -16,7 +16,7 @@ _Last synced: 2026-08-03_
 | Alexis Scott | Chapter Success Manager (Gold) | James Corriveau | ascott@nsls.org | U08ABVDPWE5 |
 | Allyson Trachtenberg | Strategic Chapter Manager | Marissa Curry | atrachtenberg@nsls.org | U0ANJTQD81L |
 | Alyssa Placeres | Chapter Success Manager (Gold) | James Corriveau | aplaceres@nsls.org | U07TSQZ4THT |
-| Amy Aguirre | Strategic Chapter Manager | Marissa Curry | aaguirre@nsls.org |  |
+| Amy Aguirre | Strategic Chapter Manager | Marissa Curry | aaguirre@nsls.org | U0BM85P7KQX |
 | Arianne Stinson | Chapter Success Manager (Silver) | James Corriveau | astinson@nsls.org | U0393VBME00 |
 | Ashleigh Smith | Chief Revenue Officer | Gary Tuerack | asmith@nsls.org | UEWBC2R08 |
 | Brielle Jones | Chapter Success Manager (Silver) | James Corriveau | bjones@nsls.org | U091ZV57M29 |
@@ -106,7 +106,6 @@ _Last synced: 2026-08-03_
 | Name | Title | Manager | Email | Slack |
 |------|-------|---------|-------|-------|
 | Alejandro Gabriel | QA Specialist | Kimberly Campbell | agabriel@nsls.org | U0A7E0JCNBU |
-| Alex Arias | Member Experience Specialist | Alejandro Gabriel | apeguero@nsls.org | U0AS9A3RLJY |
 | Angel Guzman | Membership Experience Specialist | Kimberly Campbell | aguzman@nsls.org | U0B1VBGR6DS |
 | Atrayu Polhemus | Membership Experience Specialist | Kara Klimuszko | apolhemus@nsls.org | U08E6QG6KUM |
 | Charlotte Donnelly | Member Experience Specialist | Kara Klimuszko | cdonnelly@nsls.org | U05DKQE1J3H |
@@ -115,7 +114,7 @@ _Last synced: 2026-08-03_
 | Elian Castro | Membership Experience Specialist | Kimberly Campbell | ecastro@nsls.org | U0B1NBFJACD |
 | Emilia Santana | Membership Experience Specialist | Kimberly Campbell | esantana@nsls.org | U0B1PMSKT0E |
 | Franklin Ortega | Member Experience Specialist | Alejandro Gabriel | fortega@nsls.org | U0A7BUY5EG6 |
-| Jorge Alberto | Trainer | Edgar Segura | jalberto@nsls.org | U0A7AHB67UM |
+| Jennifer Arias | Member Experience Specialist | Alejandro Gabriel | apeguero@nsls.org | U0AS9A3RLJY |
 | Kara Klimuszko | Member Experience Team Lead | Kimberly Campbell | kklimuszko@nsls.org | U01B6B0T831 |
 | Kimberly Campbell | Director of Member Experience | Ashleigh Smith | kcampbell@nsls.org | U021ZK0NW07 |
 | Maikel Berbi | Membership Experience Specialist | Kimberly Campbell | mberbi@nsls.org | U0B1A9YPKHV |
