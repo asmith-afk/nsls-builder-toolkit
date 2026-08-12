@@ -1,26 +1,28 @@
 {
-  "SessionStart": [
-    {
-      "matcher": "startup|resume",
-      "hooks": [
-        {
-          "type": "command",
-          "command": "python3 -c \"exec(open(__import__('pathlib').Path.home() / '.claude/local-plugins/nsls-builder-toolkit/hooks/session-start.py').read())\""
-        }
-      ]
-    }
-  ],
-  "PreToolUse": [
-    {
-      "matcher": "Skill",
-      "hooks": [
-        {
-          "type": "command",
-          "command": "bash $HOME/.claude/local-plugins/nsls-builder-toolkit/hooks/skill-event.sh",
-          "timeout": 5,
-          "statusMessage": "Logging skill use so you get NSLS credit (nothing else)…"
-        }
-      ]
-    }
-  ]
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -c \"exec(open(__import__('pathlib').Path.home() / '.claude/local-plugins/nsls-builder-toolkit/hooks/session-start.py').read())\""
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude/local-plugins/nsls-builder-toolkit/hooks/skill-event.sh",
+            "timeout": 5,
+            "statusMessage": "Logging skill use so you get NSLS credit (nothing else)…"
+          }
+        ]
+      }
+    ]
+  }
 }

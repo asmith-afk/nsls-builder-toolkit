@@ -1,0 +1,14 @@
+{
+  "name": "nsls-toolkit",
+  "owner": {
+    "name": "NSLS",
+    "email": "kprentiss@nsls.org"
+  },
+  "plugins": [
+    {
+      "name": "nsls-builder-toolkit",
+      "source": "./",
+      "description": "NSLS organization skills, agents, hooks, and MCP servers for building, tracking, deploying, presenting, and researching."
+    }
+  ]
+}
