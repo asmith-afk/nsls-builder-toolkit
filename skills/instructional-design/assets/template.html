@@ -1,0 +1,757 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Happy Path — Installation Guide</title>
+<style>
+  @font-face {
+    font-family: 'Bricolage Grotesque';
+    font-style: normal;
+    font-weight: 200 800;
+    font-display: swap;
+    src: url(data:font/woff2;base64,__FONT_B64__) format('woff2');
+  }
+
+  :root {
+    --desk: #E9ECE6;
+    --ground: #F7F8F4;
+    --card: #FFFFFF;
+    --ink: #22302B;
+    --ink-soft: #5A6B63;
+    --line: #DDE4DC;
+    --path: #23617A;
+    --path-soft: #E3EDF2;
+    --trail: #A9C4D2;
+    --done: #2A6E48;
+    --done-ground: #EAF4EC;
+    --warn: #9A6318;
+    --warn-ground: #FBF3E2;
+    --focus: #23617A;
+    --shadow: 0 1px 2px rgba(34, 48, 43, 0.06), 0 4px 16px rgba(34, 48, 43, 0.05);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --desk: #0E1412;
+    --ground: #151D1A;
+      --card: #1D2723;
+      --ink: #E6ECE7;
+      --ink-soft: #9DAFA5;
+      --line: #33403A;
+      --path: #7FB6CE;
+      --path-soft: #24333B;
+    --trail: #3E545F;
+      --done: #7CC79A;
+      --done-ground: #21332A;
+      --warn: #D9A860;
+      --warn-ground: #322A1C;
+      --focus: #7FB6CE;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(0, 0, 0, 0.25);
+    }
+  }
+  :root[data-theme="light"] {
+    --desk: #E9ECE6;
+    --ground: #F7F8F4;
+    --card: #FFFFFF;
+    --ink: #22302B;
+    --ink-soft: #5A6B63;
+    --line: #DDE4DC;
+    --path: #23617A;
+    --path-soft: #E3EDF2;
+    --trail: #A9C4D2;
+    --done: #2A6E48;
+    --done-ground: #EAF4EC;
+    --warn: #9A6318;
+    --warn-ground: #FBF3E2;
+    --focus: #23617A;
+    --shadow: 0 1px 2px rgba(34, 48, 43, 0.06), 0 4px 16px rgba(34, 48, 43, 0.05);
+  }
+  :root[data-theme="dark"] {
+    --desk: #0E1412;
+    --ground: #151D1A;
+    --card: #1D2723;
+    --ink: #E6ECE7;
+    --ink-soft: #9DAFA5;
+    --line: #33403A;
+    --path: #7FB6CE;
+    --path-soft: #24333B;
+    --trail: #3E545F;
+    --done: #7CC79A;
+    --done-ground: #21332A;
+    --warn: #D9A860;
+    --warn-ground: #322A1C;
+    --focus: #7FB6CE;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(0, 0, 0, 0.25);
+  }
+
+  html { font-size: 112.5%; }
+
+  * { box-sizing: border-box; }
+
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  body {
+    background: var(--desk);
+    color: var(--ink);
+    font-family: 'Seravek', 'Avenir Next', 'Segoe UI', system-ui, sans-serif;
+    font-size: 1.0625rem;
+    line-height: 1.6;
+    margin: 0;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Letter-width sheet, like a Google Doc page */
+  .page {
+    max-width: 850px;
+    margin: 2.5rem auto;
+    background: var(--ground);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+    padding: 3.75rem 4.25rem 4.25rem;
+  }
+  @media (max-width: 900px) {
+    .page {
+      margin: 0 auto;
+      border-radius: 0;
+      padding: 2.5rem 1.25rem 3rem;
+    }
+  }
+
+  h1, h2, h3 {
+    font-family: 'Bricolage Grotesque', 'Avenir Next', system-ui, sans-serif;
+    text-wrap: balance;
+    margin: 0;
+  }
+
+  .eyebrow {
+    font-family: 'Bricolage Grotesque', system-ui, sans-serif;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--path);
+  }
+
+  /* ---------- Header ---------- */
+  header {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-bottom: 2.5rem;
+  }
+  header .title-row {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+  h1 {
+    font-size: clamp(2rem, 6vw, 2.75rem);
+    font-weight: 700;
+    line-height: 1.1;
+  }
+  .draft-tag {
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 0.2rem 0.65rem;
+    white-space: nowrap;
+  }
+  .lede {
+    color: var(--ink-soft);
+    max-width: 36rem;
+    margin: 0;
+  }
+  .trip-stats {
+    display: flex;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+    margin-top: 0.25rem;
+    font-size: 0.9rem;
+    color: var(--ink-soft);
+  }
+  .trip-stats span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+  }
+  .trip-stats svg { color: var(--path); flex: none; }
+  .trip-stats strong {
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ---------- Pack list ---------- */
+  .pack {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 3rem;
+  }
+  .pack h2 {
+    font-size: 1rem;
+    font-weight: 700;
+    margin-bottom: 0.75rem;
+  }
+  .pack ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .pack li {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.65rem;
+    color: var(--ink-soft);
+  }
+  .pack li svg {
+    flex: none;
+    margin-top: 0.3rem;
+    color: var(--path);
+  }
+  .pack li strong { color: var(--ink); font-weight: 600; }
+
+  /* ---------- The trail ---------- */
+  .trail {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    position: relative;
+  }
+  .step {
+    position: relative;
+    display: grid;
+    grid-template-columns: 2.75rem 1fr;
+    gap: 1rem;
+    padding-bottom: 2.5rem;
+  }
+  /* Each step draws its own trail segment down to the next marker, so the
+     line always ends exactly at the finish flag no matter how tall steps get. */
+  .step::before {
+    content: '';
+    position: absolute;
+    left: calc(1.375rem - 2px);
+    top: 1.5rem;
+    bottom: -1.375rem;
+    border-left: 3px dashed var(--trail);
+  }
+
+  .marker {
+    position: relative;
+    z-index: 1;
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 50%;
+    background: var(--path);
+    color: #FFFFFF;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Bricolage Grotesque', system-ui, sans-serif;
+    font-size: 1.25rem;
+    font-weight: 700;
+    box-shadow: 0 0 0 5px var(--ground);
+  }
+  :root[data-theme="dark"] .marker { color: #12212A; }
+  @media (prefers-color-scheme: dark) {
+    .marker { color: #12212A; }
+    :root[data-theme="light"] .marker { color: #FFFFFF; }
+  }
+
+  .step-card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .step-body { padding: 1.25rem 1.5rem 1.35rem; }
+  .step-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0.35rem;
+  }
+  .step-head .texts { min-width: 0; }
+  .step-meta {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    display: block;
+    margin-bottom: 0.3rem;
+  }
+  .step h3 {
+    font-size: 1.35rem;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+  .step-icon {
+    flex: none;
+    width: 2.6rem;
+    height: 2.6rem;
+    border-radius: 10px;
+    background: var(--path-soft);
+    color: var(--path);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .do {
+    margin: 0.65rem 0 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .do li {
+    display: flex;
+    gap: 0.6rem;
+    align-items: baseline;
+  }
+  .do li::before {
+    content: '›';
+    color: var(--path);
+    font-weight: 700;
+    flex: none;
+  }
+  kbd, .ui {
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: 0.85em;
+    background: var(--path-soft);
+    color: var(--ink);
+    border-radius: 6px;
+    padding: 0.1em 0.45em;
+    white-space: nowrap;
+  }
+
+  .done-strip {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.65rem;
+    background: var(--done-ground);
+    border-top: 1px solid var(--line);
+    padding: 0.85rem 1.5rem;
+  }
+  .done-strip svg {
+    flex: none;
+    margin-top: 0.2rem;
+    color: var(--done);
+  }
+  .done-strip p { margin: 0; }
+  .done-strip .done-label {
+    display: block;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--done);
+  }
+
+  /* ---------- Callouts ---------- */
+  .callout {
+    display: flex;
+    gap: 0.65rem;
+    align-items: flex-start;
+    background: var(--warn-ground);
+    border-radius: 10px;
+    padding: 0.75rem 1rem;
+    margin-top: 0.9rem;
+    font-size: 0.95rem;
+  }
+  .callout svg { flex: none; margin-top: 0.25rem; color: var(--warn); }
+  .callout p { margin: 0; }
+  .callout strong { color: var(--warn); }
+
+  /* ---------- Finish ---------- */
+  .finish {
+    display: grid;
+    grid-template-columns: 2.75rem 1fr;
+    gap: 1rem;
+    position: relative;
+    margin-top: 0;
+  }
+  .finish .marker { background: var(--done); }
+  .finish-card {
+    background: var(--done-ground);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 1.25rem 1.5rem;
+  }
+  .finish-card h2 { font-size: 1.35rem; margin-bottom: 0.25rem; }
+  .finish-card p { margin: 0; color: var(--ink-soft); }
+
+  /* ---------- Stuck ---------- */
+  .stuck { margin-top: 3.5rem; }
+  .stuck > .eyebrow { display: block; margin-bottom: 0.4rem; }
+  .stuck h2 { font-size: 1.6rem; font-weight: 700; }
+  .stuck > p { color: var(--ink-soft); max-width: 34rem; margin: 0.5rem 0 1.25rem; }
+  .stuck-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+  }
+  details {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+  }
+  summary {
+    cursor: pointer;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.9rem 1.25rem;
+    font-weight: 600;
+  }
+  summary::-webkit-details-marker { display: none; }
+  summary .chev {
+    margin-left: auto;
+    flex: none;
+    color: var(--ink-soft);
+    transition: transform 0.15s ease;
+  }
+  details[open] summary .chev { transform: rotate(90deg); }
+  summary .sym {
+    flex: none;
+    color: var(--path);
+  }
+  summary .aside {
+    font-weight: 400;
+    font-size: 0.85em;
+    color: var(--ink-soft);
+    white-space: nowrap;
+  }
+  summary:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: -2px;
+    border-radius: 12px;
+  }
+  .fix {
+    padding: 0 1.25rem 1.1rem 3.1rem;
+    color: var(--ink-soft);
+  }
+  .fix p { margin: 0 0 0.5rem; }
+  .fix p:last-child { margin-bottom: 0; }
+  .fix strong { color: var(--ink); }
+
+  .escalate {
+    margin-top: 1.25rem;
+    background: var(--path-soft);
+    border-radius: 12px;
+    padding: 1.1rem 1.25rem;
+    display: flex;
+    gap: 0.75rem;
+    align-items: flex-start;
+  }
+  .escalate svg { flex: none; margin-top: 0.2rem; color: var(--path); }
+  .escalate p { margin: 0; }
+
+  footer {
+    margin-top: 3.5rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--line);
+    font-size: 0.85rem;
+    color: var(--ink-soft);
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    summary .chev { transition: none; }
+  }
+
+  @media print {
+    :root, :root[data-theme="dark"] {
+      --ground: #FFFFFF;
+      --card: #FFFFFF;
+      --ink: #22302B;
+      --ink-soft: #5A6B63;
+      --line: #CCCCCC;
+      --path: #23617A;
+      --path-soft: #E3EDF2;
+      --trail: #A9C4D2;
+      --done: #2A6E48;
+      --done-ground: #EAF4EC;
+      --warn: #9A6318;
+      --warn-ground: #FBF3E2;
+      --shadow: none;
+    }
+    body { background: #FFFFFF; }
+    .page { box-shadow: none; margin: 0 auto; max-width: none; padding: 0.5in; }
+    .draft-tag { display: none; }
+  }
+
+  @media (max-width: 480px) {
+    .step, .finish { grid-template-columns: 2.25rem 1fr; gap: 0.75rem; }
+    .marker { width: 2.25rem; height: 2.25rem; font-size: 1.05rem; }
+    .step::before { left: calc(1.125rem - 2px); }
+    .step-body, .done-strip { padding-left: 1.1rem; padding-right: 1.1rem; }
+    .step-icon { display: none; }
+  }
+</style>
+
+<div class="page">
+  <header>
+    <span class="eyebrow">Installation guide</span>
+    <div class="title-row">
+      <h1>The Happy Path</h1>
+      <span class="draft-tag">Design draft · sample content</span>
+    </div>
+    <p class="lede">Four steps, no detours. Follow the trail top to bottom — every step tells you exactly what to do and how you'll know it worked.</p>
+    <div class="trip-stats">
+      <span>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="8" cy="8" r="6.4"></circle><path d="M8 4.5V8l2.4 1.6"></path></svg>
+        About <strong>10 minutes</strong>
+      </span>
+      <span>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M3 13V3.5C3 3.5 5 2 8 3.5s5 0 5 0V10s-2 1.5-5 0-5 0-5 0"></path><path d="M3 13v1"></path></svg>
+        <strong>4</strong>&nbsp;steps
+      </span>
+      <span>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M8 14s5-3.2 5-7.2A5 5 0 0 0 3 6.8C3 10.8 8 14 8 14Z"></path><circle cx="8" cy="6.8" r="1.6"></circle></svg>
+        No technical skills needed
+      </span>
+    </div>
+  </header>
+
+  <section class="pack" aria-labelledby="pack-title">
+    <h2 id="pack-title">Before you set off, have these ready</h2>
+    <ul>
+      <li>
+        <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="1.5" y="1.5" width="12" height="12" rx="3.5"></rect></svg>
+        <span><strong>Your computer</strong> — plugged in or well charged</span>
+      </li>
+      <li>
+        <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="1.5" y="1.5" width="12" height="12" rx="3.5"></rect></svg>
+        <span><strong>Your work email and password</strong> — you'll sign in during Step 3</span>
+      </li>
+      <li>
+        <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="1.5" y="1.5" width="12" height="12" rx="3.5"></rect></svg>
+        <span><strong>10 uninterrupted minutes</strong> — this goes fastest in one sitting</span>
+      </li>
+    </ul>
+  </section>
+
+  <h2 class="visually-hidden">The steps</h2>
+  <ol class="trail">
+    <li class="step">
+      <div class="marker" aria-hidden="true">1</div>
+      <div class="step-card">
+        <div class="step-body">
+          <div class="step-head">
+            <div class="texts">
+              <span class="step-meta">Step 1 · about 2 min</span>
+              <h3>Download the installer</h3>
+            </div>
+            <div class="step-icon" aria-hidden="true">
+              <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 3v9"></path><path d="M7.5 8.5 11 12l3.5-3.5"></path><path d="M4 14v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3"></path></svg>
+            </div>
+          </div>
+          <ul class="do">
+            <li><span>Open your web browser and go to <span class="ui">example.com/download</span>.</span></li>
+            <li><span>Click the big <span class="ui">Download for Mac / Windows</span> button — it already knows which computer you have.</span></li>
+          </ul>
+          <div class="callout">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="8" cy="8" r="6.4"></circle><path d="M8 7.2v3.3"></path><circle cx="8" cy="5" r="0.4" fill="currentColor"></circle></svg>
+            <p><strong>Tip:</strong> if your browser asks whether to keep the file, choose <span class="ui">Keep</span>. It's checking, not warning.</p>
+          </div>
+        </div>
+        <div class="done-strip">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="9" r="7.2"></circle><path d="m5.8 9.2 2.2 2.2 4.2-4.6"></path></svg>
+          <p><span class="done-label">You're done when</span> a file appears in your <span class="ui">Downloads</span> folder — the little arrow in your browser's corner will show it finished.</p>
+        </div>
+      </div>
+    </li>
+
+    <li class="step">
+      <div class="marker" aria-hidden="true">2</div>
+      <div class="step-card">
+        <div class="step-body">
+          <div class="step-head">
+            <div class="texts">
+              <span class="step-meta">Step 2 · about 4 min</span>
+              <h3>Run the installer</h3>
+            </div>
+            <div class="step-icon" aria-hidden="true">
+              <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="16" height="16" rx="3"></rect><path d="m9 8 5 3-5 3V8Z"></path></svg>
+            </div>
+          </div>
+          <ul class="do">
+            <li><span>Double-click the file you just downloaded.</span></li>
+            <li><span>Click <span class="ui">Continue</span> on each screen — the standard choices are already selected for you.</span></li>
+          </ul>
+          <div class="callout">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M8 2.2 14.5 13.5H1.5L8 2.2Z" stroke-linejoin="round"></path><path d="M8 6.5v3"></path><circle cx="8" cy="11.4" r="0.4" fill="currentColor"></circle></svg>
+            <p><strong>Heads up:</strong> your computer may ask for the password you use to log in to it (not your email password). That's normal — it's confirming you approve the install.</p>
+          </div>
+        </div>
+        <div class="done-strip">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="9" r="7.2"></circle><path d="m5.8 9.2 2.2 2.2 4.2-4.6"></path></svg>
+          <p><span class="done-label">You're done when</span> you see the screen that says <span class="ui">Installation complete</span>.</p>
+        </div>
+      </div>
+    </li>
+
+    <li class="step">
+      <div class="marker" aria-hidden="true">3</div>
+      <div class="step-card">
+        <div class="step-body">
+          <div class="step-head">
+            <div class="texts">
+              <span class="step-meta">Step 3 · about 2 min</span>
+              <h3>Sign in with your work email</h3>
+            </div>
+            <div class="step-icon" aria-hidden="true">
+              <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="7.5" r="3.4"></circle><path d="M4.5 18.5c0-3.4 2.9-5.6 6.5-5.6s6.5 2.2 6.5 5.6"></path></svg>
+            </div>
+          </div>
+          <ul class="do">
+            <li><span>Open the app — it will greet you with a sign-in screen.</span></li>
+            <li><span>Enter your <strong>work</strong> email address and password, then click <span class="ui">Sign in</span>.</span></li>
+          </ul>
+        </div>
+        <div class="done-strip">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="9" r="7.2"></circle><path d="m5.8 9.2 2.2 2.2 4.2-4.6"></path></svg>
+          <p><span class="done-label">You're done when</span> you see your own name in the top-right corner of the app.</p>
+        </div>
+      </div>
+    </li>
+
+    <li class="step">
+      <div class="marker" aria-hidden="true">4</div>
+      <div class="step-card">
+        <div class="step-body">
+          <div class="step-head">
+            <div class="texts">
+              <span class="step-meta">Step 4 · about 2 min</span>
+              <h3>Send a test to prove it works</h3>
+            </div>
+            <div class="step-icon" aria-hidden="true">
+              <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 3 3.5 9.5l5.5 2 2 5.5L19 3Z"></path><path d="M9 11.5 19 3"></path></svg>
+            </div>
+          </div>
+          <ul class="do">
+            <li><span>Click <span class="ui">New message</span>, type the word <span class="ui">test</span>, and press <kbd>Enter</kbd>.</span></li>
+          </ul>
+        </div>
+        <div class="done-strip">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="9" r="7.2"></circle><path d="m5.8 9.2 2.2 2.2 4.2-4.6"></path></svg>
+          <p><span class="done-label">You're done when</span> a reply comes back within a few seconds and the <span class="ui">Connected</span> badge turns green.</p>
+        </div>
+      </div>
+    </li>
+
+  </ol>
+
+  <div class="finish">
+    <div class="marker" aria-hidden="true">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16V2.5"></path><path d="M4 3h9.5l-2 3 2 3H4"></path></svg>
+    </div>
+    <div class="finish-card">
+      <h2>You made it — you're all set</h2>
+      <p>The app is installed, signed in, and talking to the outside world. Nothing else to do; it will keep itself updated from here.</p>
+    </div>
+  </div>
+
+  <section class="stuck" aria-labelledby="stuck-title">
+    <span class="eyebrow">Off the path?</span>
+    <h2 id="stuck-title">If you get stuck</h2>
+    <p>Find the line below that sounds like what you're seeing, and open it. Each one is a short detour back to the trail.</p>
+    <div class="stuck-list">
+      <details>
+        <summary>
+          <svg class="sym" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M8 3v6"></path><path d="M5.5 6.5 8 9l2.5-2.5"></path><path d="M3 12h10"></path></svg>
+          "The download never showed up." <span class="aside">(Step 1)</span>
+          <svg class="chev" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 3 4 4-4 4"></path></svg>
+        </summary>
+        <div class="fix">
+          <p>Look for a small downward arrow near the top-right of your browser window and click it — downloads hide there.</p>
+          <p>Still nothing? Try the download link again. If your screen flashed a message about "blocked," click it and choose <strong>Keep</strong>.</p>
+        </div>
+      </details>
+      <details>
+        <summary>
+          <svg class="sym" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="2.5" y="2.5" width="11" height="11" rx="2.5"></rect><path d="M6 6l4 4M10 6l-4 4"></path></svg>
+          "I double-click the file and nothing happens." <span class="aside">(Step 2)</span>
+          <svg class="chev" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 3 4 4-4 4"></path></svg>
+        </summary>
+        <div class="fix">
+          <p>On a Mac: right-click (or hold <strong>Control</strong> and click) the file, then choose <strong>Open</strong>. A confirmation appears — click <strong>Open</strong> again.</p>
+          <p>On Windows: if a blue "protected your PC" screen appears, click <strong>More info</strong>, then <strong>Run anyway</strong>.</p>
+        </div>
+      </details>
+      <details>
+        <summary>
+          <svg class="sym" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3.5" y="7" width="9" height="6" rx="1.5"></rect><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"></path></svg>
+          "It says my password is wrong." <span class="aside">(Step 3)</span>
+          <svg class="chev" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 3 4 4-4 4"></path></svg>
+        </summary>
+        <div class="fix">
+          <p>First, check you're using your <strong>work email password</strong> — not your computer's login password (Step 2 uses that one; Step 3 doesn't).</p>
+          <p>If it still won't take, use the <strong>Forgot password</strong> link on the sign-in screen and follow the email it sends you.</p>
+        </div>
+      </details>
+      <details>
+        <summary>
+          <svg class="sym" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="8" cy="8" r="6.4"></circle><path d="M2.5 8h11"></path><path d="M8 1.6c2 1.8 2 11 0 12.8M8 1.6c-2 1.8-2 11 0 12.8"></path></svg>
+          "My test never got a reply." <span class="aside">(Step 4)</span>
+          <svg class="chev" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 3 4 4-4 4"></path></svg>
+        </summary>
+        <div class="fix">
+          <p>Check the badge in the corner of the app: if it's grey, the app is still connecting — give it 30 seconds.</p>
+          <p>If it's red, your internet connection is the likely culprit. Open any website to confirm you're online, then try the test again.</p>
+        </div>
+      </details>
+    </div>
+    <div class="escalate">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="9" cy="9" r="7"></circle><circle cx="9" cy="9" r="3"></circle><path d="m4.2 4.2 2.6 2.6M11.2 11.2l2.6 2.6M13.8 4.2l-2.6 2.6M6.8 11.2l-2.6 2.6"></path></svg>
+      <p><strong>Still stuck after two tries?</strong> Stop there — you haven't broken anything. Email <span class="ui">help@example.com</span> with a photo of your screen, and a human will walk you the rest of the way.</p>
+    </div>
+  </section>
+
+  <footer>
+    <span>Happy Path Installation Guide · v0.1 design draft</span>
+    <span>Real content flows in from the Google Doc</span>
+  </footer>
+</div>
+<script>
+  // Collapsed troubleshooting cards would vanish from printouts; open them for print only.
+  const troubleshooting = document.querySelectorAll('details');
+  window.addEventListener('beforeprint', () => {
+    troubleshooting.forEach((d) => {
+      if (!d.open) { d.dataset.autoOpened = '1'; d.open = true; }
+    });
+  });
+  window.addEventListener('afterprint', () => {
+    troubleshooting.forEach((d) => {
+      if (d.dataset.autoOpened) { d.open = false; delete d.dataset.autoOpened; }
+    });
+  });
+</script>
+</body>
+</html>
