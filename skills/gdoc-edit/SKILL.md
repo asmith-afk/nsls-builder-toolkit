@@ -30,13 +30,35 @@ python3 $S read --doc <DOC_ID>        # <- shape of EVERY call: python3 $S <acti
 
 Dropping to raw `gws` is fine only for a plain read or a single literal `replaceAllText`.
 
-## Prerequisite: `gws` must be authenticated (one-time)
+## Prerequisite: `gws` authenticated **in the toolkit profile** (one-time)
 
-This skill runs on `gws` (the Google Workspace CLI). One-time setup is `gws auth login` — see
-[`references/setup.md`](references/setup.md). If a call returns **exit 2 / auth error**, run
-`gws auth login --services docs,drive`. If it returns a **project/permission** error, you're
-missing read access to the `nsls-gdocs-skill` project (setup.md → step 2). No per-person
-webhook, no shared secret — every call is your own identity.
+This skill runs on `gws` (the Google Workspace CLI) **from the toolkit's own gws profile**,
+so it can never collide with other Google tools' client files on the same machine
+(`gdoc.py` selects the profile automatically; for raw `gws` calls set it yourself):
+
+```bash
+export GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$HOME/.config/gws-profiles/nsls-gdocs-skill"
+```
+
+**One-command setup/repair:** `python3 <plugin>/skills/gws/scripts/gws_doctor.py` —
+provisions the profile, validates the client file, and runs the one-time consent with the
+right scopes (details + manual fallback: [`references/setup.md`](references/setup.md)).
+Errors decode as:
+- **exit 2 / auth error** → no credentials in the profile → re-run
+  `python3 <plugin>/skills/gws/scripts/gws_doctor.py`. Use the doctor, **not** a raw
+  `gws auth login --services docs,drive`: the profile is shared with other toolkit skills,
+  and a narrow login overwrites its stored scopes with only `docs,drive` — silently
+  breaking `squad-dashboard` (sheets) or `receipts` (gmail) on that machine. The doctor
+  logs in with `granted ∪ requested`.
+- **403 naming `nsls-gdocs-skill`** → you're not covered by the project's quota grant —
+  staff are covered via `allstaff@nsls.org`; **contractors ask to be added to
+  `gcp-builders@nsls.org`**.
+- **403 naming ANY OTHER project** → gws is using a foreign client (profile not active or
+  never provisioned) → run the repair block in
+  [`../gws/references/multi-secret-profiles.md`](../gws/references/multi-secret-profiles.md).
+  **Never edit or delete the foreign client file — it belongs to another tool.**
+
+No per-person webhook, no shared secret — every call is your own identity.
 
 ## SAFETY: THREE-TIER PERMISSION MODEL
 
@@ -125,15 +147,17 @@ python3 $S batch --doc $DOC --file /tmp/edits.json
 | `replace` with '' leaves blank paragraphs | stale section "deleted" but gaps remain | Use `remove` (deletes whole paragraphs), not an empty `replace`. |
 | Comment orphaned after an edit | reviewer's comment detaches | Keep the anchored substring verbatim; check `comments` first, and re-read after. |
 | Anchor inside a table | `insert-after`/`remove` can't find it | Anchors match top-level paragraphs only. Edit table content via `/gdoc-build` or by index. |
-| **exit 2 / auth error** | any action fails immediately | `gws` isn't logged in → `gws auth login --services docs,drive`. |
-| **project / permission error** | Google returns a 403 / project error | Missing read access to `nsls-gdocs-skill` → see setup.md step 2. |
+| **exit 2 / auth error** | any action fails immediately | No credentials in the toolkit profile → run `python3 <plugin>/skills/gws/scripts/gws_doctor.py`. Not a raw `gws auth login --services docs,drive` — that overwrites the shared profile's scopes and breaks other skills using it. |
+| **403 naming `nsls-gdocs-skill`** | every call 403s, auth looks fine | Caller not covered by the quota grant — contractors ask to join `gcp-builders@nsls.org` (staff are covered via allstaff). |
+| **403 naming any OTHER project** | every call 403s with a foreign project name | gws is on a foreign client — profile not active/provisioned → repair block in `../gws/references/multi-secret-profiles.md`. Don't touch the foreign file. |
 
 ## Diagnostic Loop
 
 **TRY → OBSERVE → DIAGNOSE → ADAPT → TRY AGAIN**
 
-- **exit 2 / "auth error"** → `gws` token missing/expired → `gws auth login --services docs,drive`.
-- **403 / project error** → no access to the OAuth client's project → setup.md step 2 (group grant).
+- **exit 2 / "auth error"** → no credentials in the toolkit profile → `python3 <plugin>/skills/gws/scripts/gws_doctor.py` (it sets the profile itself and preserves already-granted scopes; a raw narrow login would drop them).
+- **403 naming `nsls-gdocs-skill`** → quota grant doesn't cover the caller → `gcp-builders@nsls.org` membership (contractors).
+- **403 naming another project** → foreign client in use → profile repair (multi-secret-profiles.md); never modify the other tool's file.
 - **edit ok but marker MISSING** → the `find`/`anchor` didn't match live text → re-`read`, copy
   the real line, switch to `anchor`, retry.
 - **anchor matched x2** → not unique → lengthen it.
@@ -152,8 +176,9 @@ There is always a path: read the doc, anchor on real text, verify by marker.
 ## Service Awareness
 
 - **Engine:** `/gws` (the Google Workspace CLI). This skill is a thin, safe wrapper over
-  `gws docs documents` (read/batchUpdate/create) + `gws drive comments`. Auth is `gws`'s
-  (`gws auth login`), shared across all `gws`-based skills.
+  `gws docs documents` (read/batchUpdate/create) + `gws drive comments`. Auth is `gws`'s,
+  stored **per config dir**: this skill always authenticates in the toolkit profile (see
+  Prerequisite), independent of the default dir other tools may use.
 - **Sibling:** `/gdoc-build` — creates new branded docs (python-docx → upload). Net-new with
   tables → that; in-place edits → this. Deliberate complements. Both now run on `gws` auth.
 - **Lower-level:** `/google-drive` (file ops).

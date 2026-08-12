@@ -3,7 +3,8 @@
 Usage:
     1. cp this file to ~/build_<short-name>.py and customize the BODY section.
     2. PYTHONPATH=/tmp/pptx_deps python3.12 ~/build_<short-name>.py
-    3. set -o pipefail; cd ~ && gws drive files create \\
+    3. export GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$HOME/.config/gws-profiles/nsls-gdocs-skill"
+       set -o pipefail; cd ~ && gws drive files create \\
          --json '{"name":"<doc title>","mimeType":"application/vnd.google-apps.document"}' \\
          --upload <short-name>.docx \\
          --upload-content-type "application/vnd.openxmlformats-officedocument.wordprocessingml.document" \\
@@ -241,4 +242,4 @@ doc.save(output_path)
 print(f"Saved {output_path}")
 # `set -o pipefail` is load-bearing: `| tail` makes the pipeline's exit status
 # tail's (0), so without it a failed upload reports success.
-print("Next: set -o pipefail; cd ~ && gws drive files create --json '{\"name\":\"...\",\"mimeType\":\"application/vnd.google-apps.document\"}' --upload your_doc_name.docx --upload-content-type 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' --format json | tail -10")
+print("Next: export GOOGLE_WORKSPACE_CLI_CONFIG_DIR=\"$HOME/.config/gws-profiles/nsls-gdocs-skill\"; set -o pipefail; cd ~ && gws drive files create --json '{\"name\":\"...\",\"mimeType\":\"application/vnd.google-apps.document\"}' --upload your_doc_name.docx --upload-content-type 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' --format json | tail -10")

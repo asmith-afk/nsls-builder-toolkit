@@ -283,57 +283,38 @@ to turnkey: detect state, place the shared OAuth client file for them, then hand
 off the browser consent — only they can complete it (that's the security model,
 not a gap).
 
-**1. Detect auth + the config path — never hardcode `~/.config/gws`.**
+One script drives the whole setup — the toolkit runs gws from its OWN profile so it
+never collides with other Google tools' client files (background + manual fallback:
+`skills/gws/references/multi-secret-profiles.md`).
+
+**1. Run the doctor** (use a generous timeout — its login step waits for a human):
 
 ```bash
-gws auth status 2>&1 || true
+python3 ~/.claude/local-plugins/nsls-builder-toolkit/skills/gws/scripts/gws_doctor.py
 ```
-- If it shows a `storage` other than `none`, gws is already authed → "Google
-  Docs skills are ready." Done.
-- Otherwise read the **`client_config` path from that output** — it differs by
-  platform (on Windows gws reports `C:\Users\<user>\.config\gws\...`). That
-  directory is where `client_secret.json` must live. Do **not** assume
-  `~/.config/gws`.
-
-**2. If `client_secret.json` is missing at that path, place it for them.** It's
-one shared OAuth *client* file — a Desktop client behind an **Internal** consent
-screen — that only lets a sign-in *start*; the real token is minted per-user in
-step 3. Two paths — try the connector, then a browser download that always
-works:
-
-- **Primary — the Google Drive connector** the builder connected in Step 2:
-  fetch Drive file ID `1fOu-0M35vgGO6mzbd0BInEt_sgkmgCn7` and write its bytes to
-  the client_config path from step 1. This works when the connector is the
-  builder's own @nsls.org identity; if it returns not-found or the connector
-  isn't live, go straight to the fallback (don't loop on the connector).
-- **Guaranteed fallback — browser download:**
-  1. Give them the link and tell them to open it **signed in as their @nsls.org
-     account** and click **Download**:
-     `https://drive.google.com/file/d/1fOu-0M35vgGO6mzbd0BInEt_sgkmgCn7/view`
-  2. Find the downloaded file — glob the Downloads dir loosely (the Drive
-     filename is long and quoted, so match `*client_secret*.json`):
-     - macOS/Linux: `ls -t "$HOME/Downloads/"*client_secret*.json 2>/dev/null | head -1`
-     - Windows: `Get-ChildItem "$env:USERPROFILE\Downloads\*client_secret*.json" | Sort-Object LastWriteTime | Select-Object -Last 1`
-  3. Move+rename it to the EXACT client_config path from step 1 (create the dir
-     if needed). On macOS/Linux `chmod 600` it; on Windows skip chmod (profile
-     ACLs suffice).
-  4. Re-run `gws auth status` and confirm the `client_config` file now exists
-     before continuing — don't proceed to login until it's in place.
-- **Last resort** — if the link is dead or access is denied, ask in **#builders**
-  for the current link, then place the file and re-check as above.
-
-**3. Kick off the per-user sign-in** (you may start it for them; they complete
-the Google consent themselves):
-
-```bash
-gws auth login --services docs,drive
+```powershell
+& "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe" "$env:USERPROFILE\.claude\local-plugins\nsls-builder-toolkit\skills\gws\scripts\gws_doctor.py"
 ```
-Exactly `docs,drive` — never broader. A browser opens for Google consent.
 
-> ⚠️ **Real @nsls.org Workspace accounts only.** The consent screen is
-> **Internal** to the nsls.org Workspace org, so an **alias** address, or a
-> personal/consumer Google account that merely uses an nsls.org address, is
-> **refused** with an unhelpful error. Use the actual org account.
+**2. Act on its verdict:**
+
+- **`DOCTOR: HEALTHY`** → "Google Docs skills are ready." Done.
+- **`DOCTOR: ACTION_REQUIRED` — client file needed (exit 3)** → get the file, re-run the doctor:
+  - *Primary:* fetch Drive file ID `1fOu-0M35vgGO6mzbd0BInEt_sgkmgCn7` via the builder's
+    Google Drive connector and write the bytes to
+    `~/.config/gws-profiles/nsls-gdocs-skill/client_secret.json` — the doctor validates and
+    strips it on the re-run. If the connector errors, don't loop; use the fallback.
+  - *Fallback:* the builder downloads
+    `https://drive.google.com/file/d/1fOu-0M35vgGO6mzbd0BInEt_sgkmgCn7/view` **signed in as
+    their @nsls.org account** — it lands in Downloads, where the doctor finds and validates
+    it on the re-run.
+  - *Access denied?* Staff: ask in **#builders**. **Contractors: ask to be added to
+    `gcp-builders@nsls.org`** (that group also carries the API quota grant they'll need).
+- **Browser consent opens** → the BUILDER completes it as their **real @nsls.org account**
+  (aliases and personal Google accounts are refused — the consent screen is Internal;
+  that's the security model, not a gap). The agent kicks it off; only the human can click.
+- **`DOCTOR: ERROR`** → read its message. No working Python on Windows (the Store-stub
+  trap)? Use the manual fallback in `skills/gdoc-edit/references/setup.md`.
 
 Never commit `client_secret.json` to any repo — it stays Drive-distributed.
 

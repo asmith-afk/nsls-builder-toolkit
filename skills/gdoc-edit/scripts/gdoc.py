@@ -43,6 +43,14 @@ rich tables with /gdoc-build.
 """
 import argparse, json, os, re, subprocess, sys
 
+# The gdoc family ALWAYS runs gws from the toolkit's own profile — forced per
+# spawned process, so neither the default config dir nor an ambient
+# GOOGLE_WORKSPACE_CLI_CONFIG_DIR (which may point at another tool's profile)
+# can leak in. See skills/gws/references/multi-secret-profiles.md.
+GWS_PROFILE = os.path.expanduser(
+    os.path.join("~", ".config", "gws-profiles", "nsls-gdocs-skill")
+)
+
 
 def _parse_gws_json(out):
     """Parse gws stdout, tolerating a leading keyring/log line. None if unparseable."""
@@ -75,9 +83,16 @@ def gws(args, params=None, body=None):
         cmd += ["--params", json.dumps(params)]
     if body is not None:
         cmd += ["--json", json.dumps(body)]
-    r = subprocess.run(cmd, capture_output=True, text=True)
+    env = dict(os.environ, GOOGLE_WORKSPACE_CLI_CONFIG_DIR=GWS_PROFILE)
+    r = subprocess.run(cmd, capture_output=True, text=True, env=env)
     if r.returncode == 2:
-        sys.exit("gws auth error (exit 2): run `gws auth login`. See references/setup.md.")
+        sys.exit(
+            "gws auth error (exit 2): no credentials in the toolkit profile.\n"
+            f'Fix:  export GOOGLE_WORKSPACE_CLI_CONFIG_DIR="{GWS_PROFILE}"\n'
+            "      gws auth login --services docs,drive\n"
+            "(A bare `gws auth login` authenticates the WRONG directory and the error will"
+            " repeat. Full provisioning/repair: references/setup.md.)"
+        )
 
     out = (r.stdout or "").strip()
     parsed = _parse_gws_json(out)

@@ -5,6 +5,19 @@ description: Find Ramp transactions missing receipts, fetch each receipt from An
 
 # Receipts → Ramp
 
+> **If `gws` fails (403 naming a project other than `nsls-gdocs-skill`, or exit 2):**
+> run the doctor — it provisions/repairs the toolkit's own gws profile without touching
+> any other tool's files, and computes the right scope union automatically:
+> `python3 <plugin>/skills/gws/scripts/gws_doctor.py --services docs,drive,gmail`
+> (Windows: use the real Python at `%LOCALAPPDATA%\Programs\Python\Python312\python.exe`.)
+> **The doctor heals its own profile, not your default gws setup** — so after
+> `DOCTOR: HEALTHY`, run this skill's `gws` commands against that profile, chained in
+> the SAME shell command (each agent Bash call is a fresh shell):
+> `export GOOGLE_WORKSPACE_CLI_CONFIG_DIR=~/.config/gws-profiles/nsls-gdocs-skill; gws …`
+> (Windows: `$env:GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$env:USERPROFILE\.config\gws-profiles\nsls-gdocs-skill"; gws …`)
+> Details: `../gws/references/multi-secret-profiles.md`.
+
+
 Clears Ramp's missing-receipt queue automatically instead of the manual
 "find the email, download the PDF, open Ramp, attach it" ritual.
 
@@ -416,7 +429,7 @@ whatever directory you're in, not just the repository root.
 
   ```bash
   printf 'Neon API key: '; read -rs NEON_API_KEY; echo; export NEON_API_KEY
-  ```
+  ``
 
   Exporting it with the value written inline in the command would work too,
   and would also write the credential verbatim into `~/.zsh_history` and any

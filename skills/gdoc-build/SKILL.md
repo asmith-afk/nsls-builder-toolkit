@@ -28,11 +28,15 @@ This skill exists because we keep redoing docs we got wrong with pandoc. Codifyi
 
 The fastest path for a builder asking for a Google Doc:
 
+0. **Ensure the gws profile is healthy** (once per machine; ~1s when already set up):
+   `python3 <plugin>/skills/gws/scripts/gws_doctor.py` — provisions the toolkit's own gws
+   profile, validates the client, and runs the one-time consent if needed. A 403 naming a
+   project other than `nsls-gdocs-skill`, or a gws exit 2, means run it (again).
 1. **Confirm branding.** "NSLS or Society?" Default NSLS unless the doc is for `thesociety.org` audiences.
 2. **Confirm install pattern.** `[ -d /tmp/pptx_deps/docx ]` — if missing, run `python3.12 -m pip install python-docx --target /tmp/pptx_deps -q`.
 3. **Copy the template.** `cp templates/build_doc.py ~/build_<short-name>.py` (must be in `~`, not `/tmp` — see gws cwd gotcha below). Customize content sections.
 4. **Build the docx.** `PYTHONPATH=/tmp/pptx_deps python3.12 ~/build_<short-name>.py` → produces `~/<short-name>.docx`.
-5. **Upload as Google Doc.** `set -o pipefail; cd ~ && gws drive files create --json '{"name":"<doc title>","mimeType":"application/vnd.google-apps.document"}' --upload <short-name>.docx --upload-content-type "application/vnd.openxmlformats-officedocument.wordprocessingml.document" --format json | tail -10` — the `pipefail` is load-bearing: without it `tail` swallows a failed upload and the command still exits 0.
+5. **Upload as Google Doc.** `export GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$HOME/.config/gws-profiles/nsls-gdocs-skill"; set -o pipefail; cd ~ && gws drive files create --json '{"name":"<doc title>","mimeType":"application/vnd.google-apps.document"}' --upload <short-name>.docx --upload-content-type "application/vnd.openxmlformats-officedocument.wordprocessingml.document" --format json | tail -10` — the `pipefail` is load-bearing: without it `tail` swallows a failed upload and the command still exits 0.
 6. **Return the URL.** `https://docs.google.com/document/d/<id>/edit` — give the user that link.
 7. **Clean up local artifacts.** `rm ~/build_<short-name>.py ~/<short-name>.docx`
 
@@ -55,6 +59,7 @@ The fastest path for a builder asking for a Google Doc:
 >
 > On a toolkit Windows machine the whole flow is:
 > ```powershell
+> $env:GOOGLE_WORKSPACE_CLI_CONFIG_DIR = "$env:USERPROFILE\.config\gws-profiles\nsls-gdocs-skill"
 > $py = "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe"
 > Copy-Item templates\build_doc.py "$env:USERPROFILE\build_mydoc.py"
 > cd $env:USERPROFILE

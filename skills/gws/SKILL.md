@@ -22,6 +22,36 @@ description: >-
 - `docs.google.com/presentation/*` → `gws slides presentations get`
 - `drive.google.com/*` → `gws drive files get`
 
+## NSLS toolkit profile — required for gdoc work; the fix for wrong-project 403s
+
+Machines can hold OAuth client files from several gws-based tools; the default config dir
+is contested ground (a foreign client there 403s every call with "…required permission to
+use project `<other-project>`…"). The gdoc skills (`/gdoc-edit`, `/gdoc-build`, `/setup`'s
+turnkey step) ALWAYS run from the toolkit's own profile; for other gws work, a healthy
+default dir is fine — but on any wrong-project 403, switch to the profile (and log in with
+the services you actually need, e.g. `--services docs,drive,sheets`):
+
+```bash
+export GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$HOME/.config/gws-profiles/nsls-gdocs-skill"
+```
+```powershell
+$env:GOOGLE_WORKSPACE_CLI_CONFIG_DIR = "$env:USERPROFILE\.config\gws-profiles\nsls-gdocs-skill"
+```
+
+**One command does all of it** — provision, validate, strip, consent with the right
+scope union (run with a generous timeout; the login step waits for a human):
+
+```bash
+python3 <plugin>/skills/gws/scripts/gws_doctor.py --services docs,drive
+```
+
+After `DOCTOR: HEALTHY`, run your gws commands with the profile — **agents: chain the
+export and the command in ONE shell call** (each Bash call is a fresh shell):
+`export GOOGLE_WORKSPACE_CLI_CONFIG_DIR=~/.config/gws-profiles/nsls-gdocs-skill; gws <command>`
+
+Background, manual fallback, and the 403-signature table:
+[`references/multi-secret-profiles.md`](references/multi-secret-profiles.md).
+
 ## What This Does
 
 Wraps the `gws` CLI to interact with all Google Workspace services from the command line. Supports Sheets, Docs, Slides, Drive, Gmail, Calendar, and more.
@@ -65,13 +95,22 @@ This installs the latest release from https://github.com/googleworkspace/cli.
 > from https://aka.ms/vs/17/release/vc_redist.x64.exe (double-click → Yes → Install).
 > `install.ps1` stages this in your Downloads folder and prints the step.
 
-After install, authenticate:
+After install, authenticate — **mode-specific**:
 
-```bash
-gws auth login
-```
+- **Toolkit gdoc work** (gdoc-edit/gdoc-build/setup): run
+  `python3 <plugin>/skills/gws/scripts/gws_doctor.py` — it forces the profile, validates the
+  client, and logs in with `granted ∪ requested`, so credentials land inside the profile
+  without disturbing scopes another skill already holds there. Do **not** hand-run
+  `gws auth login --services docs,drive` against the profile: it stores only what you asked
+  for, so a gdoc repair silently strips the sheets scope `squad-dashboard` needs (or gmail
+  for `receipts`). If you must log in by hand, follow the union rule in
+  [`references/multi-secret-profiles.md`](references/multi-secret-profiles.md) — request
+  everything `gws auth status` already lists plus what you need.
+- **Ad-hoc gws use:** a bare `gws auth login` stores credentials in the default dir
+  (`~/.config/gws`). Fine when that dir is healthy — but don't use a bare login to fix a
+  toolkit-skill auth error (it authenticates the wrong directory).
 
-This opens a browser for Google OAuth2. Credentials are stored at `~/.config/gws`.
+Either way a browser opens for Google OAuth2 consent.
 
 ---
 
@@ -81,9 +120,13 @@ This opens a browser for Google OAuth2. Credentials are stored at `~/.config/gws
 
 1. `GOOGLE_WORKSPACE_CLI_TOKEN` — pre-obtained OAuth2 access token (highest priority)
 2. `GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE` — path to an OAuth credentials JSON file
-3. Stored credentials in `~/.config/gws` (set up via `gws auth login`)
+3. Stored credentials in the **active config dir** — `GOOGLE_WORKSPACE_CLI_CONFIG_DIR`
+   when set (e.g. the toolkit profile), else the default `~/.config/gws`
 
-For most workflows, credentials are already configured at `~/.config/gws`. If you get exit code 2 (auth error), the token may have expired — re-run `gws auth login`.
+On exit code 2 (auth error), re-run `gws auth login` **in the same config dir the failing
+call used** — for toolkit skills that means with the profile env var set (and
+`--services docs,drive` at minimum). A bare re-login from a different dir "succeeds" while
+the failing skill keeps erroring.
 
 ---
 
@@ -354,7 +397,7 @@ gws schema drive.files.list --resolve-refs
 
 - `0` — success
 - `1` — API error (Google returned an error response)
-- `2` — auth error (credentials missing or expired — re-run `gws auth login`)
+- `2` — auth error (credentials missing or expired in the ACTIVE config dir — re-run `gws auth login` with the same `GOOGLE_WORKSPACE_CLI_CONFIG_DIR` the failing call used)
 - `3` — validation error (bad arguments)
 
 ### Two ways gws reports failure — check both
