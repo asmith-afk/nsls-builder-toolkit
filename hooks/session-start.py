@@ -15,6 +15,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 import urllib.request
 import urllib.error
 from datetime import datetime, timezone
@@ -113,14 +114,51 @@ def unquote_scalar(value):
 
 
 def git_pull():
-    """Pull latest toolkit changes."""
-    try:
-        subprocess.run(
-            ["git", "-C", str(PLUGIN_DIR), "pull", "origin", "main", "--quiet"],
-            capture_output=True, timeout=10
-        )
-    except Exception:
-        pass
+    """Pull latest changes for every toolkit in SYNC_PLUGINS.
+
+    Parity fix with the Windows hook: session-start.ps1 has always looped
+    @($BuilderDir, $PersonalDir) and pulled both, but this function pulled only
+    the builder dir — so on macOS/Linux the personal toolkit was cloned once and
+    then frozen at install-time state forever. Fixes shipped upstream (like the
+    visual-companion self-heal) never reached those machines. SYNC_PLUGINS
+    already names both toolkits for pointer sync; pull the same list.
+
+    Bare `pull --ff-only` — no explicit remote/refspec — follows each
+    checkout's configured upstream, the same convention personal-setup's own
+    update path uses. Hardcoding `origin main` here would silently fast-forward
+    a supported fork checkout (NSLS_PERSONAL_REPO / NSLS_PERSONAL_BRANCH) or a
+    deliberately pinned detached HEAD onto a branch it never tracked; with no
+    upstream configured, a bare pull just exits nonzero and the checkout is
+    left alone. --ff-only matches the .ps1: the `pull origin main` this
+    replaces could stop on merge conflicts (leaving a conflicted tree) or, on
+    modern git with no reconcile config, refuse divergence outright — neither
+    visible here, since the exit status is ignored and output captured, while
+    the toolkit quietly never updated again. ff-only refuses cleanly instead
+    of half-merging.
+
+    Prompts are disabled (GIT_TERMINAL_PROMPT=0, stdin closed) so a remote
+    that wants credentials fails in milliseconds instead of hanging out the
+    timeout, and the loop shares one 15s deadline so the worst case — every
+    pull wedged — still leaves the 35s replay + 35s live ping inside the 90s
+    hook budget install.sh configures.
+    """
+    deadline = time.monotonic() + 15
+    for plugin in SYNC_PLUGINS:
+        plugin_dir = CONFIG_DIR / "local-plugins" / plugin
+        if not (plugin_dir / ".git").exists():
+            continue
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        try:
+            subprocess.run(
+                ["git", "-C", str(plugin_dir), "pull", "--ff-only", "--quiet"],
+                capture_output=True, timeout=min(10, remaining),
+                stdin=subprocess.DEVNULL,
+                env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+            )
+        except Exception:
+            pass
 
 
 def sync_pointers():
