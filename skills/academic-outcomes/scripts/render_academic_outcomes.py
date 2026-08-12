@@ -13,8 +13,10 @@ Usage:
 Then upload the .docx as a Google Doc with gdoc-build's `gws drive files create
 --upload ...` step (Society branding is already baked into this renderer).
 
-Requires python-docx. Per the NSLS env note:
-    [ -d /tmp/pptx_deps/docx ] || python3.12 -m pip install python-docx --target /tmp/pptx_deps -q
+Requires python-docx. Guard on a real import, not a directory (macOS /tmp
+cleanup guts old installs but leaves the dirs):
+    PYTHONPATH="$HOME/.local/lib/nsls-pydeps:/tmp/pptx_deps" python3.12 -c 'import docx' 2>/dev/null \
+      || python3.12 -m pip install --upgrade python-docx --target "$HOME/.local/lib/nsls-pydeps" -q
 
 Document JSON shape — see references/outcomes-json-schema.md. In brief:
 {
@@ -41,10 +43,12 @@ Each ITEM is the per-track structured record stored in Airtable
   "status": "Status: live."
 }
 """
+import os
 import sys
 import json
 
-sys.path.insert(0, "/tmp/pptx_deps")
+sys.path.insert(0, "/tmp/pptx_deps")  # legacy location — /tmp cleanup can gut it
+sys.path.insert(0, os.path.expanduser("~/.local/lib/nsls-pydeps"))  # durable home, wins
 
 from docx import Document
 from docx.shared import Pt, RGBColor, Inches, Cm
@@ -71,9 +75,23 @@ def set_cell_bg(cell, color_hex):
     tc_pr.append(shd)
 
 
+def set_cell_borders(cell, color="BFBFBF", size="6"):
+    # Explicit per-cell borders: Google's .docx importer DROPS the borders the
+    # built-in table.style promises, so style-only tables land borderless.
+    tc_pr = cell._tc.get_or_add_tcPr()
+    borders = OxmlElement("w:tcBorders")
+    for edge in ("top", "left", "bottom", "right"):
+        b = OxmlElement(f"w:{edge}")
+        b.set(qn("w:val"), "single")
+        b.set(qn("w:sz"), size)
+        b.set(qn("w:color"), color)
+        borders.append(b)
+    tc_pr.append(borders)
+
+
 def add_table(doc, headers, rows, col_widths=None):
     table = doc.add_table(rows=1, cols=len(headers))
-    table.style = "Light Grid Accent 1"
+    table.style = "Light Grid Accent 1"  # readable in Word; NOT a border source after import
     table.alignment = WD_TABLE_ALIGNMENT.LEFT
     table.autofit = False
     if col_widths:
@@ -88,6 +106,7 @@ def add_table(doc, headers, rows, col_widths=None):
         run.font.color.rgb = RGBColor(*P["header_fg"])
         run.font.size = Pt(10.5)
         set_cell_bg(hdr[i], P["header_bg"])
+        set_cell_borders(hdr[i])
         hdr[i].vertical_alignment = WD_ALIGN_VERTICAL.CENTER
     for r_idx, row_data in enumerate(rows):
         cells = table.add_row().cells
@@ -99,6 +118,7 @@ def add_table(doc, headers, rows, col_widths=None):
             if i == 0:
                 run.bold = True
             set_cell_bg(cells[i], bg)
+            set_cell_borders(cells[i])
             cells[i].vertical_alignment = WD_ALIGN_VERTICAL.TOP
     return table
 

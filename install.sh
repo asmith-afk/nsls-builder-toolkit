@@ -267,11 +267,15 @@ for candidate in \
   fi
 done
 
-# Retry with PATH refresh if not found (native installer may need a moment)
+# Retry with PATH refresh if not found (native installer may need a moment).
+# The `|| true` is load-bearing: a bare VAR="$(failing command)" assignment
+# carries the substitution's exit status, and under `set -e` that killed the
+# whole install right here on every CLI-less Mac Desktop machine — before the
+# desktop-app probe below ever ran (Mac round-2 finding C1).
 if [ -z "$CLAUDE_BIN" ]; then
   eval "$(cat ~/.zshrc 2>/dev/null | grep -E 'export PATH|path=')" 2>/dev/null || true
   eval "$(cat ~/.bashrc 2>/dev/null | grep -E 'export PATH|path=')" 2>/dev/null || true
-  CLAUDE_BIN="$(command -v claude 2>/dev/null)"
+  CLAUDE_BIN="$(command -v claude 2>/dev/null || true)"
 fi
 
 # Desktop-app bundled CLI (no separate CLI install). macOS ships it under
@@ -481,16 +485,126 @@ fi
 
 echo ""
 echo "Installing gws (Google Workspace CLI)..."
+GWS_OK=0
 if command -v gws &>/dev/null; then
   echo "  gws: already installed ($(gws --version 2>/dev/null | head -1))"
+elif [ -x "$HOME/.local/bin/gws" ] && "$HOME/.local/bin/gws" --version >/dev/null 2>&1; then
+  # A working gws already sits at the install target but ~/.local/bin isn't on
+  # PATH, so `command -v` missed it. Do NOT re-download over it — the old code
+  # overwrote this binary and then deleted it if the fresh download failed its
+  # version check, destroying a working install. Just fix the PATH below.
+  echo "  gws: already installed at ~/.local/bin (not on PATH — fixing that below)"
+  GWS_OK=1
 else
-  if curl --proto '=https' --tlsv1.2 -LsSf \
-    https://github.com/googleworkspace/cli/releases/latest/download/google-workspace-cli-installer.sh \
-    2>/dev/null | sh >/dev/null 2>&1; then
-    echo "  gws installed. Authenticate later with: gws auth login"
+  # Upstream retired their installer script (the old
+  # google-workspace-cli-installer.sh URL 404s — every fresh Mac install hit
+  # it). Releases now ship per-arch tarballs with .sha256 sidecars: download
+  # the right one, verify the checksum, install to ~/.local/bin (no sudo).
+  GWS_OK=0
+  case "$(uname -s)-$(uname -m)" in
+    Darwin-arm64)              GWS_TARGET="aarch64-apple-darwin" ;;
+    Darwin-x86_64)             GWS_TARGET="x86_64-apple-darwin" ;;
+    Linux-aarch64|Linux-arm64) GWS_TARGET="aarch64-unknown-linux-gnu" ;;
+    Linux-x86_64)              GWS_TARGET="x86_64-unknown-linux-gnu" ;;
+    *)                         GWS_TARGET="" ;;
+  esac
+  if [ -n "$GWS_TARGET" ]; then
+    GWS_TMP=$(mktemp -d)
+    GWS_TAR="google-workspace-cli-$GWS_TARGET.tar.gz"
+    GWS_BASE="https://github.com/googleworkspace/cli/releases/latest/download"
+    if curl --proto '=https' --tlsv1.2 -fsSL "$GWS_BASE/$GWS_TAR" -o "$GWS_TMP/$GWS_TAR" 2>/dev/null \
+      && curl --proto '=https' --tlsv1.2 -fsSL "$GWS_BASE/$GWS_TAR.sha256" -o "$GWS_TMP/$GWS_TAR.sha256" 2>/dev/null; then
+      # Tolerate both checksum-file formats ("<hex>" and "<hex>  <name>").
+      GWS_EXPECTED=$(awk '{print $1}' "$GWS_TMP/$GWS_TAR.sha256" 2>/dev/null || true)
+      if command -v shasum &>/dev/null; then
+        GWS_ACTUAL=$(shasum -a 256 "$GWS_TMP/$GWS_TAR" | awk '{print $1}')
+      else
+        GWS_ACTUAL=$(sha256sum "$GWS_TMP/$GWS_TAR" | awk '{print $1}')
+      fi
+      if [ -n "$GWS_EXPECTED" ] && [ "$GWS_EXPECTED" = "$GWS_ACTUAL" ]; then
+        if tar -xzf "$GWS_TMP/$GWS_TAR" -C "$GWS_TMP" 2>/dev/null; then
+          GWS_BIN=$(find "$GWS_TMP" -type f -name gws 2>/dev/null | head -1)
+          if [ -n "$GWS_BIN" ]; then
+            mkdir -p "$HOME/.local/bin"
+            mv "$GWS_BIN" "$HOME/.local/bin/gws" && chmod +x "$HOME/.local/bin/gws" && GWS_OK=1
+            # Gate success on the binary actually running — a wrong-libc
+            # artifact (e.g. the gnu build on musl/Alpine) exec-fails here,
+            # and reporting it "installed" would be a lie.
+            if [ "$GWS_OK" = "1" ] && ! "$HOME/.local/bin/gws" --version >/dev/null 2>&1; then
+              GWS_OK=0
+              echo "  Note: gws downloaded but won't run on this system (libc mismatch?) — removing it."
+              rm -f "$HOME/.local/bin/gws"
+            fi
+          fi
+        fi
+      else
+        echo "  Note: gws checksum verification failed — not installing this download."
+      fi
+    fi
+    rm -rf "$GWS_TMP"
+  fi
+  if [ "$GWS_OK" = "1" ]; then
+    echo "  gws installed to ~/.local/bin ($("$HOME/.local/bin/gws" --version 2>/dev/null | head -1)). Authenticate later with: gws auth login"
   else
     echo "  Note: gws install failed — /gdoc-build and /gdoc-edit will prompt you to install it."
   fi
+fi
+
+# PATH fix-up, outside the install branch so it also runs for a gws we FOUND at
+# ~/.local/bin rather than downloaded (that's the whole point of the elif above).
+if [ "$GWS_OK" = "1" ]; then
+  case ":$PATH:" in
+    *":$HOME/.local/bin:"*) ;;
+    *)
+      if [ "$TEST_MODE" = "1" ]; then
+        echo "  Note: ~/.local/bin isn't on your PATH — add it to use gws (test mode won't touch your shell profile)."
+      else
+        # Pick the rc file the user's LOGIN SHELL actually reads. Selecting by
+        # file-existence order (zshrc, then bashrc, then bash_profile) wrote the
+        # export into ~/.bashrc for any zsh user who merely happened to have
+        # one — and zsh never sources it, so gws stayed missing while the
+        # installer reported PATH configured.
+        GWS_SHELL=$(basename "${SHELL:-}" 2>/dev/null || true)
+        if [ -z "$GWS_SHELL" ] || [ "$GWS_SHELL" = "sh" ]; then
+          case "$(uname -s)" in
+            Darwin) GWS_SHELL="zsh" ;;
+            *)      GWS_SHELL="bash" ;;
+          esac
+        fi
+        GWS_RC=""
+        case "$GWS_SHELL" in
+          zsh) GWS_RC="${ZDOTDIR:-$HOME}/.zshrc" ;;
+          bash)
+            # bash reads .bashrc for interactive non-login shells, but macOS
+            # Terminal starts login shells, which read .bash_profile instead.
+            if [ -f "$HOME/.bashrc" ]; then GWS_RC="$HOME/.bashrc"
+            elif [ -f "$HOME/.bash_profile" ]; then GWS_RC="$HOME/.bash_profile"
+            else
+              case "$(uname -s)" in
+                Darwin) GWS_RC="$HOME/.bash_profile" ;;
+                *)      GWS_RC="$HOME/.bashrc" ;;
+              esac
+            fi
+            ;;
+          *) GWS_RC="" ;;  # fish/nu/etc: different syntax — instruct, don't corrupt
+        esac
+        if [ -z "$GWS_RC" ]; then
+          echo "  Note: ~/.local/bin isn't on your PATH, and $GWS_SHELL needs a syntax this installer doesn't write."
+          echo "        Add ~/.local/bin to your PATH manually to use gws."
+        else
+          [ -f "$GWS_RC" ] || touch "$GWS_RC"
+          # Match the exact export line, not the bare substring: a commented-out
+          # export, or an unrelated path that merely contains ".local/bin"
+          # (/opt/app/.local/bin), would satisfy a substring grep and we'd skip
+          # appending — leaving gws off PATH while reporting it configured.
+          if ! grep -qE '^[[:space:]]*export PATH="\$HOME/\.local/bin' "$GWS_RC" 2>/dev/null; then
+            { echo ""; echo "# gws (NSLS Builder Toolkit)"; echo 'export PATH="$HOME/.local/bin:$PATH"'; } >> "$GWS_RC"
+            echo "  Added ~/.local/bin to PATH in $(basename "$GWS_RC") (takes effect in new terminals)."
+          fi
+        fi
+      fi
+      ;;
+  esac
 fi
 
 # --- Step 3.8: Node.js check (the signal MCP server needs it) ---

@@ -79,7 +79,8 @@ Field notes:
 ## Render
 
 ```bash
-[ -d /tmp/pptx_deps/docx ] || python3.12 -m pip install python-docx --target /tmp/pptx_deps -q
+PYTHONPATH="$HOME/.local/lib/nsls-pydeps:/tmp/pptx_deps" python3.12 -c 'import docx' 2>/dev/null \
+  || python3.12 -m pip install --upgrade python-docx --target "$HOME/.local/lib/nsls-pydeps" -q
 python3.12 scripts/render_academic_outcomes.py document.json out.docx
 ```
 Then upload `out.docx` as a Google Doc via gdoc-build's `gws drive files create

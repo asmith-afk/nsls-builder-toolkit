@@ -30,6 +30,15 @@ python3 $S read --doc <DOC_ID>        # <- shape of EVERY call: python3 $S <acti
 
 Dropping to raw `gws` is fine only for a plain read or a single literal `replaceAllText`.
 
+## Intake — never invent an edit
+
+Invoked bare (no doc named, no change described)? **Ask which doc and what change
+before touching anything.** If a doc was built or edited earlier this session,
+offer it as the likely target — but the *change* still comes from the user, not
+from you. In a walkthrough/demo, ask what they'd like changed and suggest
+something small only if they shrug (a new bullet, one line in a list). Applying
+content the user never asked for is the failure mode this section exists to stop.
+
 ## Prerequisite: `gws` authenticated **in the toolkit profile** (one-time)
 
 This skill runs on `gws` (the Google Workspace CLI) **from the toolkit's own gws profile**,
@@ -97,6 +106,9 @@ python3 $S comments --doc $DOC            # reviewer comments (address them; don
 python3 $S replace --doc $DOC --find "old text" --replace "new text"   # literal by default
 python3 $S insert-top --doc $DOC --title "Changelog — v2.3" --text-file /tmp/changelog.txt
 python3 $S insert-after --doc $DOC --anchor "Top questions for Kevin" --text "• New bullet"
+# --level 1..4 sets the inserted title's heading level (defaults: insert-top H2,
+# insert-after H3) — match the doc's own hierarchy, e.g. --level 1 in an H1 doc.
+# Inserted body text is pinned to NORMAL_TEXT so it never inherits a heading style.
 python3 $S append --doc $DOC --text "One appended paragraph."
 python3 $S remove --doc $DOC --anchor "What changed (v1.0"   # delete whole paragraphs w/ anchor
 python3 $S create --title "Scratch notes" --text "First line."   # net-new simple doc → prints URL
@@ -144,6 +156,7 @@ python3 $S batch --doc $DOC --file /tmp/edits.json
 | `replaceAllText` returns ok on **0 matches** | "ok" but nothing changed | Always read-back / use `batch` markers; an empty match is not an error to the API. |
 | Regex expectation | `--find` didn't behave like a pattern | `replace` is **literal** by default; pass `--regex` (resolved client-side). |
 | `replace` can't make paragraphs | `\n` in a literal `replace` won't create a new paragraph/bullet | New sections/bullets → `insert-top` or `insert-after`, not `replace`. |
+| Insert looks right in text, wrong on screen | marker verification is text-presence only — it passes while formatting is mangled (e.g. a section landing as the wrong heading level) | The helper pins body to NORMAL_TEXT and takes `--level` for the title; after inserts near headings, eyeball the doc or re-read and check the section sits at the intended level. |
 | `replace` with '' leaves blank paragraphs | stale section "deleted" but gaps remain | Use `remove` (deletes whole paragraphs), not an empty `replace`. |
 | Comment orphaned after an edit | reviewer's comment detaches | Keep the anchored substring verbatim; check `comments` first, and re-read after. |
 | Anchor inside a table | `insert-after`/`remove` can't find it | Anchors match top-level paragraphs only. Edit table content via `/gdoc-build` or by index. |

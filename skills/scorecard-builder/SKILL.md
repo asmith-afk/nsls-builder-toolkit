@@ -244,8 +244,8 @@ The Doc's structure maps 1:1 to the fields HR loads. Keep the render structurall
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `ImportError: cannot import name 'Document' from 'docx'` | Corrupt/partial python-docx in `/tmp/pptx_deps` | `python3.12 -m pip install --upgrade --force-reinstall python-docx --target /tmp/pptx_deps -q` |
-| Tables render borderless | `table.style` unset | `table.style = 'Light Grid Accent 1'` |
+| `ImportError: cannot import name 'Document' from 'docx'` | Corrupt/partial python-docx install (macOS `/tmp` cleanup guts `/tmp/pptx_deps` but leaves the dir) | `python3.12 -m pip install --upgrade --force-reinstall python-docx --target ~/.local/lib/nsls-pydeps -q` and run with `PYTHONPATH=~/.local/lib/nsls-pydeps` |
+| Tables render borderless | Cells lack explicit `w:tcBorders` — Google's importer drops `table.style` borders | The template's `rich_table()` calls `set_cell_borders()` on every cell; keep it (style alone won't survive import) |
 | `**bold**` shows literally in a cell | cell text added as a raw string | use the template's `add_runs()` parser (handles `**bold**`, `*italic*`, `` `code` ``, `\n`) |
 | `gws --upload` rejects the path | file outside cwd | build in `~`, run `gws` from `~` |
 | `gws` JSON parse fails | keyring line on stdout | pipe through `grep -v -i keyring \| tail` |

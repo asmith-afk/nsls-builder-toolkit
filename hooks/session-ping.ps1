@@ -81,10 +81,20 @@ try {
 Remove-Item $MarkerFile -Force -ErrorAction SilentlyContinue
 
 $out = @()
-foreach ($pr in @($resp.new_pr_credits)) { if ($pr) { $out += "PR $($pr.pr) to $($pr.repo) credited." } }
-if ($resp.stage_advanced) { $out += "Advanced to $($resp.stage_advanced.to)." }
+$prCount = @($resp.new_pr_credits | Where-Object { $_ }).Count
+foreach ($pr in @($resp.new_pr_credits)) { if ($pr) { $out += "Your PR #$($pr.pr) to $($pr.repo) was merged." } }
+if ($resp.stage_advanced) { $out += "You advanced to $($resp.stage_advanced.to) on the builder path." }
 if ($out.Count -gt 0) {
     Add-Content -Path $LogFile -Value ("[" + (Get-Date).ToString('s') + "] " + ($out -join ' '))
+    # Surface these inline too (parity with session-start.py, which prints
+    # credits synchronously on Mac). This script runs detached, so the lines
+    # ride the same pending-announcements hand-off the announcements use and
+    # show at the NEXT session start - previously they went ONLY to the log
+    # file, so a Windows builder never saw their merged-PR credit at all.
+    foreach ($line in $out) { Add-Content -Path $AnnounceFile -Value $line -Encoding UTF8 }
+    if ($prCount -gt 0) {
+        Add-Content -Path $AnnounceFile -Value 'Shipped something new with that PR (a skill, tool, or service others will use - not just a fix)? Run /register-automation so it counts on the org tracker.' -Encoding UTF8
+    }
 }
 
 # Announcements - parity with session-start.py. Dismiss each so the server

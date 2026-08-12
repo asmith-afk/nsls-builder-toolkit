@@ -131,6 +131,14 @@ Skills that produce output for humans (most of them) benefit from audience-aware
 
 Also: PII awareness, sample size warnings, source attribution when cross-referencing.
 
+**House rule — question last, nothing trailing.** Any skill turn that ends by
+asking the user something must put that question on the **last line**, with no
+informational text after it. Silence after a question must unambiguously mean
+"waiting on you," never "might still be talking." A buried question is the #1
+way a guided flow reads as stalled — a real builder froze mid-`/setup` and asked
+"did setup stall?" because a disclosure paragraph trailed the confirmation
+question. Sweep for this whenever a skill scripts its own messages.
+
 ## Discovering the Full Shape
 
 Before writing a skill, explore broadly at every level. The elements above are the columns (so far — you may discover more). The skill-creation process is about finding all the ROWS and all the CELLS.
@@ -168,6 +176,7 @@ When building a new skill right now:
 8. **Add output guidelines.** Who will read this output? What do they need?
 9. **Wire up the hierarchy.** Reference `/connect` for setup, `/data-intel` for cross-system, other domain skills for related expertise.
 10. **Check the full shape.** Walk through every element in The Pattern. Is anything missing? Is anything duplicated from another skill? Did you discover a new element that should be added to the rubric?
+11. **Register it.** When the skill actually ships (merged / installed for real use), run `/register-automation` so it's on the org Automation Tracker — leadership visibility comes from that record, not from the merge. New skills, tools, and services count; pure bugfixes don't. Remind the builder of this at the end of any skill-creation session that produced a shippable skill.
 
 ## Recommended Creation Flow
 

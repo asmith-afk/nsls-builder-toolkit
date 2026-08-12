@@ -42,6 +42,8 @@ output = []
 
 for pr in data.get('new_pr_credits', []):
     output.append(f\"Your PR #{pr.get('pr','?')} to {pr.get('repo','?')} was merged.\")
+if data.get('new_pr_credits'):
+    output.append('Shipped something new with that PR (a skill, tool, or service others will use — not just a fix)? Run /register-automation so it counts on the org tracker.')
 
 adv = data.get('stage_advanced')
 if adv:

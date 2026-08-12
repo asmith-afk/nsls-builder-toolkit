@@ -2,7 +2,8 @@
 
 Usage:
     1. cp this file to ~/build_<short-name>.py and customize the BODY section.
-    2. PYTHONPATH=/tmp/pptx_deps python3.12 ~/build_<short-name>.py
+    2. PYTHONPATH="$HOME/.local/lib/nsls-pydeps:/tmp/pptx_deps" python3.12 ~/build_<short-name>.py
+       (deps missing? python3.12 -m pip install --upgrade python-docx --target ~/.local/lib/nsls-pydeps -q)
     3. export GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$HOME/.config/gws-profiles/nsls-gdocs-skill"
        set -o pipefail; cd ~ && gws drive files create \\
          --json '{"name":"<doc title>","mimeType":"application/vnd.google-apps.document"}' \\
@@ -21,8 +22,10 @@ lists, cell shading, alternating row banding.
 DO NOT switch to pandoc-from-markdown. See SKILL.md "Common Mistakes."
 """
 
+import os
 import sys
-sys.path.insert(0, '/tmp/pptx_deps')
+sys.path.insert(0, '/tmp/pptx_deps')  # legacy location — /tmp cleanup can gut it
+sys.path.insert(0, os.path.expanduser('~/.local/lib/nsls-pydeps'))  # durable home, wins
 
 from docx import Document
 from docx.shared import Pt, RGBColor, Inches, Cm
@@ -81,9 +84,14 @@ def set_cell_borders(cell, color='BFBFBF', size='6'):
 
 
 def add_table(doc, headers, rows, col_widths=None):
-    """Real Word table with NSLS-styled header row + alternating banding."""
+    """Real Word table with NSLS-styled header row + alternating banding.
+
+    Borders are set explicitly per cell (set_cell_borders): Google's .docx
+    importer DROPS the borders a built-in table.style promises, so style-only
+    tables land borderless in the finished Doc.
+    """
     table = doc.add_table(rows=1, cols=len(headers))
-    table.style = 'Light Grid Accent 1'  # built-in, gives borders on import
+    table.style = 'Light Grid Accent 1'  # keeps the table readable in Word; NOT a border source after import
     table.alignment = WD_TABLE_ALIGNMENT.LEFT
     table.autofit = False
 
@@ -101,6 +109,7 @@ def add_table(doc, headers, rows, col_widths=None):
         run.font.color.rgb = RGBColor(*P["header_fg"])
         run.font.size = Pt(10.5)
         set_cell_bg(hdr[i], P["header_bg"])
+        set_cell_borders(hdr[i])
         hdr[i].vertical_alignment = WD_ALIGN_VERTICAL.CENTER
 
     # body rows with alternating banding
@@ -115,6 +124,7 @@ def add_table(doc, headers, rows, col_widths=None):
                 run.bold = True
                 run.font.name = 'Consolas'
             set_cell_bg(cells[i], bg)
+            set_cell_borders(cells[i])
             cells[i].vertical_alignment = WD_ALIGN_VERTICAL.TOP
 
     return table
@@ -237,7 +247,7 @@ add_code(doc, "git checkout main && git pull origin main")
 
 # ---- SAVE ------------------------------------------------------------
 
-output_path = '/Users/k/your_doc_name.docx'   # MUST be in ~ for gws --upload
+output_path = os.path.expanduser('~/your_doc_name.docx')   # MUST be in ~ for gws --upload
 doc.save(output_path)
 print(f"Saved {output_path}")
 # `set -o pipefail` is load-bearing: `| tail` makes the pipeline's exit status

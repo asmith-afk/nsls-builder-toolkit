@@ -13,6 +13,7 @@ Must be fast and fail silently. Works on Mac, Linux, and Windows.
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -277,16 +278,66 @@ def read_env(key):
     return ""
 
 
-def _post_session_ping(body, timeout=PING_TIMEOUT):
-    """POST a session-ping body dict. Returns parsed response, or raises."""
+def _http_post_json(url, body, timeout):
+    """POST JSON to url and return the parsed JSON response. Raises on failure.
+
+    curl first, urllib as the fallback — not the other way around: python.org
+    framework builds ship WITHOUT CA certificates, so every urllib HTTPS call
+    on such a Mac fails cert verification and the ping dies silently (this
+    cost a builder ~6 weeks of session points, June–Aug 2026, while
+    skill-event.sh — which shells out to curl — kept working). curl uses the
+    OS trust store, so it works on a stock install.
+    """
+    payload = json.dumps(body)
+    if shutil.which("curl"):
+        # curl PRESENT is not curl WORKING. A broken proxy/TLS config, or a curl
+        # that can't reach this host while Python can, made every POST fail
+        # permanently — the old code raised here, so the urllib fallback below
+        # was only ever reached when curl was missing entirely. Treat a curl
+        # failure as "try the other transport", and only fail if both lose.
+        started = time.monotonic()
+        try:
+            result = subprocess.run(
+                ["curl", "-s", "--fail", "--max-time", str(timeout), "-X", "POST",
+                 url, "-H", "Content-Type: application/json",
+                 "--data-binary", payload],
+                # encoding is explicit: text=True alone decodes with the platform
+                # locale, so on Windows with a legacy code page (cp1252) a
+                # non-ASCII announcement raises UnicodeDecodeError out of this
+                # call. A ping that actually succeeded then counts as failed,
+                # the failure marker gets written, and the announcement is lost.
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
+                timeout=timeout + 10,
+            )
+            if result.returncode == 0:
+                return json.loads(result.stdout)
+            # 28 == curl's own operation-timeout. The host is slow or
+            # unreachable, so urllib would burn the same wait again for the same
+            # answer — and this runs inside a SessionStart hook whose whole
+            # budget (90s, install.sh) covers a replayed ping AND a live one.
+            # Retrying only NON-timeout failures is what keeps a second
+            # transport from doubling the worst case.
+            if result.returncode == 28:
+                raise RuntimeError("curl exited 28 (timeout)")
+        except subprocess.TimeoutExpired:
+            raise RuntimeError("curl timed out")
+        except (OSError, ValueError):
+            pass  # curl unusable or returned unparseable JSON — try urllib
+        # Only the remaining slice of this call's budget, for the same reason.
+        timeout = max(5, timeout - (time.monotonic() - started))
     req = urllib.request.Request(
-        f"{PROXY_URL}/session-ping",
-        data=json.dumps(body).encode(),
+        url,
+        data=payload.encode(),
         headers={"Content-Type": "application/json"},
         method="POST",
     )
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         return json.loads(resp.read().decode())
+
+
+def _post_session_ping(body, timeout=PING_TIMEOUT):
+    """POST a session-ping body dict. Returns parsed response, or raises."""
+    return _http_post_json(f"{PROXY_URL}/session-ping", body, timeout)
 
 
 def replay_failed_ping():
@@ -361,17 +412,37 @@ def session_ping(replayed=None):
     except Exception:
         # Delivery failed (timeout / network / proxy down). Stash the payload
         # so the next session start replays it. Best-effort — never raise.
+        failures = 1
+        try:
+            prior = json.loads(PING_FAIL_MARKER.read_text(encoding="utf-8"))
+            failures = int(prior.get("failures", 1)) + 1
+        except Exception:
+            pass
         try:
             PING_FAIL_MARKER.parent.mkdir(parents=True, exist_ok=True)
             PING_FAIL_MARKER.write_text(
                 json.dumps({
                     "payload": body,
                     "attempted_at": datetime.now(timezone.utc).isoformat(),
+                    "failures": failures,
                 }),
                 encoding="utf-8",
             )
         except Exception:
             pass
+        # One visible heads-up per failure streak (the marker resets on any
+        # success). Silent-forever is how a CA-cert breakage went unnoticed
+        # for six weeks — the builder must eventually hear about it.
+        if failures == 3:
+            print(
+                "[NSLS Builder Toolkit — surface the following to the user "
+                "at the start of your first reply, then proceed with their "
+                "request:]\n\n"
+                "Heads up: the NSLS automation tracker hasn't been reachable "
+                "for your last 3 sessions, so daily session points aren't "
+                "being recorded. If your network is otherwise fine, mention "
+                "this in #builders so it gets looked at."
+            )
         return
 
     # Delivered — clear any stale failure marker from a prior session.
@@ -398,21 +469,17 @@ def session_ping(replayed=None):
         title = ann.get("title", "")
         body = ann.get("body", "")
         output.append(f"{title}: {body}")
-        # Dismiss
+        # Dismiss (same curl-first transport as the ping — the urllib CA-cert
+        # failure mode applies here too, and a failed dismiss re-delivers the
+        # announcement every session).
         ann_id = ann.get("id", "")
         if ann_id:
             try:
-                dismiss_payload = json.dumps({
-                    "announcement_id": ann_id,
-                    "builder_email": email,
-                }).encode()
-                dismiss_req = urllib.request.Request(
+                _http_post_json(
                     f"{PROXY_URL}/dismiss-announcement",
-                    data=dismiss_payload,
-                    headers={"Content-Type": "application/json"},
-                    method="POST",
+                    {"announcement_id": ann_id, "builder_email": email},
+                    5,
                 )
-                urllib.request.urlopen(dismiss_req, timeout=5)
             except Exception:
                 pass
 
@@ -434,12 +501,27 @@ def session_ping(replayed=None):
         # see it in the terminal AND see Claude echo it once — minor
         # redundancy, acceptable trade for desktop coverage).
         announcement_block = "\n".join(output)
-        print(
+        directive = (
             "[NSLS Builder Toolkit — surface the following to the user "
             "verbatim at the start of your first reply, then proceed with "
             "their request:]\n\n"
             f"{announcement_block}"
         )
+        if data.get("new_pr_credits"):
+            # Judge-then-nudge: a merged PR that shipped something others
+            # will rely on (a new skill, tool, or service) belongs on the
+            # org Automation Tracker; a pure bugfix/doc tweak doesn't.
+            directive += (
+                "\n\n[NSLS Builder Toolkit — additionally: judge whether a "
+                "merged PR above shipped something registerable (a new "
+                "skill, tool, or service other builders will rely on). If "
+                "it did — or you can't tell from the repo/PR context — also "
+                "surface this line: \"Shipped something new? Run "
+                "/register-automation so it's on the org tracker.\" If it "
+                "was clearly a pure bugfix, doc tweak, or maintenance "
+                "change, skip that line.]"
+            )
+        print(directive)
 
 
 def main():

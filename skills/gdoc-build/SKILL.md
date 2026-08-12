@@ -33,9 +33,14 @@ The fastest path for a builder asking for a Google Doc:
    profile, validates the client, and runs the one-time consent if needed. A 403 naming a
    project other than `nsls-gdocs-skill`, or a gws exit 2, means run it (again).
 1. **Confirm branding.** "NSLS or Society?" Default NSLS unless the doc is for `thesociety.org` audiences.
-2. **Confirm install pattern.** `[ -d /tmp/pptx_deps/docx ]` — if missing, run `python3.12 -m pip install python-docx --target /tmp/pptx_deps -q`.
+2. **Confirm install pattern.** Guard on a real import, not a directory — macOS `/tmp` cleanup guts old installs but leaves the dirs, so a `-d` check passes on a broken install weeks later:
+   ```bash
+   PYTHONPATH="$HOME/.local/lib/nsls-pydeps:/tmp/pptx_deps" python3.12 -c 'import docx' 2>/dev/null \
+     || python3.12 -m pip install --upgrade python-docx --target "$HOME/.local/lib/nsls-pydeps" -q
+   ```
+   (`~/.local/lib/nsls-pydeps` is the durable home; `/tmp/pptx_deps` stays on the path only as a legacy fallback for machines that already have it.)
 3. **Copy the template.** `cp templates/build_doc.py ~/build_<short-name>.py` (must be in `~`, not `/tmp` — see gws cwd gotcha below). Customize content sections.
-4. **Build the docx.** `PYTHONPATH=/tmp/pptx_deps python3.12 ~/build_<short-name>.py` → produces `~/<short-name>.docx`.
+4. **Build the docx.** `PYTHONPATH="$HOME/.local/lib/nsls-pydeps:/tmp/pptx_deps" python3.12 ~/build_<short-name>.py` → produces `~/<short-name>.docx`.
 5. **Upload as Google Doc.** `export GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$HOME/.config/gws-profiles/nsls-gdocs-skill"; set -o pipefail; cd ~ && gws drive files create --json '{"name":"<doc title>","mimeType":"application/vnd.google-apps.document"}' --upload <short-name>.docx --upload-content-type "application/vnd.openxmlformats-officedocument.wordprocessingml.document" --format json | tail -10` — the `pipefail` is load-bearing: without it `tail` swallows a failed upload and the command still exits 0.
 6. **Return the URL.** `https://docs.google.com/document/d/<id>/edit` — give the user that link.
 7. **Clean up local artifacts.** `rm ~/build_<short-name>.py ~/<short-name>.docx`
@@ -50,9 +55,9 @@ The fastest path for a builder asking for a Google Doc:
 >   that print "Python was not found" and **exit 0** — a naive check passes while nothing
 >   runs. `install.ps1` installs Python 3.12 to that path *and* `python-docx` into it, so
 >   on a toolkit machine you usually don't need the `--target /tmp/pptx_deps` install at all.
-> - **Temp deps dir:** if you do need a target install, replace `/tmp/pptx_deps` with a
->   writable dir such as `%TEMP%\pptx_deps` (`$env:TEMP\pptx_deps`), and set `PYTHONPATH`
->   to it.
+> - **Deps dir:** if you do need a target install, use a durable user-owned dir —
+>   `$env:LOCALAPPDATA\nsls-pydeps` (not `$env:TEMP`, which Windows cleans the same way
+>   macOS cleans `/tmp`) — and set `PYTHONPATH` to it.
 > - **`gws --upload` cwd restriction still applies:** build the `.docx` in your home dir
 >   (`%USERPROFILE%`) and run `gws` from there — `--upload` rejects paths outside the cwd.
 > - Home paths: `~/build_<name>.py` → `$env:USERPROFILE\build_<name>.py`.
@@ -63,11 +68,20 @@ The fastest path for a builder asking for a Google Doc:
 > $py = "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe"
 > Copy-Item templates\build_doc.py "$env:USERPROFILE\build_mydoc.py"
 > cd $env:USERPROFILE
-> # EDIT build_mydoc.py FIRST: the template ships output_path = '/Users/k/your_doc_name.docx'
-> # (a macOS path). Set it to "$env:USERPROFILE\mydoc.docx" and customize the content
-> # sections. Run it unedited and it dies with FileNotFoundError on the missing /Users/k.
+> # EDIT build_mydoc.py FIRST: customize the content sections and the output filename.
+> # The template's default output_path (~/your_doc_name.docx) expands to the user
+> # profile on Windows too, so it saves in the right place unedited.
 > & $py build_mydoc.py           # produces mydoc.docx in the home dir
-> $gwsOut = gws drive files create --json '{"name":"My Doc","mimeType":"application/vnd.google-apps.document"}' --upload mydoc.docx --upload-content-type "application/vnd.openxmlformats-officedocument.wordprocessingml.document" --format json
+> # PS 5.1 CANNOT pass --json '{...}' directly: it strips the embedded double
+> # quotes at the native-command boundary, gws receives {name:My Doc,...} and
+> # fails with `key must be a string at line 1 column 2`. Escaping the quotes
+> # alone ALSO fails — the binder then skips quote-wrapping and the argument
+> # splits at the space in the title (`unexpected argument 'Doc' found`).
+> # Bypass the binder: escape quotes, park the JSON in an env var, and pass it
+> # after the stop-parsing token --% (only cmd-style %VAR% expands there — no
+> # $vars, pipes, or ; on that line):
+> $env:GWS_JSON = (@{ name = 'My Doc'; mimeType = 'application/vnd.google-apps.document' } | ConvertTo-Json -Compress) -replace '([\\]*)"','$1$1\"'
+> $gwsOut = gws drive files create --% --json "%GWS_JSON%" --upload mydoc.docx --upload-content-type "application/vnd.openxmlformats-officedocument.wordprocessingml.document" --format json
 > if ($LASTEXITCODE -ne 0) { throw "gws upload failed (exit $LASTEXITCODE)" }
 > $gwsOut | Select-Object -Last 10
 > ```
@@ -75,6 +89,14 @@ The fastest path for a builder asking for a Google Doc:
 > The `$LASTEXITCODE` check is the PowerShell equivalent of the `set -o pipefail` rule
 > above: piping `gws` straight into `Select-Object` swallows the exit code, so a 403 on
 > upload produces a clean-looking pipeline and you proceed as if the doc exists.
+
+## If `gws` auth is unavailable — use the Drive connector (CHECK THIS FIRST if upload fails)
+
+The Quick Start uploads via `gws`. On some machines `gws` is **not set up and can't be self-configured** (no creds, and the NSLS org blocks the GCP project/OAuth-client setup — `gws auth status` shows `auth_method: none`, or upload returns 401 `No credentials`). **`gws` being down does NOT mean you can't create a Doc.**
+
+**Fallback that works without `gws`:** the claude.ai **Drive MCP connector** converts `text/html` straight into a **native Google Doc** (real tables, headings, colors). Build the same content as styled **HTML** (inline `style=` for NSLS navy `#1A2B4A` headers + row banding, real `<table>`/`<h1>`/`<h2>`/`<ul>`) and call the connector's `create_file` with `textContent=<html>` and `contentMimeType: "text/html"`. The response's `mimeType` comes back `application/vnd.google-apps.document` with a `viewUrl` — that's the deliverable. HTML is plain text, so author it inline in the `create_file` call; there's no size problem.
+
+**Do NOT** try to push the built `.docx` through the connector: a docx is binary, its base64 is ~60K chars (too large to move inline, and Read truncates it), **and** the connector won't convert a docx — it'd land as a Word file. HTML is the path. The connector has no delete tool, so any throwaway probe file must be trashed by the user.
 
 ## NSLS Brand Constants
 
@@ -121,12 +143,16 @@ These are the wounds. Codified so we don't relive them.
 | `gws --upload` rejects `/tmp/foo.docx` | Error: `resolves to '/private/tmp/foo.docx' which is outside the current directory` | `cp /tmp/foo.docx ~/foo.docx && cd ~ && gws ...` |
 | `gws` mixes stderr into stdout | JSON parse fails on `Using keyring backend: keyring` line | Pipe through `tail -10` or `grep -v "keyring"` before parsing — **but put `set -o pipefail` first**, or the pipe hides gws failures (next row) |
 | A `gws` write "succeeds" but nothing changed | `\| tail`/`\| grep` makes the pipeline's exit status the *filter's* (always 0), so a 403/404 reads as success | `set -o pipefail` before any piped `gws` call, then verify by re-reading the resource. gws also returns a JSON `{"error":{...}}` body on **stdout** — check for an `error` key even on exit 0 |
-| `python3.14` venv broken on this machine | `pip install` succeeds but `import` fails | Use `python3.12 -m pip install --target /tmp/pptx_deps`; run with `PYTHONPATH=/tmp/pptx_deps python3.12 ...` (see MEMORY.md "Python / PPTX / DOCX Environment") |
+| `python3.14` venv broken on this machine | `pip install` succeeds but `import` fails | Use `python3.12 -m pip install --upgrade --target ~/.local/lib/nsls-pydeps`; run with `PYTHONPATH=~/.local/lib/nsls-pydeps python3.12 ...` (see MEMORY.md "Python / PPTX / DOCX Environment") |
+| Deps guard passes but the build explodes with `ImportError` | Guard tested `[ -d /tmp/pptx_deps/docx ]` — macOS `/tmp` cleanup deletes old *files* but leaves *dirs*, so the check passes on a gutted install | Guard on a real import (Quick Start step 2), and keep deps in the durable `~/.local/lib/nsls-pydeps` |
 | Custom brand fonts disappear after upload | Lexend / HW Cigars fall back to system default in Google Docs | Use Calibri for body. Brand expression comes from colors, not fonts. |
-| Table renders without borders in Google Docs | `table.style` not set | `table.style = 'Light Grid Accent 1'` (built-in name, gives borders) |
+| Table renders without borders in Google Docs | Cells lack explicit `w:tcBorders` — Google's importer **drops** the borders that `table.style` promises | The template's `add_table()` calls `set_cell_borders()` on every cell. If you build a table by hand, do the same — `table.style` alone will NOT survive import |
 | Header row text invisible | Black text on dark navy fill | Set `run.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)` after adding text |
 | Cell text appears twice | Forgot to clear default cell content before adding run | Always `cell.text = ''` before `cell.paragraphs[0].add_run(...)` |
 | Bullet list renders as plain paragraphs | Wrong style name | Use exact built-ins: `'List Bullet'` and `'List Number'` (case-sensitive, space included) |
+| Literal `"` inside a content string breaks the build | `SyntaxError: invalid syntax. Perhaps you forgot a comma?` on an `add_para`/`add_bullet`/`add_table` line | A straight `"` inside the Python string closes it early. Use curly quotes `“ ”` for quotes inside content (they render better in Google Docs anyway) or escape as `\"`. Easy to hit when content quotes a phrase, e.g. the `"school-official"` exception. |
+| `gws` upload fails (401 / no creds) and gws can't be set up | `Access denied. No credentials` from `gws`, and `gws auth setup` dies on GCP org-permission walls | Don't conclude you can't make a Doc. Use the Drive MCP connector + `text/html` → native Google Doc (see "If `gws` auth is unavailable" above). Don't go down the docx/base64 path. |
+| PowerShell 5.1 mangles `--json '{...}'` | `key must be a string at line 1 column 2` (quotes stripped), or `unexpected argument '...' found` once quotes are escaped (arg splits at spaces) | Never pass JSON to gws inline in PS 5.1 — quote-escaping alone still splits on spaces. Use the env-var + `--%` stop-parsing form from the Windows block above. Git Bash doesn't have the bug — which is exactly why it hides it. |
 | Pandoc-from-markdown was used | Tables look fine raw, render without borders / banding once in Google Docs | Don't. Build with python-docx. See `feedback_docx_pipeline` memory. |
 | Old draft URL piles up after iterations | Drive fills with `DRAFT v1`, `DRAFT v2`, etc. | Trash old drafts: `gws drive files update --params '{"fileId":"<old_id>"}' --json '{"trashed":true}'` |
 | Replacing canonical doc directly breaks shared link history | Shared URL changes if you delete + recreate | NEVER replace canonical content automatically. Always create a new draft, give the user the URL, let them copy-paste into the existing canonical doc. |
@@ -138,7 +164,7 @@ When the upload doesn't produce what you expected:
 **TRY:** Build → upload → open the resulting Google Doc.
 **OBSERVE:** Tables borderless? Headings flat? Cell shading missing? Bullets plain? Some content missing entirely?
 **DIAGNOSE:**
-- Borderless tables → `table.style` not set, OR table.style was set to a name that doesn't exist (typo). Stick to `'Light Grid Accent 1'` until you have reason to change.
+- Borderless tables → cells lack explicit `w:tcBorders`; Google's importer drops style-based borders. Use the template's `add_table()` (it calls `set_cell_borders()` on every cell) — `table.style` alone won't survive import.
 - Flat headings → using `doc.add_paragraph(text, style='Heading 1')` instead of `doc.add_heading(text, level=1)`. The latter is more reliable.
 - Missing cell shading → forgot the `OxmlElement('w:shd')` block, or applied it before `cell.text = ''`. Order matters.
 - Plain bullets → wrong style string. Must be exactly `'List Bullet'`.
@@ -150,7 +176,7 @@ For runtime errors:
 
 | Error | Cause | Fix |
 |---|---|---|
-| `ModuleNotFoundError: No module named 'docx'` | `PYTHONPATH` not set or pkg not installed | `python3.12 -m pip install python-docx --target /tmp/pptx_deps && PYTHONPATH=/tmp/pptx_deps python3.12 build.py` |
+| `ModuleNotFoundError: No module named 'docx'` | `PYTHONPATH` not set or pkg not installed | `python3.12 -m pip install --upgrade python-docx --target ~/.local/lib/nsls-pydeps && PYTHONPATH=~/.local/lib/nsls-pydeps python3.12 build.py`. **`--upgrade` is load-bearing** — without it pip sees the (damaged) package already present in the target, exits 0 without writing, and the next build raises the same `ImportError`. |
 | `python3.12: command not found` | Older system Python | Check `ls /usr/local/bin/python3.1*`; install via `brew install python@3.12` if missing |
 | gws CLI returns 401/403 | Auth expired | Re-auth via the gws login flow (this is `/gws`'s problem, not this skill's) |
 | gws upload "Bad Request" | Wrong `--upload-content-type` | For `.docx`, use exactly `application/vnd.openxmlformats-officedocument.wordprocessingml.document` |
@@ -214,5 +240,5 @@ The "Becoming a Builder at NSLS" onboarding doc draft v2, 2026-05-01. The first 
 | "It's just a draft, I won't bother trashing the old one." | Drive fills up; the user can't tell the latest. Trash old drafts in the same turn you create new ones. |
 | "I'll just edit the canonical doc directly via the API to save the user a copy-paste." | The canonical doc has formatting the human controls. Replacing programmatically nukes that. Always create a draft. |
 | "The cell text is showing twice but it'll probably be fine." | It won't. `cell.text = ''` before adding the run. |
-| "I'll set the table style later, the table itself works." | Without `table.style`, the table renders without borders in Google Docs. Set it when you create the table. |
+| "The built-in table style gives borders — I don't need per-cell borders." | Google's importer drops style-based borders; only explicit `w:tcBorders` on each cell survives. The template's `add_table()` sets them for you — don't strip that out. |
 | "I don't need to test the upload — the .docx looks fine in Word." | Word and Google Docs handle some elements differently. Verify by opening the actual Google Doc. |

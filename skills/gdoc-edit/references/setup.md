@@ -39,10 +39,19 @@ macOS/Linux placement snippet needs the same `python3` the doctor does.
 
 ### 1. Make sure `gws` is installed
 
-**macOS / Linux:**
+**macOS / Linux** — `install.sh` does this for you; if `gws --version` fails,
+this is the manual path. (The old `google-workspace-cli-installer.sh` script
+was retired upstream and its URL 404s — releases ship per-arch tarballs now.)
 ```bash
-gws --version || curl --proto '=https' --tlsv1.2 -LsSf \
-  https://github.com/googleworkspace/cli/releases/latest/download/google-workspace-cli-installer.sh | sh
+T="aarch64-apple-darwin"                                   # Apple Silicon
+[ "$(uname -m)" = "x86_64" ] && T="x86_64-apple-darwin"    # Intel Mac; Linux: use the *-unknown-linux-gnu assets
+D=$(mktemp -d) && cd "$D" \
+  && curl --proto '=https' --tlsv1.2 -fsSLO "https://github.com/googleworkspace/cli/releases/latest/download/google-workspace-cli-$T.tar.gz" \
+  && curl --proto '=https' --tlsv1.2 -fsSLO "https://github.com/googleworkspace/cli/releases/latest/download/google-workspace-cli-$T.tar.gz.sha256" \
+  && [ "$(shasum -a 256 "google-workspace-cli-$T.tar.gz" | awk '{print $1}')" = "$(awk '{print $1}' "google-workspace-cli-$T.tar.gz.sha256")" ] \
+  && tar -xzf "google-workspace-cli-$T.tar.gz" \
+  && mkdir -p ~/.local/bin && mv "$(find . -type f -name gws | head -1)" ~/.local/bin/gws && chmod +x ~/.local/bin/gws \
+  && ~/.local/bin/gws --version && echo "gws installed — make sure ~/.local/bin is on your PATH"
 ```
 
 **Windows** (the installer script above is bash-only). Download the release zip,
@@ -185,12 +194,17 @@ gws auth login --services docs,drive
 > `docs,drive`. `gws_doctor.py` does this arithmetic for you and is the preferred path
 > wherever Python works.
 
-A browser opens for Google consent. Because the app is **Internal**, only a real
-**`@nsls.org` Google Workspace account** can complete it — an **alias** address, or a
-personal/consumer Google account that merely *uses* an nsls.org address, is **refused**
-with an unhelpful error. `--services docs,drive` requests only the Docs + Drive scopes this
-skill needs — not the full Workspace surface. Your refresh token is stored **encrypted**
-inside the profile directory; you won't be asked again. (Builders who authed in the
+The command **prints a consent URL and starts a local listener** — on Windows it
+does not open a browser itself, and on Mac don't assume it did. If you're driving
+this for a builder: run it in the background, read the URL from its output, open
+it (`open "<url>"` / `Start-Process "<url>"`) **and** print it as a clickable
+link. The URL is single-use — mint a fresh one on any retry. Because the app is
+**Internal**, only a real **`@nsls.org` Google Workspace account** can complete
+consent — an **alias** address, or a personal/consumer Google account that merely
+*uses* an nsls.org address, is **refused** with an unhelpful error.
+`--services docs,drive` requests only the Docs + Drive scopes this skill needs —
+not the full Workspace surface. Your refresh token is stored **encrypted** inside
+the profile directory; you won't be asked again. (Builders who authed in the
 default dir before profiles existed re-consent once here — ~20 seconds; their old
 credentials are left untouched.)
 

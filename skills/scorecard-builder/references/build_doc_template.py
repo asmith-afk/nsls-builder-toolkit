@@ -4,9 +4,9 @@ USAGE
   1. cp this file to ~/build_<name>_scorecard.py
   2. Fill the BODY section (marked ==== FILL THIS ====). Keep every uncertain
      value as a [bracket] — those are confirmed WITH the report, not by you.
-  3. PYTHONPATH=/tmp/pptx_deps python3.12 ~/build_<name>_scorecard.py
+  3. PYTHONPATH="$HOME/.local/lib/nsls-pydeps:/tmp/pptx_deps" python3.12 ~/build_<name>_scorecard.py
      (if import fails: python3.12 -m pip install --upgrade --force-reinstall \
-      python-docx --target /tmp/pptx_deps -q)
+      python-docx --target ~/.local/lib/nsls-pydeps -q)
      The script derives the output filename from NAME (e.g. ~/chelsea_byers_scorecard.docx)
      and PRINTS both commands you need — upload, then the REQUIRED HR share.
   4. Run the printed STEP 1 upload command (it fills in the right filename):
@@ -28,8 +28,9 @@ Helpers below produce real Word elements that survive .docx -> Google Doc
 conversion. add_runs() parses mini-markdown inside any paragraph or table cell:
 **bold**, *italic*, `code`, and \\n line breaks.
 """
-import sys, re
-sys.path.insert(0, '/tmp/pptx_deps')
+import os, sys, re
+sys.path.insert(0, '/tmp/pptx_deps')  # legacy location — /tmp cleanup can gut it
+sys.path.insert(0, os.path.expanduser('~/.local/lib/nsls-pydeps'))  # durable home, wins
 from docx import Document
 from docx.shared import Pt, RGBColor, Cm
 from docx.enum.table import WD_TABLE_ALIGNMENT, WD_ALIGN_VERTICAL
@@ -46,6 +47,17 @@ def set_cell_bg(cell, color_hex):
     shd = OxmlElement('w:shd'); shd.set(qn('w:val'), 'clear')
     shd.set(qn('w:color'), 'auto'); shd.set(qn('w:fill'), color_hex)
     tcPr.append(shd)
+
+def set_cell_borders(cell, color='BFBFBF', size='6'):
+    # Explicit per-cell borders: Google's .docx importer DROPS the borders the
+    # built-in table.style promises, so style-only tables land borderless.
+    tcPr = cell._tc.get_or_add_tcPr()
+    borders = OxmlElement('w:tcBorders')
+    for edge in ('top', 'left', 'bottom', 'right'):
+        b = OxmlElement(f'w:{edge}')
+        b.set(qn('w:val'), 'single'); b.set(qn('w:sz'), size); b.set(qn('w:color'), color)
+        borders.append(b)
+    tcPr.append(borders)
 
 TOKEN = re.compile(r'(\*\*.+?\*\*|`.+?`|\*.+?\*)', re.S)
 
@@ -95,7 +107,7 @@ def rich_table(headers, rows, widths=None, mono_first=False):
         c = t.rows[0].cells[i]; c.text = ''
         r = c.paragraphs[0].add_run(h)
         r.bold = True; r.font.color.rgb = RGBColor(*P["header_fg"]); r.font.size = Pt(10)
-        set_cell_bg(c, P["header_bg"]); c.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+        set_cell_bg(c, P["header_bg"]); set_cell_borders(c); c.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
     for ri, rowdata in enumerate(rows):
         cells = t.add_row().cells
         bg = P["row_band"] if ri % 2 == 0 else 'FFFFFF'
@@ -105,7 +117,7 @@ def rich_table(headers, rows, widths=None, mono_first=False):
             if mono_first and i == 0:
                 for r in cells[i].paragraphs[0].runs:
                     r.font.name = 'Consolas'
-            set_cell_bg(cells[i], bg); cells[i].vertical_alignment = WD_ALIGN_VERTICAL.TOP
+            set_cell_bg(cells[i], bg); set_cell_borders(cells[i]); cells[i].vertical_alignment = WD_ALIGN_VERTICAL.TOP
     if widths:
         for i, w in enumerate(widths):
             for c in t.columns[i].cells:

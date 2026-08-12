@@ -138,6 +138,7 @@ Write-Host ""
 Write-Host "Step 0: Prerequisites (Python, gws, Node)..."
 $PrereqReport = @()
 $HasWinget = [bool](Get-Command winget -ErrorAction SilentlyContinue)
+$IsElevated = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 $PyExe  = Join-Path $env:LOCALAPPDATA 'Programs\Python\Python312\python.exe'
 $GwsDir = Join-Path $env:LOCALAPPDATA 'Programs\gws'
 $GwsExe = Join-Path $GwsDir 'gws.exe'
@@ -175,10 +176,20 @@ if (-not (Test-Path $GwsExe) -and -not (Get-Command gws -ErrorAction SilentlyCon
 if (Test-Path $GwsExe) { Add-ToUserPath $GwsDir }
 
 # --- (c) Node.js LTS - the signal MCP server runs on it ---
+# This winget package needs elevation. From an interactive human shell winget
+# raises a UAC prompt and can succeed; from a NON-interactive shell (an
+# agent-driven install) the UAC prompt never reaches the screen and winget
+# fails with exit 1602. Attempt it, but CAPTURE the outcome - the report below
+# must give the real remedy (elevated shell), never re-suggest the same
+# command that just failed.
+$NodeInstallExit = $null
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
     if ($HasWinget) {
-        Write-Host "  Installing Node.js LTS..."
-        try { winget install --id OpenJS.NodeJS.LTS -e --source winget --accept-source-agreements --accept-package-agreements 2>$null | Out-Null } catch {}
+        Write-Host "  Installing Node.js LTS (a UAC prompt may appear - click Yes)..."
+        try {
+            winget install --id OpenJS.NodeJS.LTS -e --source winget --accept-source-agreements --accept-package-agreements 2>$null | Out-Null
+            $NodeInstallExit = $LASTEXITCODE
+        } catch { $NodeInstallExit = -1 }
         # winget writes Node onto the machine PATH; refresh this session's PATH
         # so the verify below (and Step 3.5) can see it without a reopen.
         $mp = [Environment]::GetEnvironmentVariable('Path','Machine')
@@ -208,7 +219,33 @@ if ($NodeCmd) {
     if ($nodeVer -match 'v\d') { $PrereqReport += "  [ok]   Node: $nodeVer" }
     else { $PrereqReport += "  [warn] Node present but 'node --version' failed - reopen PowerShell and retry." }
 } else {
-    $PrereqReport += "  [warn] Node.js not installed - the signal MCP server needs it. Install: winget install OpenJS.NodeJS.LTS"
+    # Blocking action item, not a passing warn: without Node, /signal-setup
+    # fails and the day-planner dashboard (the Step 7 payoff) stays locked.
+    $PrereqReport += "  [ACTION NEEDED] Node.js is not installed - /signal-setup and the day-planner dashboard won't work without it."
+    # $NodeInstallExit distinguishes "needs elevation" (retry as admin will work)
+    # from any other winget failure (download error, source error, package not
+    # found) where re-running the identical command as admin changes nothing.
+    # Surface the code and route to the manual installer in that case, rather
+    # than prescribing a retry that already failed.
+    $NodeRetryWorthwhile = $true
+    if ($NodeInstallExit -eq 1602) {
+        $PrereqReport += "                  The automatic install failed (winget 1602): it needs an elevation prompt this shell can't show."
+    } elseif ($null -ne $NodeInstallExit -and $NodeInstallExit -ne 0) {
+        $PrereqReport += "                  The automatic install failed (winget exit $NodeInstallExit) - not an elevation problem, so re-running it as administrator won't help."
+        $NodeRetryWorthwhile = $false
+    } elseif (-not $IsElevated) {
+        $PrereqReport += "                  Installing it needs an administrator PowerShell."
+    }
+    if ($NodeRetryWorthwhile -and $HasWinget) {
+        $PrereqReport += "                  Open one: Start -> type 'powershell' -> right-click Windows PowerShell -> Run as administrator. Then run:"
+        $PrereqReport += "                  winget install --id OpenJS.NodeJS.LTS -e --source winget"
+    } else {
+        $PrereqReport += "                  Download Node LTS from https://nodejs.org and run the installer (no winget needed)."
+        if (-not $HasWinget) {
+            $PrereqReport += "                  (This machine has no winget, so that's the only path.)"
+        }
+    }
+    $PrereqReport += "                  Afterwards restart Claude Code and run /signal-setup."
 }
 
 # (d) MS Visual C++ x64 runtime - gws.exe (a Rust/MSVC binary) needs it or it
