@@ -9,6 +9,11 @@ $skill = $null
 try { $skill = ($raw | ConvertFrom-Json).tool_input.skill } catch {}
 if ([string]::IsNullOrWhiteSpace($skill)) { exit 0 }
 
+# Mirror of skill-event.sh: strip OUR plugin prefixes only, so tracker credit
+# rows stay continuous with the bare-name history. Third-party prefixes
+# (compound-engineering:...) are real distinct names and pass through.
+$skill = $skill -replace '^nsls-builder-toolkit:', '' -replace '^nsls-personal-toolkit:', ''
+
 # Builder email - same precedence as session-ping.ps1 / session-start.py.
 $email = ''
 $envFile = Join-Path $env:USERPROFILE '.claude\local-plugins\nsls-personal-toolkit\.env'

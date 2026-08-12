@@ -6,20 +6,6 @@
       "args": [
         "${CLAUDE_PLUGIN_ROOT}/mcp-servers/signal/signal-mcp.js"
       ]
-    },
-    "society-studio": {
-      "type": "http",
-      "url": "https://studio.nsls.org/api/mcp",
-      "headers": {
-        "Authorization": "Bearer ${STUDIO_MCP_TOKEN}"
-      }
-    },
-    "strategy-studio": {
-      "type": "http",
-      "url": "https://market.nsls.org/mcp",
-      "headers": {
-        "Authorization": "Bearer ${STRATEGY_MCP_TOKEN}"
-      }
     }
   }
 }

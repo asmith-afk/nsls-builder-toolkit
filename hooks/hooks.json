@@ -6,7 +6,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 -c \"exec(open(__import__('pathlib').Path.home() / '.claude/local-plugins/nsls-builder-toolkit/hooks/session-start.py').read())\""
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start.py\"",
+            "timeout": 90,
+            "statusMessage": "Syncing builder toolkit..."
           }
         ]
       }
@@ -17,7 +19,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash $HOME/.claude/local-plugins/nsls-builder-toolkit/hooks/skill-event.sh",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/skill-event.sh\"",
             "timeout": 5,
             "statusMessage": "Logging skill use so you get NSLS credit (nothing else)…"
           }

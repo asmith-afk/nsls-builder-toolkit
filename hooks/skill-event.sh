@@ -27,6 +27,13 @@ SKILL_NAME=$(printf '%s' "$INPUT" | sed -n 's/.*"skill"[[:space:]]*:[[:space:]]*
 
 [ -z "$SKILL_NAME" ] && exit 0
 
+# Plugin-installed toolkits namespace their skills (nsls-builder-toolkit:gws).
+# Strip OUR prefixes only, so tracker credit rows stay continuous with the
+# years of bare-name history. Third-party prefixes (compound-engineering:…)
+# are real distinct names and pass through untouched.
+SKILL_NAME=${SKILL_NAME#nsls-builder-toolkit:}
+SKILL_NAME=${SKILL_NAME#nsls-personal-toolkit:}
+
 # Find builder email (same precedence as session-start.py). Respect
 # CLAUDE_CONFIG_DIR so a --test install reads its own (absent) .env instead of
 # the real user's — keeping test skill events off the real builder's row.
