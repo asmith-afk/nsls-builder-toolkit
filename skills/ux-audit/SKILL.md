@@ -1,11 +1,24 @@
 ---
 name: ux-audit
-description: Conduct a heuristic UX audit of a web page, Figma frame, screenshot, or HTML snippet, OR run a Design Validation Layer that predicts member reaction to a proposed change before it ships. Produces (1) a Predicted SUS estimate against the 10 System Usability Scale dimensions, (2) findings against 21 Laws of UX, (3) WCAG 2.1 A/AA accessibility checks, (4) brand-style findings against NSLS or Society brand guidelines, and (5) optionally, a Design Validation readout — surface-area map, past-test cross-reference, member-fit persona panel, DESIGN.md alignment, and three views of impact confidence. Use when the user wants a UX review, usability audit, accessibility audit, brand audit, heuristic evaluation, design critique, or pre-test design validation. Audit triggers include "audit this", "review the UX of", "is this accessible", "WCAG check", "predict SUS", "heuristic eval", "brand audit", or pasting a URL / Figma link / screenshot with audit intent. Design-validation triggers include "validate this design", "design validate", "/design-validate", "QA this change", "predict member reaction", "what will members think", "is this safe to test", "test this hypothesis". Especially relevant for NSLS enrollment pages and Figma frames in the EE sprint.
+description: Conduct a heuristic UX audit of a web page, Figma frame, screenshot, or HTML snippet, OR run a Design Validation Layer that predicts member reaction to a proposed change before it ships. Produces (1) a Predicted SUS estimate against the 10 System Usability Scale dimensions, (2) findings against 21 Laws of UX, (3) WCAG 2.1 A/AA accessibility checks, (4) brand-style findings against NSLS or Society brand guidelines, and (5) optionally, a Design Validation readout — surface-area map, past-test cross-reference, member-fit persona panel, DESIGN.md alignment, and three views of impact confidence. Use when the user wants a UX review, usability audit, accessibility audit, brand audit, heuristic evaluation, design critique, or pre-test design validation. Audit triggers include "audit this", "review the UX of", "is this accessible", "WCAG check", "predict SUS", "heuristic eval", "brand audit", or pasting a URL / Figma link / screenshot with audit intent. Design-validation triggers include "validate this design", "design validate", "/design-validate", "QA this change", "predict member reaction", "what will members think", "is this safe to test", "test this hypothesis". Runs in two modes: full (all four layers plus optional Design Validation) or QA (usability + UX + accessibility + functional build quality — links resolve, responsive breakpoints, console errors, tap targets, form error states, semantic landmarks, code readiness — with no brand layer and no member research). QA-mode triggers include "QA this page", "QA this build", "is this ready to ship", "check the responsive behavior", "build-quality pass", "ux qa", or a call from /page-qa. Especially relevant for NSLS enrollment pages and Figma frames in the EE sprint.
 ---
 
 # UX Audit Skill
 
-Heuristic expert review covering four layers: SUS (usability), Laws of UX (design principles), WCAG 2.1 A/AA (accessibility), and brand-style alignment (NSLS or Society). This is **expert review, not user testing**. Findings predict where users will struggle; they don't measure where they actually struggled.
+Heuristic expert review covering four layers: SUS (usability), Laws of UX (design principles), WCAG 2.1 A/AA (accessibility), and brand-style alignment (NSLS or Society) — plus a functional-QA layer in QA mode. This is **expert review, not user testing**. Findings predict where users will struggle; they don't measure where they actually struggled.
+
+## Modes — pick one in Step 1
+
+| Mode | Layers | Use when |
+|---|---|---|
+| **Full** (default) | SUS · Laws of UX · WCAG · **Brand** · optional behavioral data + Design Validation | design review, pre-test validation, anything brand-facing |
+| **QA** | SUS · Laws of UX · WCAG · **Functional QA** — no brand, no member research | a build-quality pass before handoff or merge, and every call from `/page-qa` |
+
+Treat it as **QA mode** when the request says "QA this page", "QA this build", "is this ready to ship", "check the responsive behavior", "build-quality pass", or when the caller is `/page-qa`. Say which mode you're running in the report header.
+
+**QA mode adds a fifth lens the heuristic layers cannot cover: does the thing actually work?** A page can pass SUS, Laws of UX, and WCAG and still ship a dead CTA, a layout that collapses at 768px, a form with no error state, or console errors. Read `references/qa-checks.md` and prefix those findings `QA.<area>`.
+
+**QA mode deliberately drops brand and member research — do not improvise them.** No font, palette, or voice findings; no personas, past A/B outcomes, sentiment, or behavioral analytics. If a finding depends on brand rules or on what a past test showed, say so and note that full mode covers it, rather than guessing. In the pre-output gate and failure-mode catalog, skip **F2** (proxy fonts) and **F3** (validated wins) — both are brand/research-dependent — and apply every other entry.
 
 ## What this skill is NOT a substitute for
 
@@ -32,14 +45,14 @@ Before presenting ANY mockup, change, or design output to the user, verify each 
 4. **Rejected patterns avoided** — scan against the rejected list in encoded-principles.md.
 5. **Web/mobile parity** — same content on both platforms unless there's an explicit user-facing reason to differ. No truncated bullets, no dropped links/pricing on mobile.
 6. **Adjacent visual distinction** — for component groups (payment buttons, social pills, CTA pairs), confirm each can be told apart at a one-second glance.
-7. **Heading hierarchy — count AND order.** Count h1=1 with `grep -oE "<h[1-6]" <file> | sort | uniq -c`. **Also** verify no levels skipped in document order — h1 → h3 without h2, or h2 → h4 without h3, fails WCAG 1.3.1. Use Python: `grep -oE "<h[1-6]" file` then walk and flag any `level > last + 1`. Gate-item-7 fails by ORDER even when COUNT passes — see F11 in failure-modes.
+7. **Heading hierarchy — count AND order.** Count h1=1 with `grep -oE "<h[1-6]" <file> | sort | uniq -c`. **Also** verify no levels skipped in document order — h1 → h3 without h2, or h2 → h4 without h3. Use Python: `grep -oE "<h[1-6]" file` then walk and flag any `level > last + 1`. Gate-item-7 fails by ORDER even when COUNT passes — see F11 in failure-modes. Report both the single-`<h1>` and unskipped-levels items as **best practice**: neither is required by WCAG at any level, so don't cite 1.3.1 as failed. The genuine 1.3.1 failure to hunt alongside them is a visual heading marked up as a styled `<div>`/`<p>`, which keeps the structure out of the accessibility tree entirely.
 8. **Real assets > placeholders** — check `~/Downloads/`, `~/Documents/`, `~/Desktop/` for any real asset (logos, badges, photos) before falling back to styled placeholders.
 9. **Terminology accuracy** — domain terms (induction, membership, FOL, dashboard) verified against `references/nsls-context.md` for the specific funnel moment they appear at.
 10. **No orphan references** — after any removal/change, grep for stale references to removed elements; rationale blocks + legend sections + TOCs are consistent with current state. ALSO grep stylesheet for orphan CSS class definitions whose HTML consumers were removed (F13).
-11. **Responsive breakpoint logic (code-ready)** — for any design claimed as production-ready: real `@media` queries on CONTENT, not just doc-wrapper stacking. At minimum: mobile (≤767px), tablet (768-1023px), desktop (≥1024px). If the design is a demonstration (side-by-side device frames), it MUST include an explicit breakpoint specification annotation block so engineers have unambiguous intent. See F14.
-12. **Form error/invalid states** — if the design includes forms, error/invalid states must be defined: `.error` or `:invalid` CSS, error-message containers, `aria-invalid` + `aria-describedby` linking error text to the failing input. Happy-path-only forms fail WCAG 3.3.1 + 3.3.3. See F16.
+11. **Responsive behaviour (code-ready)** — for any design claimed as production-ready: the CONTENT adapts (not just doc-wrapper stacking) at mobile (≤767px), tablet (768-1023px), desktop (≥1024px) — reflow, no clipping, no sideways scroll. `@media` queries are the usual mechanism, but a fluid or container-query layout can pass every width with none; judge the rendered outcome, not the presence of rules. If the design is a demonstration (side-by-side device frames), it MUST include an explicit breakpoint specification annotation block so engineers have unambiguous intent. See F14.
+12. **Form error/invalid states** — if the design includes forms, error/invalid states must be defined: `.error` or `:invalid` CSS, error-message containers, `aria-invalid` + `aria-describedby` linking error text to the failing input. Missing these is a house-standard finding; it rises to a 3.3.1 failure only where the form automatically detects an error and doesn't describe it in text, and 3.3.3's suggestion requirement applies only when a safe, known correction exists. Don't assert either against a static mockup with no demonstrated validation. See F16.
 13. **Semantic landmarks + ARIA form attrs** — exactly one `<main>` landmark wrapping content. `aria-required` on required form fields. `aria-describedby` linking helper text to inputs. `aria-live` regions for status messages (payment confirmation, error toasts). See F17.
-14. **Code-readiness (low inline styles, tokenized colors, fluid units)** — inline `style="..."` attributes < 10. Color values use `var(--token)` references where the value is a brand or semantic color; hex literals reserved for one-off brand marks (Apple/Google/PayPal logos). Critical typography + spacing in `rem` (not px) to support WCAG 1.4.4 user text scaling. See F15, F18, F19.
+14. **Code-readiness (low inline styles, tokenized colors, fluid units)** — inline `style="..."` attributes < 10. Color values use `var(--token)` references where the value is a brand or semantic color; hex literals reserved for one-off brand marks (Apple/Google/PayPal logos). Critical typography + spacing in `rem` (not px). This is a **house standard**, not a 1.4.4 failure — browser zoom scales `px` text, so a `px` page normally passes 1.4.4. The real gain from `rem` is respecting the user's browser font-size preference, which zoom doesn't cover. File 1.4.4 only on observed loss at 200% (clipping, overlap, a control scrolled out of reach). See F15, F18, F19.
 
 The full failure-mode catalog (calibrated against real session failures) is in `references/design-validate-failure-modes.md` — read it before output.
 
@@ -119,8 +132,9 @@ Mobile Figma frames at iPhone width (393px) often render at small image dimensio
 | SUS estimate | `references/sus-dimensions.md` |
 | Laws of UX | `references/laws-of-ux.md` |
 | WCAG | `references/wcag-21-AA.md` |
-| Brand — NSLS | `references/brand-nsls.md` |
-| Brand — Society | `references/brand-society.md` |
+| Brand — NSLS (full mode only) | `references/brand-nsls.md` |
+| Brand — Society (full mode only) | `references/brand-society.md` |
+| Functional QA (QA mode) | `references/qa-checks.md` |
 | Severity (always) | `references/severity-rubric.md` |
 | NSLS audience context (if NSLS member-facing page) | `references/nsls-context.md` |
 | Design Validation Layer (Step 6, any design output) | `references/design-validate-surfaces.md`, `design-validate-personas.md`, `design-validate-confidence.md`, `design-validate-hubspot-retrieval.md`, `design-validate-encoded-principles.md` |
@@ -146,7 +160,8 @@ The Layer prefix tells the reader which lens the finding came from:
 - `SUS-N` (e.g., `SUS-3` = "Easy to use" item)
 - `LoUX.<Law>` (e.g., `LoUX.Hick`, `LoUX.Fitts`, `LoUX.Jakob`)
 - `WCAG.<criterion>` (e.g., `WCAG.1.4.3`, `WCAG.3.3.4`)
-- `Brand.<area>` (e.g., `Brand.typography`, `Brand.color`, `Brand.logo`, `Brand.voice`)
+- `Brand.<area>` (e.g., `Brand.typography`, `Brand.color`, `Brand.logo`, `Brand.voice`) — full mode only
+- `QA.<area>` (e.g., `QA.links`, `QA.responsive`, `QA.forms`, `QA.code`) — QA mode only
 
 ### Step 5 (optional) — Layer in behavioral data
 
@@ -278,7 +293,7 @@ If the user wants a real SUS survey, use `templates/sus-instrument.md`.
 ## WCAG 2.2 considerations
 
 This skill covers WCAG 2.1 A + AA. WCAG 2.2 added 9 criteria; three are relevant to enrollment:
-- **2.5.8 Target Size (Minimum)** — AA — 24×24 CSS px minimum
+- **2.5.8 Target Size (Minimum)** — AA — 24×24 CSS px minimum, subject to five exceptions (spacing, inline, equivalent control, user-agent-determined, essential). Rule them out before calling an undersized target a failure — body-copy links and well-separated small controls conform. Detail in `references/qa-checks.md` → QA.targets.
 - **3.3.7 Redundant Entry** — A — don't re-ask info already entered
 - **3.3.8 Accessible Authentication (Minimum)** — AA — no cognitive function tests for login
 
