@@ -5,10 +5,12 @@ description: >-
   portfolio pipeline behind market.nsls.org. The front door that shows what's
   already in flight and hands off to the right tool for wherever a bet sits in
   its lifecycle: capturing a new idea, researching one, planning its economics,
-  reviewing the portfolio, or tracking a live bet's experiments. Triggers: "bet
-  studio", "strategy studio", "business bet", "work on a bet", "new business
-  idea", "show the portfolio", "stack rank the bets", "what bets are we
-  running".
+  reviewing the portfolio, tracking a live bet's experiments, or reading the
+  competition grid. Triggers: "bet studio", "strategy studio", "business bet",
+  "work on a bet", "new business idea", "show the portfolio", "stack rank the
+  bets", "what bets are we running", "competition grid", "who are we up
+  against", "who else does this", "where is the blue ocean", "how do we
+  compete with", "show me the competitors".
 ---
 
 # bet-studio
@@ -16,7 +18,8 @@ description: >-
 ## SAFETY: THREE-TIER PERMISSION MODEL
 
 1. **Read-only** — `list_bets`, `get_stack_rank`, `get_bet`, `list_taxonomy`,
-   `list_moves`. Everything this skill does. Free, no confirmation needed.
+   `list_moves`, `list_competitors`, `get_competition_grid`, `get_competitor`.
+   Everything this skill does. Free, no confirmation needed.
 2. **Configuration / new-content** — none. This skill is a **router**; it never
    drafts canvas content, sections, or scores itself. Any authoring happens in
    the sub-skill it hands off to, under that skill's own tier for it.
@@ -46,13 +49,15 @@ lifecycle question, reads the live portfolio, and hands off — the real work
 | **Plan economics / proof plan** | `bet-plan` (2026–2028 model with downside/base/upside, execution & risk, sell-first channel-aware experiment with three thresholds, adversarial review loop — drives the planned→live gate; hand off with `get_bet` context) | Planned → Live |
 | **Portfolio review** | *Phase 5 `bet-review` — not built.* Interim: render the stack rank + portfolio overview yourself — `get_stack_rank` plus `list_bets` (see `references/portfolio-views.md`) — then drill into `get_bet` only for the 1–3 bets the human picks, to check that bet's status update and flag invalidated assumptions. Per-bet health across the whole board arrives with the Phase 3 UI / a future bulk endpoint — the engine has no bulk status tool today, so don't loop `get_bet` over the full portfolio. | n/a (cross-cutting) |
 | **Run experiments** | *Phase 5 `bet-run` — not built.* Interim: say plainly it's coming. | Live → Running → Scaling |
+| **"Who are we up against?" / "where's the blue ocean?"** | Cross-bet, not a single bet — call `get_competition_grid` and render `/strategy/competition`: jobs down, companies across (status quo pinned first), with `blue_ocean` computed per job. Read it on one side at a time (`side: "b2b"` \| `"b2c"`) when the market is two-sided — a company can own the institution's budget and barely touch the student experience, and the merged view cannot tell you which. Cell states: `covered` (validated) \| `provisional` (hypothesis only) \| `open-water` (assessed absent) \| `unassessed`. **`unassessed` is not opportunity** — it means nobody looked, and the honest answer is "that's a research gap," not "that's open water." Drill into a company with `get_competitor`; if its `freshness` is `stale` or `never`, say so before anyone leans on it. Competitor pages GROW OUT OF `bet-research` — route there rather than authoring here, and route on three triggers, not one: a company that is **missing**, a page that is **stale/never reviewed**, or — the one the grid makes visible and nobody thinks to look for — a company **covering a job one of your bets delivers with no stance on record**. Read that last one off the row: the bet-overlay chips say which bets deliver the job, the cells say who covers it, and `get_bet`'s `competitors` array says whether a stance exists. A fresh page with no stance is a real gap that looks like nothing. | n/a (cross-cutting) |
 | **"What should I work on?"** | Cross-bet to-dos, not a single bet — call `list_moves` and render `/strategy/moves` (todo/active first). A **move** is one piece of work that advances more than one bet at once ("build once, deploy everywhere" — e.g. one lead scrape + campaign to career-services buyers that serves several bets' hypotheses through relationships we already have). Point the builder at the move's linked bets and owner before routing anywhere else. | n/a (cross-cutting) |
 
 ## Flow
 
 1. **Ask the lifecycle question:** *"What would you like to do — add an idea,
    research a bet, plan its economics, review the portfolio, track a live
-   bet's experiments, or see what cross-bet moves are ready to pick up?"*
+   bet's experiments, see the competition grid, or see what cross-bet moves
+   are ready to pick up?"*
 2. **Show the live portfolio** (skip only when adding a brand-new idea with
    nothing to compare against). Call `get_stack_rank` for active bets and
    `list_bets` for the graveyard, grouped by stage cohort with each bet's
@@ -101,6 +106,9 @@ Kevin, SLT authors only) and suggest running `/connect`.
 
 - It does not draft, interrogate, score, or review — it routes. Each sub-skill
   owns its work.
+- It does not author competitor pages. Reading the grid is routing; filling a
+  stale or missing page is `bet-research`'s competition dimension, where the
+  findings arrive with evidence attached.
 - It does not write to the engine — reads only, always.
 - It is not the dashboard — for the visual portfolio, that's `market.nsls.org`.
 
@@ -109,3 +117,5 @@ Kevin, SLT authors only) and suggest running `/connect`.
   the stack rank, stage grouping, and graveyard.
 - Hand-off targets: `bet-idea`, `bet-research`, `bet-plan` (built);
   `bet-review`, `bet-run` (Phase 5, not yet built).
+- Competitor pages and the competition grid live at `/strategy/competition`;
+  they are written by `bet-research`, and read here.

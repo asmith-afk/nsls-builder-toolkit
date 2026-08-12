@@ -9,7 +9,9 @@ description: >-
   against the bet", "size the market for", "who should we talk to about",
   "target shortlist", "roadshow sprint", "is anyone actually paying for
   this", "validate the bet", "resume research on", "commercialization
-  research".
+  research", "research a competitor", "what do we know about <company>",
+  "add a competitor", "update the competitor page", "does anyone cover this
+  job".
 ---
 
 # bet-research
@@ -17,14 +19,20 @@ description: >-
 ## SAFETY: THREE-TIER PERMISSION MODEL
 
 1. **Read-only** — `get_bet`, `list_assumptions`, `list_bets`,
-   `list_taxonomy`, `size_segment`, `target_shortlist`, `get_stack_rank`.
+   `list_taxonomy`, `size_segment`, `target_shortlist`, `get_stack_rank`,
+   `list_competitors`, `get_competitor`, `get_competition_grid`.
    Free, no confirmation needed.
 2. **Configuration / new-content** — `log_evidence`, `update_section`
    (`market.*`/`econ.*` on this bet), `upsert_assumption`,
    `resolve_assumption`, `score_rubric`, `upsert_move`, `link_move_bet`,
-   `log_move_evidence`. Say out loud what's being written as you go — which
-   field or evidence kind, what tag or grade, or which bets a move links —
-   no per-call confirmation.
+   `log_move_evidence`, `upsert_competitor`, `update_competitor_section`,
+   `map_competitor_job`, `link_competitor_bet`, `tag_evidence_competitor`,
+   `mark_competitor_reviewed`. Say out loud what's being written as you go —
+   which field or evidence kind, what tag or grade, which bets a move links,
+   or which company a claim lands on — no per-call confirmation.
+   **Competitor pages are shared across bets**, so announce a page you create
+   (`log_evidence` and `tag_evidence_competitor` return `created_stub: true`)
+   the same way you announce a section write.
 3. **Write to shared systems** — `save_targets` (names real schools onto a
    rep-visible call list), `advance_stage`, `set_status`, `upsert_taxonomy`.
    **Confirm the exact values with the human before writing.**
@@ -145,6 +153,18 @@ order. Each dimension ends with sections written under an honest tag,
 evidence logged where applicable, and — where it resolves an assumption —
 `resolve_assumption` called with the evidence id linked.
 
+**Competition is company-scoped.** Read the existing competitor pages before
+researching anything: a `fresh` page is a colleague's finished work, and
+re-deriving it is the waste this axis exists to end. New findings land on the
+company page (memo sections, coverage claims, stance) with `market.alternatives`
+keeping only this bet's synthesis. Record `absent` coverage explicitly — a
+missing claim reads as unassessed, not as open water.
+
+Freshness excuses re-deriving the **memo**, never the **per-bet layer**: a
+fresh page still needs `map_competitor_job` coverage and a `link_competitor_bet`
+stance for THIS bet, plus the bet's own `market.alternatives`. Skip those and
+the bet reads as having no competitors at all.
+
 Heartbeat each dimension: *"sizing next because assumption #1 is
 market-risk…"* Never silently batch through all five.
 
@@ -258,7 +278,9 @@ point at `/connect` or the README's Strategy Studio setup section
   channels: who to talk to, the four forces, the anti-sycophancy and grading
   rules, the `log_evidence` recipe.
 - `references/self-serve-research.md` — the five self-serve dimensions,
-  exact tool recipes, where each lands, the `econ.*` first-draft rule.
+  exact tool recipes, where each lands, the `econ.*` first-draft rule, and
+  the company-scoped competition recipe (read-before-research, the five memo
+  sections, coverage claims, per-side stances).
 - `references/gate-progress.md` — the research→planned checklist
   (transcribed from the engine's `gates.ts`), the never-probe rule, the
   rendering format.
@@ -278,4 +300,9 @@ point at `/connect` or the README's Strategy Studio setup section
 | "The econ page can stay thin, `bet-plan` will fill it in." | The gate checks `econ.*` non-empty NOW. Draft honest first-cut estimates before moving on. |
 | "It's an internal tool everyone here loves, that's demand." | Internal enthusiasm is `interest`, never market demand — even on a dogfood bet, external evidence has to climb the same ladder. |
 | "The rubric's been low confidence forever, I'll just bump it to medium." | Confidence is earned by citable evidence rows, not scheduled to clear a gate. Cite the row or leave it low. |
+| "I'll just write the competitor findings into `market.alternatives`." | Then B-2, B-3 and B-9 each re-research the same company. Findings go on the company page; the bet keeps the synthesis. |
+| "I only log what competitors DO cover — the gaps are obvious." | A cell with no claim renders `unassessed`, never open water. Unlogged `absent` findings manufacture blank space nobody can act on. Record the negative. |
+| "There's already a page for them, I'll refresh the research anyway." | Check `freshness` first. A `fresh` page is a colleague's finished work — cite its evidence rows. Re-deriving it is exactly the waste this axis removes. |
+| "The page came back `fresh`, so I read it and moved on." | Freshness is a property of the company page, not of your bet. Coverage claims and the `link_competitor_bet` stance have never been made for THIS bet — skipping them leaves the bet's competition view empty, which renders identically to having no competitors. |
+| "One stance covers the bet, the b2b/b2c split can go in the note." | A note is not queryable and the bet page cannot show two stances. Pass `payer_type` when the sides genuinely differ. |
 | "Sizing's close enough, I won't flag the divergence." | A >3× top-down/bottom-up gap gets named out loud, with the assumption driving it — silence there just hides the riskiest number. |

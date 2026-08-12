@@ -7,21 +7,111 @@ order the assumption agenda demands (riskiest first), not the order below.
 
 ## 1. Competition
 
-Web research on alternatives, **including the status quo** — "keep doing the
-workaround" is a real competitor and usually the toughest one. For each
-alternative, capture: who it serves, pricing if public, why a buyer picks it,
-why they'd leave it.
+Competition research is **company-scoped, not bet-scoped**. Every finding
+lands on a competitor page that any other bet can read, and the bet keeps only
+its own synthesis. Research done here for one bet must not be work the next
+bet has to redo.
 
-Write findings to `market.alternatives`:
-- `evidence_tag: "estimate"` by default.
-- `evidence_tag: "data"` only for verifiable facts with sources cited
-  directly in the content — a pricing page URL, a review quote, a filed
-  document. Don't upgrade the tag just because the finding feels solid.
+### Read before you research
 
-Log each substantive finding as its own evidence row:
-```
-log_evidence(kind: "competitor", link: <source URL>, evidence_tag: "data"|"estimate")
-```
+`list_competitors` first — it returns each company's **`key`**, and that key
+(or the row's id) is what `get_competitor` accepts. It does NOT accept a display
+name: `get_competitor("PathwayU")` returns `competitor not found`, because the
+stored key is `pathwayu`. Take the key from the listing rather than guessing it
+from the name. (The WRITE tools are the opposite — `competitor_name` and
+`competitor_homepage` are exactly how you tag a company you have not looked up.)
+
+Then `get_competitor(<key or id>)` for anything already tracked. Each page
+reports computed `freshness`:
+
+- **`fresh`** — the shared memo is done. Do NOT re-derive what a colleague
+  already established; cite the existing evidence rows instead. But freshness
+  is a property of the **company page, not of your bet**, and the two halves
+  behave differently:
+  - **Step 4 (stance) is always yours to write** — a stance is per-bet by
+    definition, so a fresh page has none for the bet in hand. Same for the
+    bet's own `market.alternatives` synthesis.
+  - **Step 3 (coverage) is shared, and gated on the JOB, not on your bet** —
+    a claim another bet's research already made still stands. Run it for the
+    jobs THIS bet delivers that carry no claim yet; the grid's `unassessed`
+    cells are that worklist.
+
+  A fresh page you only read leaves the bet's competition view empty — which
+  looks identical to having no competitors.
+- **`stale`** (>180 days) or **`never`** — the page needs work. A `never`
+  page is a stub that grew out of someone's evidence tagging and has no memo
+  yet; that is the normal starting state, not a defect.
+- Re-verified a stale page and nothing changed? `mark_competitor_reviewed`
+  with a note saying what you checked. That is the only write besides a
+  section edit that clears the stale badge, so use it honestly.
+
+Also pull `get_competition_grid(side: "b2b" | "b2c")` — it shows which jobs
+already have coverage claims and which have none, so the sweep spends its time
+on genuinely unassessed cells.
+
+### Per company
+
+Identify it by `competitor_homepage` wherever you have a URL — the domain
+outranks the name when matching, so a company that spells itself three ways
+still resolves to one page. Then:
+
+1. **Log each substantive finding as evidence, tagged to the company:**
+   ```
+   log_evidence(kind: "competitor", competitor_name: "Handshake",
+                competitor_homepage: "joinhandshake.com",
+                link: <source URL>, evidence_tag: "data"|"estimate")
+   ```
+   Works for ANY kind — competitive intel arrives in interviews at least as
+   often as in `competitor`-kind rows, so tag those too. The row appears on
+   both the bet and the company page from one record; never log it twice.
+
+   If the result carries `created_stub: true`, **say so out loud** — you just
+   created a company page, and the owner should know a new entity exists.
+
+   Already-logged rows that turn out to be about a company get
+   `tag_evidence_competitor` — an in-place update, not a second row.
+
+2. **Write the five memo sections** with `update_competitor_section`:
+   `competitor.business_model`, `competitor.pricing`,
+   `competitor.entrenchment` (including reach — how hard they are to
+   displace), `competitor.weaknesses`, `competitor.our_angle`. Same tag
+   discipline as any section: `estimate` by default, `data` only with the
+   source cited in the content itself. These writes refresh the page's
+   last-reviewed date, because editing what we believe about a company IS
+   reviewing it.
+
+3. **Claim job coverage** with `map_competitor_job` — `owns` / `partial` /
+   `absent`, per job.
+
+   > **Record `absent` explicitly.** It is an assessment ("we looked, they do
+   > not serve this"), and it is the ONLY thing that turns a cell into
+   > verified open water. Skipping it leaves the cell `unassessed`, which the
+   > grid renders as ignorance rather than opportunity — deliberately. A
+   > competition sweep that logs only what competitors DO cover manufactures
+   > blank space that nobody can act on.
+
+   Omit `segment_id`/`buyer_id` to claim all buyers; narrow to a buyer when
+   the answer differs by side. Claims default to `hypothesis` — leave them
+   there until something validates them.
+
+4. **State the stance** with `link_competitor_bet`: `head-on` / `flank` /
+   `not-competing` / `watching`, plus a note saying HOW we compete or why we
+   don't. Pass `payer_type` when the two sides of the market differ — a
+   company can be head-on for the institution's budget and not-competing on
+   the student experience of the same bet. One stance cannot say that.
+
+**The status quo is competitor zero** and it already exists as a page —
+"keep doing the workaround" is a real competitor and usually the toughest.
+Assess it like any other: a blue-ocean read that skips it is a lie. Where the
+grid flags a job with no status-quo call, that flag is pointed at you.
+
+### The bet's own layer
+
+`market.alternatives` stays the **per-bet synthesis**: what this competitive
+picture means for THIS bet's positioning and which assumption it resolves.
+Point at the company pages; do not paste their dossiers back into it. Same
+tag rule as before — `estimate` by default, `data` only with sources cited in
+the content.
 
 ## 2. Market size, both directions — both in dollars
 
