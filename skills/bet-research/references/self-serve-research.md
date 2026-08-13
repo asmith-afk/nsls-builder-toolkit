@@ -83,12 +83,50 @@ still resolves to one page. Then:
 3. **Claim job coverage** with `map_competitor_job` — `owns` / `partial` /
    `absent`, per job.
 
-   > **Record `absent` explicitly.** It is an assessment ("we looked, they do
-   > not serve this"), and it is the ONLY thing that turns a cell into
-   > verified open water. Skipping it leaves the cell `unassessed`, which the
-   > grid renders as ignorance rather than opportunity — deliberately. A
-   > competition sweep that logs only what competitors DO cover manufactures
-   > blank space that nobody can act on.
+   > **Record `absent` explicitly — but only when you have actually looked.**
+   > `absent` is an assessment ("we looked, they do not serve this"), and it is
+   > the ONLY thing that turns a cell into verified open water. Skipping it
+   > leaves the cell `unassessed`, which the grid renders as ignorance rather
+   > than opportunity — deliberately. A competition sweep that logs only what
+   > competitors DO cover manufactures blank space nobody can act on.
+
+   **What counts as having looked.** `absent` requires a source that would
+   have mentioned the feature if it existed:
+
+   | Source | Good enough for `absent`? |
+   |---|---|
+   | Support / help centre, developer docs, release notes, changelog | **Yes** |
+   | The product itself (trial, licence, demo) | **Yes** — the strongest |
+   | Third-party review sites with feature matrices | Weak yes; corroborate |
+   | Marketing site, product page, pricing page | **No** |
+   | "I searched and found nothing" | **No** — say where you searched |
+
+   **Marketing pages are not feature inventories.** They sell a positioning,
+   and they omit table-stakes features precisely *because* those features are
+   unremarkable. Silence there is evidence of nothing. This is not
+   hypothetical: on 2026-08-13 a competitor sweep graded three companies
+   `absent` on job alerting from marketing-page silence and reported alerting
+   as the market's open water. Two of the three documented the feature plainly
+   in their help centres — Handshake's saved-search alerts and 12twenty's
+   Daily/Weekly email alerts — and the conclusion had to be retracted the same
+   day, after it had already been used to argue a bet's differentiation.
+
+   **When marketing pages are all you have, leave the cell `unassessed` and
+   say so out loud.** That is the correct, honest state — not a failure to
+   finish. The pressure in this recipe is to record the negative; it is not to
+   invent one. `unassessed` costs the grid nothing, and a wrong `absent` costs
+   it credibility on every other cell.
+
+   **In the claim note, name every surface you checked.** "No alerting on the
+   product page or the help centre; also checked release notes and the API
+   docs" is a claim the next researcher can weigh and challenge. "Absent" on
+   its own is not. A negative claim whose note does not say where you looked
+   should be treated as `unassessed` by whoever reads it next.
+
+   **Positive claims from marketing copy establish existence, never quality.**
+   "They ship fit-based ranking" is fair from a product page; "their ranking
+   is weak" is not. Grade the feature's presence, and put the untested quality
+   question in the note as the thing to test.
 
    Omit `segment_id`/`buyer_id` to claim all buyers; narrow to a buyer when
    the answer differs by side. Claims default to `hypothesis` — leave them

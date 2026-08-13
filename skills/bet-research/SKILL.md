@@ -160,6 +160,16 @@ company page (memo sections, coverage claims, stance) with `market.alternatives`
 keeping only this bet's synthesis. Record `absent` coverage explicitly — a
 missing claim reads as unassessed, not as open water.
 
+**`absent` has an evidence bar.** It means "we looked," so it needs a source
+that would have named the feature if it existed: support docs, release notes,
+developer docs, or the product. A marketing page is not one — it sells a
+positioning and omits table-stakes features precisely because they are
+unremarkable. When that is all you have, leave the cell `unassessed`, say so
+out loud, and name the surfaces you checked in the note. And before turning a
+row of `absent` cells into "this job is open water," check what tier of
+evidence those cells rest on: the narrowest true claim beats the strongest
+retractable one. See `references/self-serve-research.md` for the source table.
+
 Freshness excuses re-deriving the **memo**, never the **per-bet layer**: a
 fresh page still needs `map_competitor_job` coverage and a `link_competitor_bet`
 stance for THIS bet, plus the bet's own `market.alternatives`. Skip those and
@@ -262,6 +272,15 @@ returns `moved: true`. Called by `bet-studio`'s "Research a bet" hand-off.
 - Leaving `econ.*` empty "for `bet-plan`." → The gate checks non-empty
   content on all 5 `econ.*` fields now; draft honest first-cut estimates,
   don't wait.
+- Grading a competitor `absent` on a feature because their marketing site
+  doesn't mention it. → Marketing pages omit table-stakes features. Check
+  support docs, release notes, developer docs, or the product; otherwise the
+  cell is `unassessed` and you say so.
+- Telling the owner "nobody does X, that's our opening" off a row of `absent`
+  cells. → Check the evidence tier under those cells first. A market-level
+  claim built on marketing-page silence gets retracted, and it takes the
+  credibility of your other findings with it. Report the narrowest version
+  the evidence supports, and name what would change it.
 
 ## No token / server missing
 
@@ -302,6 +321,9 @@ point at `/connect` or the README's Strategy Studio setup section
 | "The rubric's been low confidence forever, I'll just bump it to medium." | Confidence is earned by citable evidence rows, not scheduled to clear a gate. Cite the row or leave it low. |
 | "I'll just write the competitor findings into `market.alternatives`." | Then B-2, B-3 and B-9 each re-research the same company. Findings go on the company page; the bet keeps the synthesis. |
 | "I only log what competitors DO cover — the gaps are obvious." | A cell with no claim renders `unassessed`, never open water. Unlogged `absent` findings manufacture blank space nobody can act on. Record the negative. |
+| "Their site doesn't mention it, so it's `absent`." | Marketing pages sell a positioning, not a feature inventory — they omit table-stakes features BECAUSE those are unremarkable. `absent` needs support docs, release notes, developer docs, or the product. Otherwise leave it `unassessed` and say so. |
+| "Nothing came up when I searched, that's good enough for `absent`." | Name the surfaces you checked in the note, or the next reader cannot weigh the claim. A negative whose note doesn't say where you looked should be read as `unassessed`. |
+| "Every company I graded reads `absent` — this job is open water." | Check what tier of evidence those grades rest on before escalating cell-level calls into a market-level claim. One field-wide conclusion built on marketing-page silence had to be retracted the same day it was reported. State the narrowest version the evidence supports. |
 | "There's already a page for them, I'll refresh the research anyway." | Check `freshness` first. A `fresh` page is a colleague's finished work — cite its evidence rows. Re-deriving it is exactly the waste this axis removes. |
 | "The page came back `fresh`, so I read it and moved on." | Freshness is a property of the company page, not of your bet. Coverage claims and the `link_competitor_bet` stance have never been made for THIS bet — skipping them leaves the bet's competition view empty, which renders identically to having no competitors. |
 | "One stance covers the bet, the b2b/b2c split can go in the note." | A note is not queryable and the bet page cannot show two stances. Pass `payer_type` when the sides genuinely differ. |
