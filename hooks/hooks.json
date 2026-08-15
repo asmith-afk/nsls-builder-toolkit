@@ -24,6 +24,17 @@
             "statusMessage": "Logging skill use so you get NSLS credit (nothing else)…"
           }
         ]
+      },
+      {
+        "matcher": "Bash|Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/guardrail-gate.py\"",
+            "timeout": 10,
+            "statusMessage": "Checking builder guardrails…"
+          }
+        ]
       }
     ]
   }
