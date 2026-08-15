@@ -8,6 +8,11 @@ description: >-
   "define this project", "what should I build", or is starting something new
   and needs to think it through before building. Also use when a builder wants
   to register an automation they've built but hasn't documented it yet.
+  Fires on natural phrasings too — "I want to build something that…",
+  "I'm starting a new automation", "I've got an idea for a tool",
+  "can you help me build X", "thinking about automating Y" — this skill is
+  the front door for new builds and classifies the guardrail tier before
+  any code gets written.
 ---
 
 # Interrogate
@@ -39,6 +44,48 @@ git remote -v 2>/dev/null
 ```
 
 If they have existing docs, read them and skip questions they already answer.
+
+---
+
+## Step 1b: Classify the tier
+
+The three answers above are usually enough to place the build. Do this now, not
+at the end — it decides how much of the rest of this skill applies.
+
+**Read `_shared/references/guardrail-voice.md` before saying any of this aloud.**
+
+| Tier | Test | Sets `Scope` |
+|---|---|---|
+| **1 · Personal** | Only they use the output. No member data. Nothing others depend on. | `Personal` |
+| **2 · Team-useful** | Someone else would use it, or it touches internal NSLS data. | `Department` |
+| **3 · Company-wide / member-facing** | Members see it, it wears NSLS's name, or it writes to a system of record at scale. | `Company-wide` |
+
+If the first three answers left it ambiguous, ask **only** the question that
+resolves it — not all three:
+
+- "If this works, is anyone other than you going to use the output?"
+- "Does it touch member data, or anything members will see?"
+- "Does it write back to HubSpot, Customer.io, Airtable or Feather?"
+
+**What changes by tier:**
+
+- **Tier 1** — say nothing about registration. Offer it once, lightly, only if
+  they'd want credit. Then get on with the interrogation.
+- **Tier 2** — register it, light 1-pager. Suggest a mentor if effort looks like
+  more than ~2 days. They can decline any of it; take the first no gracefully.
+- **Tier 3** — register *before* code. Full design doc via `/product-design`.
+  Reviewer assigned. Flag the platform check if it isn't Anthropic.
+
+**Watch for escalation mid-conversation.** Builds routinely start as "just for
+me" and turn out to be Tier 2 three questions later. When that happens, say so
+plainly and move on — don't make it a moment.
+
+**Also flag now, before any code exists:**
+- Working in a repo whose `git remote` isn't an NSLS org → this will hard-block
+  later. Far cheaper to move it now. `register-automation` has the transfer steps.
+- Raw school lists (e.g. NCO lead data) → Bedrock PII gate, zero data retention.
+  NSLS's own member data (PostHog, HubSpot, Hex) is fine on Claude under
+  do-not-train.
 
 ---
 

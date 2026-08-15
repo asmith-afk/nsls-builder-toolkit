@@ -78,6 +78,29 @@ Ask the user only for fields you can't detect:
 - **Recommended**: department, scope, type, stage
 - **Optional**: everything else
 
+### Guardrail fields (set these alongside scope)
+
+`scope` doubles as the guardrail tier — `Personal` = Tier 1, `Department` =
+Tier 2, `Company-wide` = Tier 3. Four fields hang off it:
+
+| Field | When to set |
+|---|---|
+| `Platform Used` | Always. `Anthropic` (default) / `OpenAI` / `Other`. |
+| `Design Doc URL` | Tier 2+. Link the doc `/product-design` produces. |
+| `Reviewer` | Tier 3 always; Tier 2 when effort > ~2 days. Links to the Builders table. |
+| `Review Status` | Tier 2+. `Not needed` → `Requested` → `In review` → `Go` / `Go with notes` / `Pull in another reviewer` / `Slow down`. |
+
+**Reviewer pool:** Kevin (platform, architecture, member-facing — final say) ·
+Davo (Tier 2/3 design, skills, agentic flows) · Jenna (adoption, UX, HR-ops
+surfaces) · a domain reviewer when the build crosses into their flow.
+
+**Platform check.** If `Platform Used` is not `Anthropic` and scope is
+`Department` or `Company-wide`, that's a hard gate — it needs a short written
+memo plus Kevin's sign-off. Say so, and offer to draft the memo in the same
+breath. Never a flat no.
+
+**Read `_shared/references/guardrail-voice.md` before raising any of this.**
+
 ### Not in a repo (manual mode)
 
 Ask for:
@@ -175,12 +198,55 @@ If the user asks "what are my automations":
 - `GET /builder-stats/{email}` to get their portfolio
 - Show automations with checklist progress
 
-## Scope Change Check
+## Scope Change Check — the tier gate
 
-When updating scope to a higher level (Personal → Department, Department →
-Company-wide, any → Customer Facing), check for `DESIGN.md`. If missing,
-recommend: "Higher scope automations need a DESIGN.md. Run the `product-design`
-skill in Generate Mode to create one."
+Scope changes are how Tier 1 builds become Tier 2 and Tier 3 ones, so this is
+where most guardrail conversations actually happen.
+
+When scope rises (Personal → Department, Department → Company-wide, any →
+Customer Facing), gate on design-doc depth **before** letting `stage` advance
+past `Idea`:
+
+| New scope | Depth needed | Blocking? |
+|---|---|---|
+| `Department` (Tier 2) | Light — 1-pager, 20–30 min | No. Strong suggestion; take the first no gracefully and log it. |
+| `Company-wide` (Tier 3) | Standard or Extensive | **Yes.** Registration must exist before code, and a reviewer must be assigned. |
+
+Run `/product-design` in Generate Mode to produce the doc, then write the URL to
+`Design Doc URL` and set `Review Status` to `Requested`.
+
+**Tier 3 hard gate.** A Company-wide or member-facing automation may not advance
+to a shipping stage without a tracker record and an assigned `Reviewer`. State
+the policy, then offer the authorization route — Kevin can authorize an
+exception, and you should offer to draft that note immediately. Never a flat no.
+
+**Emit the event either way** (see Guardrail Events below) — a declined
+suggestion is as worth recording as an accepted one.
+
+## Guardrail Events
+
+Every guardrail moment gets an `Events` row so it can be reported on. `Event Type`
+is free text, so no schema change is needed; Signal reads it via the existing
+15-minute Airtable→Supabase sync.
+
+| Event Type | When |
+|---|---|
+| `guardrail_flagged` | Claude raised a tier flag |
+| `guardrail_registered` | Builder registered *because of* the flag |
+| `guardrail_mentor` | Reviewer or mentor brought in |
+| `guardrail_migrated` | Repo moved to the NSLS org, or platform moved to Anthropic |
+| `guardrail_proceeded` | Builder declined; build continued (soft path) |
+| `guardrail_blocked` | A hard gate stopped the action |
+| `guardrail_authorized` | Kevin authorized an exception to a hard gate |
+
+Set `Description` to one plain sentence naming the build and what happened, and
+link `Builder` and `Automation` where known. These four counts — acted on,
+declined, hard blocked, authorized — are what the guardrail report shows.
+
+**Only record what actually happened.** A repo move is observable. Whether a
+reviewer genuinely reviewed, or whether someone really migrated off OpenAI, is
+not — those are self-reported. Never emit `guardrail_migrated` or
+`guardrail_mentor` on the strength of an intention.
 
 ## API Reference
 

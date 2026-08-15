@@ -34,7 +34,30 @@ Read `references/design-md-template.md` for the complete template and a worked e
 
 **When to use:** Repo has no DESIGN.md, or builder asks to create one.
 
-Walk through a guided conversation, one question at a time:
+### First — pick the depth
+
+Depth follows the guardrail tier, which is the automation's `Scope` in the
+tracker. Don't ask the builder to choose; infer it, say which you're using, and
+let them push back.
+
+| Depth | When | Time | Must contain |
+|---|---|---|---|
+| **Light** | Tier 2 (`Department`), or a Tier 1 build that escalated | 20–30 min | Purpose, who uses it, systems touched, ROI, effort, risks |
+| **Standard** | Tier 2 with Medium/Large effort; Tier 3 internal-facing | 1–3 hrs | Light + stack components, data flow, success criteria, failure modes, rollout, reviewers |
+| **Extensive** | Tier 3 (`Company-wide`) member-facing, or central to org value | half day+ | Standard + UI/message mockups, edge cases, sandbox/allowlist, monitoring + rollback |
+
+Jenna's SSI design doc is the reference for **Extensive** — that's the bar when
+work is member-facing and central to the org.
+
+**Tier 1 needs no design doc at all.** If the build is genuinely personal, say so
+and don't run this mode.
+
+At Light depth, answer questions 1, 2, 5 and 6 below and skip the rest — a
+1-pager that actually gets written beats a template that doesn't.
+
+### Then — the conversation
+
+Walk through it one question at a time:
 
 1. **What does this do?** — In plain language, from the user's perspective. No technical details.
 2. **Who uses it?** — Define customer segments. For each: who they are, their context when they encounter it, which flows they use.
@@ -44,6 +67,19 @@ Walk through a guided conversation, one question at a time:
 6. **How will you know it's working?** — Define what adoption looks like, satisfaction signals, and red flags.
 
 Read `references/design-md-template.md` and output a populated DESIGN.md in the repo root. The builder reviews and commits it.
+
+### Then — link it back
+
+Write the doc's URL to `Design Doc URL` on the automation's tracker record via
+`/register-automation`, and set `Review Status` to `Requested` for Tier 2+. A
+design doc nobody can find from the tracker doesn't close the guardrail.
+
+For Tier 3, assign a `Reviewer` in the same pass — Kevin covers member-facing
+and platform, Davo covers Tier 2/3 design and agentic flows, Jenna covers
+adoption, UX and HR-ops surfaces.
+
+**Read `_shared/references/guardrail-voice.md` before raising the depth
+requirement.** Lead with what the doc buys them, not with what's required.
 
 ---
 
