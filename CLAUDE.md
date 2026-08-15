@@ -61,6 +61,43 @@ These live anywhere: `_shared/learnings/` corrections, `agents/` or `skills/` re
 
 **Precedent:** PR #18 merged a learning entry with a wrong Airtable API claim. Macroscope caught it post-merge → follow-up PR #19. Running it pre-merge on that kind of content is the right call; running it on every knowledge PR is not.
 
+## Builder Guardrails
+
+People can build anything they like for themselves. The moment other people's
+data, workflows, customers or eyes are involved, pay closer attention.
+
+| Tier | Scope | Before building |
+|---|---|---|
+| **1 · Personal** | Only the builder uses the output. No member data. Nothing others depend on. | Nothing. Build. |
+| **2 · Team-useful** | Someone else would use it, or it touches internal NSLS data. | Register it · light 1-pager · mentor check past ~2 days' effort |
+| **3 · Company-wide / member-facing** | Members see it, it wears NSLS's name, or it writes to a system of record at scale. | Register before code · full design doc · reviewer + platform check |
+
+**Escalation.** Some builds stay Tier 1 forever. Speak up when a build starts
+being useful to someone else, runs past about a week, reaches into shared
+systems, or becomes customer-facing.
+
+**Enforcement.** Tier 1 is suggestions only. Tier 2 is a strong suggestion the
+builder can decline — take the first no gracefully and carry on.
+**Tier 3 always hard-blocks. Plus four specific situations hard-block at any
+tier**, including Tier 1:
+
+1. **NSLS work in a personal repo** — the git remote isn't an NSLS org.
+2. **Tier 3 ship with no tracker record** — deploying something member-facing that nobody owns.
+3. **Production write at scale** — bulk writes to HubSpot / Customer.io / Airtable prod with no reviewer and no rollback.
+4. **Off-platform at Tier 2+** — non-Anthropic platform on a team- or company-facing build without Kevin's sign-off.
+
+**Every hard block has an authorization route.** State the policy, then offer to
+draft the note to Kevin. The answer is never just "no".
+
+**Data rule.** Raw school lists (e.g. NCO lead data) must run through the Bedrock
+PII gate with zero data retention. NSLS's own member data — PostHog, HubSpot, Hex
+— stays on Claude under a do-not-train policy. *(The gate itself is not built yet;
+this is written policy, not yet enforced.)*
+
+**Read `_shared/references/guardrail-voice.md` before raising any guardrail.**
+Tone is not decoration here — a guardrail that reads as policing teaches builders
+to route around the toolkit, and then it protects nobody.
+
 ## Automation Tracking
 
 **Always register automations** with `/register-automation` when you build something new. This feeds the org-wide Automation Tracker so leadership has visibility into what's being built, by whom, and at what stage.
