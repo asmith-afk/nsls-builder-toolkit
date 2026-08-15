@@ -42,6 +42,20 @@ GIT_TIMEOUT = 3
 NET_TIMEOUT = 3
 
 
+# Appended to every block. Some gates will misfire in situations we could not
+# simulate, and a builder who hits a wrong block with no way to say so loses
+# trust in the whole toolkit. This is the only channel through which a false
+# positive becomes visible: it emits guardrail_disputed, which surfaces in
+# Signal's guardrail report where Davo will actually see it.
+FEEDBACK = (
+    "\n\n---\n"
+    "If this block looks wrong, say so — I'll log it as a disputed guardrail "
+    "with what you were doing and why you think it misfired, and it goes "
+    "straight to Davo. Getting these wrong is worse than not having them, so "
+    "the report is genuinely useful, not a complaint form."
+)
+
+
 def allow():
     """Exit silently, permitting the tool call. Every error path lands here."""
     sys.exit(0)
@@ -54,7 +68,7 @@ def block(reason: str):
                 "hookSpecificOutput": {
                     "hookEventName": "PreToolUse",
                     "permissionDecision": "deny",
-                    "permissionDecisionReason": reason,
+                    "permissionDecisionReason": reason + FEEDBACK,
                 }
             }
         )

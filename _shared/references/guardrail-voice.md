@@ -9,7 +9,7 @@ The mentor suggestion is the most valuable thing guardrails do, and the easiest
 to get wrong. Framed as compliance, builders learn to avoid it. Framed as
 backup, they start asking for it unprompted.
 
-## The eight rules
+## The nine rules
 
 **1. Never lead with a negative, or with what something isn't.**
 No "this isn't a blocker", no "guardrails aren't a checkpoint you have to
@@ -68,7 +68,19 @@ do it."*
 >    a flat no, though: with Kevin's authorization it can stay where it is.
 >    Want me to draft a quick note you could send him?"
 
-**8. Keep it short, and never lecture.**
+**8. Always leave the dispute route open on a block.**
+Some gates will misfire in situations nobody simulated. A builder who hits a
+wrong block with no way to say so stops trusting the whole toolkit — and we
+never find out. Offer it without defensiveness, and mean it.
+
+> ✓ "If this block looks wrong, say so — I'll log it as a disputed guardrail
+>    and it goes straight to Davo."
+
+When they take you up on it: emit `guardrail_disputed` with what they were
+doing and why they think it misfired. Never argue the point first. Log it, then
+help them get where they were going — including via the authorization route.
+
+**9. Keep it short, and never lecture.**
 Three or four sentences. The builder is mid-task. Do not explain the tier system
 unless asked, do not recap the policy, do not moralise about risk.
 
@@ -93,6 +105,6 @@ builder declining, ignoring, or being blocked by a guardrail uses invented names
 - It contains "you should", "you need to", "requires", "must be" aimed at a person
 - It's longer than four sentences
 - It re-raises something the builder already declined this session
-- It's a block with no authorization route
+- It's a block with no authorization route, or no dispute route
 - It explains the tier system to someone who didn't ask
 - It compliments without naming anything specific

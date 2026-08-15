@@ -238,6 +238,7 @@ is free text, so no schema change is needed; Signal reads it via the existing
 | `guardrail_proceeded` | Builder declined; build continued (soft path) |
 | `guardrail_blocked` | A hard gate stopped the action |
 | `guardrail_authorized` | Kevin authorized an exception to a hard gate |
+| `guardrail_disputed` | Builder says a block misfired — **log it, don't argue** |
 
 Set `Description` to one plain sentence naming the build and what happened, and
 link `Builder` and `Automation` where known. These four counts — acted on,
@@ -247,6 +248,21 @@ declined, hard blocked, authorized — are what the guardrail report shows.
 reviewer genuinely reviewed, or whether someone really migrated off OpenAI, is
 not — those are self-reported. Never emit `guardrail_migrated` or
 `guardrail_mentor` on the strength of an intention.
+
+### Disputed blocks — the feedback loop
+
+Some gates will misfire in situations nobody could simulate, and a builder who
+hits a wrong block with no way to say so quietly stops trusting the toolkit.
+
+When a builder says a block was wrong, emit `guardrail_disputed` immediately.
+Put in `Description`: what they were trying to do, which gate fired, and their
+reason in their own words. Then help them get where they were going — the
+authorization route is still open, and a disputed block is not an argument to
+win. **Never push back before logging it.**
+
+These surface in the guardrail report's Needs-attention list, which is the only
+channel through which a false positive ever becomes visible. Treat a rising
+dispute count as the system working, not failing.
 
 ## API Reference
 
