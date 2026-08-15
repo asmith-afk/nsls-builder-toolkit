@@ -82,17 +82,21 @@ def builder_email():
 def emit(event_type: str, description: str, automation: str = ""):
     """Fire-and-forget guardrail event. Never raises, never affects the decision.
 
-    DEPENDENCY: POST /guardrail-event does not exist on the tracker proxy yet
-    (thensls/automation-tracker-proxy). Until it ships, this call fails silently
-    and no guardrail events reach Airtable or Signal — the gates still work, but
-    nothing is reported. Expected payload contract:
+    Payload contract with POST /guardrail-event on the tracker proxy:
 
-        {"builder_email": str, "event_type": str,
-         "description": str, "automation_name": str}
+        {"builder_email": str, "event_type": str, "description": str,
+         "automation_name": str, "repo_url": str}
 
-    which the proxy writes to the Events table as Event Type / Description /
-    Builder / Automation. `Event Type` is free text, so no Airtable schema
-    change is needed.
+    written to the Events table as Event Type / Description / Builder /
+    Automation. `Event Type` is free text, so no Airtable schema change is
+    needed; the proxy enforces a `guardrail_` prefix.
+
+    `repo_url` exists because `automation_name` is a directory name
+    ("mex-tools") while Airtable's Name is human-entered ("MEx Tools"), so
+    name matching alone leaves most events with no build attached — and an
+    event trail that can't say which build tripped the gate is most of the
+    value gone. The Automations table already has a GitHub Repo URL field,
+    which is an exact key rather than a guess.
     """
     try:
         import urllib.request
@@ -106,6 +110,7 @@ def emit(event_type: str, description: str, automation: str = ""):
                 "event_type": event_type,
                 "description": description[:500],
                 "automation_name": automation,
+                "repo_url": origin_url() or "",
             }
         ).encode()
         req = urllib.request.Request(
