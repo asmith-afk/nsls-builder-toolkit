@@ -39,7 +39,7 @@ PING_FAIL_MARKER = PLUGIN_DIR / ".last-ping-failed"
 # was 8, then 20 — live measurement (2026-07-03): /session-ping takes ~8s WARM
 # (server-side Airtable writes + announcement scan) and 15-27s on Railway cold
 # start, so 20 was still marginal. The SessionStart hook budget must stay
-# comfortably above this (install.sh sets 60).
+# comfortably above this (install.sh sets 90).
 PING_TIMEOUT = 35
 
 # Plugins to sync, in precedence order — earlier entries win on name collision.
