@@ -16,12 +16,16 @@ $Marker      = 'local-plugins\nsls-'
 
 # --- 1. git pull (direct call; the prior Start-Process form failed silently on
 #        Windows, freezing toolkits weeks behind). ff-only never merges.
+#        Bare pull (no remote/refspec) follows each checkout's configured
+#        upstream, so a customized fork (NSLS_PERSONAL_REPO/BRANCH) or a pinned
+#        checkout is never fast-forwarded onto a branch it doesn't track.
 #        A pull refused by the checkout's own state (divergence, dirty tree) is
 #        announced on stdout — SessionStart stdout reaches the model's context —
 #        so a frozen toolkit is never silent. Offline failures stay quiet. ---
+$env:GIT_TERMINAL_PROMPT = '0'   # credentialed remotes fail fast, never prompt-hang the hook
 foreach ($dir in @($BuilderDir, $PersonalDir)) {
     if (-not (Test-Path $dir)) { continue }
-    $pullOut = (& git -C $dir pull --ff-only origin main --quiet 2>&1 | Out-String)
+    $pullOut = (& git -C $dir pull --ff-only --quiet 2>&1 | Out-String)
     if ($LASTEXITCODE -ne 0 -and $pullOut -match 'fast-forward|would be overwritten|unmerged|not concluded') {
         Write-Output ("WARNING - $(Split-Path $dir -Leaf) could not self-update: the checkout at $dir has local commits or edits, so automatic updates are FROZEN and this toolkit is going stale. Tell the user at the first natural moment and offer the fix: preserve their local changes on a backup branch, then fast-forward the checkout to its upstream. (Skills in ~/.claude/skills are the right place for personal edits and are unaffected.)")
     }
