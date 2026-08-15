@@ -56,12 +56,66 @@ FEEDBACK = (
 )
 
 
+def builder_email():
+    """Same precedence as session-start.py and skill-event.sh."""
+    try:
+        cfg = Path(os.environ.get("CLAUDE_CONFIG_DIR") or (Path.home() / ".claude"))
+        env_file = cfg / "local-plugins" / "nsls-personal-toolkit" / ".env"
+        if env_file.is_file():
+            for line in env_file.read_text(errors="ignore").splitlines():
+                if line.startswith("BUILDER_EMAIL="):
+                    return line.split("=", 1)[1].strip().strip('"')
+    except Exception:
+        pass
+    return git("config", "user.email")
+
+
+def emit(event_type: str, description: str, automation: str = ""):
+    """Fire-and-forget guardrail event. Never raises, never affects the decision.
+
+    DEPENDENCY: POST /guardrail-event does not exist on the tracker proxy yet
+    (thensls/automation-tracker-proxy). Until it ships, this call fails silently
+    and no guardrail events reach Airtable or Signal — the gates still work, but
+    nothing is reported. Expected payload contract:
+
+        {"builder_email": str, "event_type": str,
+         "description": str, "automation_name": str}
+
+    which the proxy writes to the Events table as Event Type / Description /
+    Builder / Automation. `Event Type` is free text, so no Airtable schema
+    change is needed.
+    """
+    try:
+        import urllib.request
+
+        email = builder_email()
+        if not email:
+            return
+        body = json.dumps(
+            {
+                "builder_email": email,
+                "event_type": event_type,
+                "description": description[:500],
+                "automation_name": automation,
+            }
+        ).encode()
+        req = urllib.request.Request(
+            f"{TRACKER_URL}/guardrail-event",
+            data=body,
+            headers={"Content-Type": "application/json"},
+        )
+        urllib.request.urlopen(req, timeout=2).read()
+    except Exception:
+        pass  # reporting is never worth failing or delaying a decision over
+
+
 def allow():
     """Exit silently, permitting the tool call. Every error path lands here."""
     sys.exit(0)
 
 
-def block(reason: str):
+def block(reason: str, gate: str = "", automation: str = ""):
+    emit("guardrail_blocked", f"{gate}: {reason.splitlines()[0]}", automation)
     print(
         json.dumps(
             {
@@ -208,7 +262,9 @@ def gate_personal_repo(tool: str, ti: dict):
         f"(org default permission is none).\n\n"
         f"NSLS policy blocks the push until then. It's not a flat no — Kevin can "
         f"authorize it staying where it is, and I can draft that note now if "
-        f"you'd rather. Say the word and I'll do either."
+        f"you'd rather. Say the word and I'll do either.",
+        gate="personal_repo",
+        automation=Path(root).name,
     )
 
 
@@ -266,7 +322,9 @@ def gate_unregistered_ship(tool: str, ti: dict):
                 f"ships. Kevin covers member-facing and usually turns these round "
                 f"inside a day. Want me to assign him and request review now? "
                 f"If it's genuinely urgent he can authorize the deploy instead — "
-                f"I'll draft that note."
+                f"I'll draft that note.",
+                gate="tier3_no_reviewer",
+                automation=name,
             )
         return  # registered and reviewed, or lower tier — carry on
 
@@ -277,7 +335,9 @@ def gate_unregistered_ship(tool: str, ti: dict):
         f"Two minutes and it's sorted: I can register it and get a reviewer "
         f"assigned, then we deploy properly. Want me to do that now?\n\n"
         f"If this is genuinely urgent, Kevin can authorize shipping first — say "
-        f"the word and I'll draft the note."
+        f"the word and I'll draft the note.",
+        gate="tier3_unregistered",
+        automation=name,
     )
 
 
@@ -319,7 +379,8 @@ def gate_bulk_production_write(tool: str, ti: dict):
         "dry-run pass so we can see what it would touch. Want me to set those up?\n\n"
         "If it's already been reviewed and you're re-running it deliberately, "
         "re-run with --dry-run first, or ask Kevin to authorize and I'll draft "
-        "the note."
+        "the note.",
+        gate="bulk_production_write",
     )
 
 
@@ -372,7 +433,9 @@ def gate_off_platform(tool: str, ti: dict):
         f"off-platform at this scope needs a short written why plus Kevin's OK.\n\n"
         f"If there's a real reason it's the right call here — and sometimes there "
         f"is — tell me and I'll draft the memo with you now. It's a paragraph, "
-        f"not a process."
+        f"not a process.",
+        gate="off_platform",
+        automation=name,
     )
 
 
