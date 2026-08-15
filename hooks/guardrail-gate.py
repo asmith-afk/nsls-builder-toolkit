@@ -38,8 +38,17 @@ TRACKER_URL = os.environ.get(
     "NSLS_TRACKER_URL", "https://web-production-6281e.up.railway.app"
 )
 NSLS_ORGS = ("thensls",)
-GIT_TIMEOUT = 3
+
+# The hook's total budget is 10s (hooks.json). Every subprocess and socket here
+# has to fit inside it *cumulatively*, because a gate can chain several: repo
+# lookup, then a tracker lookup, then the event POST on the way out. Blowing the
+# budget means the harness kills the hook mid-decision and the block is lost —
+# the gate silently fails to fire. These numbers are picked so the worst path
+# (gate 2: repo_root + tracker_get + emit) lands near 6s, leaving headroom on a
+# slow network. Raise them and redo that arithmetic.
+GIT_TIMEOUT = 2
 NET_TIMEOUT = 3
+EMIT_TIMEOUT = 1.5
 
 
 # Appended to every block. Some gates will misfire in situations we could not
@@ -104,7 +113,7 @@ def emit(event_type: str, description: str, automation: str = ""):
             data=body,
             headers={"Content-Type": "application/json"},
         )
-        urllib.request.urlopen(req, timeout=2).read()
+        urllib.request.urlopen(req, timeout=EMIT_TIMEOUT).read()
     except Exception:
         pass  # reporting is never worth failing or delaying a decision over
 
@@ -133,7 +142,15 @@ def block(reason: str, gate: str = "", automation: str = ""):
 # ---------------------------------------------------------------- helpers
 
 
+_GIT_CACHE = {}
+
+
 def git(*args, cwd=None):
+    """Memoised per process. Three gates ask for the repo root independently;
+    without the cache that's three subprocesses against the same 10s budget."""
+    key = (args, cwd)
+    if key in _GIT_CACHE:
+        return _GIT_CACHE[key]
     try:
         out = subprocess.run(
             ["git", *args],
@@ -142,9 +159,11 @@ def git(*args, cwd=None):
             timeout=GIT_TIMEOUT,
             cwd=cwd,
         )
-        return out.stdout.strip() if out.returncode == 0 else ""
+        val = out.stdout.strip() if out.returncode == 0 else ""
     except Exception:
-        return ""
+        val = ""
+    _GIT_CACHE[key] = val
+    return val
 
 
 def repo_root(start=None):
@@ -182,8 +201,13 @@ def looks_like_nsls_work(root: str) -> bool:
     """
     if not root:
         return False
-    needles = (
-        "nsls",
+    # "nsls" alone is decisive. The SaaS names are not — plenty of people use
+    # Airtable or PostHog for their own projects, and blocking someone's
+    # weekend build is exactly the false positive that gets the toolkit
+    # uninstalled. So they only count as evidence in pairs. (Tightened after
+    # Codex review 2026-08-15 flagged the fingerprints as too broad.)
+    decisive = ("nsls",)
+    corroborating = (
         "hubspot",
         "customer.io",
         "customerio",
@@ -192,6 +216,7 @@ def looks_like_nsls_work(root: str) -> bool:
         "posthog",
     )
     try:
+        seen = set()
         for name in ("README.md", "CLAUDE.md", "DESIGN.md", "package.json",
                      "pyproject.toml", ".env.example", "requirements.txt"):
             p = Path(root) / name
@@ -201,27 +226,64 @@ def looks_like_nsls_work(root: str) -> bool:
                 text = p.read_text(errors="ignore").lower()[:20000]
             except Exception:
                 continue
-            if any(n in text for n in needles):
+            if any(n in text for n in decisive):
                 return True
+            seen.update(n for n in corroborating if n in text)
+        # customer.io/customerio are the same system; don't let them pair up.
+        if "customer.io" in seen and "customerio" in seen:
+            seen.discard("customerio")
+        return len(seen) >= 2
     except Exception:
         pass
     return False
 
 
-def tracker_get(path: str):
+MAX_BODY = 1 << 20  # 1 MiB — a tracker reply is a few KB; anything else is wrong
+
+
+def tracker_records(path: str):
+    """Fetch automation records.
+
+    Returns a LIST on a well-formed reply, or None for "I don't know".
+
+    The distinction is load-bearing. Callers block on an empty list (the tracker
+    positively said there's no such automation) and stay silent on None. So any
+    reply we can't confidently parse — HTTP error, unreadable body, a 200
+    carrying an error object, an unexpected shape — must be None. Codex review
+    2026-08-15 caught the original returning [] for a malformed 200, which turned
+    a tracker hiccup into a denied deploy: a fail-open violation.
+    """
     try:
         import urllib.request
 
         req = urllib.request.Request(f"{TRACKER_URL}{path}")
         with urllib.request.urlopen(req, timeout=NET_TIMEOUT) as r:
-            return json.loads(r.read().decode())
+            raw = r.read(MAX_BODY)
+        data = json.loads(raw.decode(errors="replace"))
     except Exception:
-        return None  # network down => unknown => allow
+        return None
+
+    if isinstance(data, list):
+        recs = data
+    elif isinstance(data, dict):
+        if "automations" not in data:
+            return None  # unrecognised shape — do not infer "none found"
+        recs = data.get("automations")
+    else:
+        return None
+
+    if not isinstance(recs, list):
+        return None
+    return [r for r in recs if isinstance(r, dict)]
 
 
 # ---------------------------------------------------------------- gate 1
 
 PUSH_RE = re.compile(r"\bgit\s+push\b")
+# A push that publishes nothing isn't the moment we care about. Matched only
+# within the push invocation itself (not across ; | &&) so an unrelated later
+# command can't wave the gate through. Codex review 2026-08-15.
+PUSH_HARMLESS_RE = re.compile(r"\bgit\s+push\b[^|;&]*?(--dry-run|--help|\s-n\b)")
 
 
 def gate_personal_repo(tool: str, ti: dict):
@@ -231,6 +293,8 @@ def gate_personal_repo(tool: str, ti: dict):
     if tool == "Bash":
         cmd = ti.get("command") or ""
         if not PUSH_RE.search(cmd):
+            return
+        if PUSH_HARMLESS_RE.search(cmd):
             return
     elif tool in ("Write", "Edit"):
         return  # editing locally is fine; the push is the moment that matters
@@ -272,12 +336,18 @@ def gate_personal_repo(tool: str, ti: dict):
 
 DEPLOY_RE = re.compile(
     r"\b(railway\s+up|railway\s+redeploy"
-    r"|netlify\s+deploy(?!.*--dry-run)"
+    r"|netlify\s+deploy"
     r"|vercel\s+(deploy\s+)?--prod"
     r"|fly\s+deploy"
     r"|gcloud\s+(run\s+deploy|functions\s+deploy)"
     r"|serverless\s+deploy"
     r"|eb\s+deploy)\b"
+)
+# Reading the docs, rehearsing, or shipping to a preview target isn't shipping
+# to members. Codex review 2026-08-15 flagged `railway up --help` blocking.
+DEPLOY_HARMLESS_RE = re.compile(
+    r"--help|-h\b|--dry-run|--alias|--preview|\bnetlify\s+deploy(?!.*--prod)",
+    re.I,
 )
 
 
@@ -290,7 +360,7 @@ def gate_unregistered_ship(tool: str, ti: dict):
     if tool != "Bash":
         return
     cmd = ti.get("command") or ""
-    if not DEPLOY_RE.search(cmd):
+    if not DEPLOY_RE.search(cmd) or DEPLOY_HARMLESS_RE.search(cmd):
         return
 
     root = repo_root()
@@ -300,14 +370,20 @@ def gate_unregistered_ship(tool: str, ti: dict):
     if not name:
         return
 
-    found = tracker_get(f"/automations?name={name}")
-    if found is None:
-        return  # tracker unreachable => unknown => allow
+    # Only NSLS work is our business. Without this, every personal side project
+    # deployed from a laptop gets blocked for not being in the NSLS tracker —
+    # which is both wrong and the fastest way to lose builders. Codex review
+    # 2026-08-15.
+    if not looks_like_nsls_work(root):
+        return
 
-    records = found if isinstance(found, list) else found.get("automations") or []
+    records = tracker_records(f"/automations?name={name}")
+    if records is None:
+        return  # unreachable or unparseable => unknown => allow
+
     match = None
     for r in records:
-        if isinstance(r, dict) and (r.get("name") or "").lower() == name.lower():
+        if (r.get("name") or "").lower() == name.lower():
             match = r
             break
 
@@ -348,7 +424,11 @@ BULK_WRITE_RE = re.compile(
     re.I,
 )
 WRITE_VERB_RE = re.compile(r"-X\s*(POST|PUT|PATCH|DELETE)\b", re.I)
-BATCH_RE = re.compile(r"\b(batch|bulk|/records\b|import|backfill)\b", re.I)
+# The marker has to appear inside the URL, not anywhere in a compound command.
+# That's what makes "import" safe to keep: `.../customers/import` is a real bulk
+# endpoint, while `... && python import_data.py` sits outside any URL and no
+# longer matches. Codex review 2026-08-15 flagged the unscoped version.
+BATCH_RE = re.compile(r"https?://\S*\b(batch|bulk|backfill|import|/records)\b", re.I)
 DRYRUN_RE = re.compile(r"--dry[-_]?run|\bDRY_RUN=(1|true)\b", re.I)
 
 
@@ -410,19 +490,21 @@ def gate_off_platform(tool: str, ti: dict):
     if not root:
         return
     name = Path(root).name
-    found = tracker_get(f"/automations?name={name}")
-    if found is None:
+    records = tracker_records(f"/automations?name={name}")
+    if records is None:
         return
 
-    records = found if isinstance(found, list) else found.get("automations") or []
     scope = ""
     for r in records:
-        if isinstance(r, dict) and (r.get("name") or "").lower() == name.lower():
+        if (r.get("name") or "").lower() == name.lower():
             scope = (r.get("scope") or "").lower()
             break
 
-    if not scope or "personal" in scope:
-        return  # Tier 1, or unknown — not our call
+    # Positive confirmation of Tier 2+ only. Previously any unrecognised scope
+    # string ("", "n/a", "tbd") fell through to a block; Codex review
+    # 2026-08-15 caught it. Unknown scope is not evidence of anything.
+    if not ("department" in scope or "company" in scope):
+        return
 
     block(
         f"Pausing on this one — '{name}' is registered as {scope}, and this adds "

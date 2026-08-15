@@ -22,12 +22,49 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 HOOK = HERE.parent.parent / "hooks" / "guardrail-gate.py"
 SCENARIOS = HERE / "scenarios.json"
 VERBOSE = "-v" in sys.argv
+
+# Every scenario is pointed at a loopback stub, never the live NSLS tracker.
+# Two reasons: the suite must not depend on (or hammer) a production service to
+# pass, and several cases need responses the real proxy would never send —
+# notably the malformed-200 that Codex found could turn a tracker hiccup into a
+# denied deploy.
+STUB_MODES = {
+    "empty": (200, {"automations": []}),        # well-formed "no such automation"
+    "malformed": (200, {"status": "ok"}),       # 200, unrecognised shape
+}
+_stub_mode = {"mode": "empty"}
+
+
+class _Stub(BaseHTTPRequestHandler):
+    def do_GET(self):
+        code, body = STUB_MODES[_stub_mode["mode"]]
+        raw = json.dumps(body).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(raw)))
+        self.end_headers()
+        self.wfile.write(raw)
+
+    def do_POST(self):
+        self.send_response(204)
+        self.end_headers()
+
+    def log_message(self, *a):
+        pass
+
+
+def start_stub():
+    srv = HTTPServer(("127.0.0.1", 0), _Stub)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return srv, f"http://127.0.0.1:{srv.server_port}"
 
 
 def make_repo(spec: dict) -> str:
@@ -50,10 +87,11 @@ def make_repo(spec: dict) -> str:
     return d
 
 
-def run_scenario(sc: dict):
+def run_scenario(sc: dict, stub_url: str):
     payload = json.dumps({"tool_name": sc.get("tool", ""), "tool_input": sc.get("input", {})})
     cwd = None
     tmp = None
+    _stub_mode["mode"] = sc.get("tracker_stub", "empty")
     try:
         if sc.get("repo"):
             tmp = make_repo(sc["repo"])
@@ -65,6 +103,7 @@ def run_scenario(sc: dict):
             text=True,
             cwd=cwd,
             timeout=30,
+            env={**os.environ, "NSLS_TRACKER_URL": stub_url},
         )
         blocked = bool(proc.stdout.strip())
         reason = ""
@@ -83,11 +122,12 @@ def main():
     data = json.loads(SCENARIOS.read_text())
     scenarios = data["hook"]
 
+    srv, stub_url = start_stub()
     passed, failed = 0, []
     false_positives, false_negatives = [], []
 
     for sc in scenarios:
-        blocked, reason, err = run_scenario(sc)
+        blocked, reason, err = run_scenario(sc, stub_url)
         want_block = sc["expect"] == "block"
         ok = blocked == want_block
 
