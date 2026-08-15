@@ -114,6 +114,36 @@ def unquote_scalar(value):
     return " ".join(_CONTROL.sub(" ", v).split())
 
 
+# ff-only pull failures that mean the checkout ITSELF blocks updating (frozen),
+# as opposed to being offline or having no upstream (both fine and quiet).
+# Real incident: a single local commit froze a builder's toolkit for a month
+# with zero signal — every session "synced" and nothing ever changed.
+_FREEZE_SIGNS = (
+    "fast-forward",            # ff-only refused: local commits diverge from upstream
+    "would be overwritten",    # dirty working tree blocks the update
+    "unmerged",                # conflicted / unfinished state
+    "not concluded",           # "you have not concluded your merge"
+)
+
+
+def _warn_if_frozen(plugin, plugin_dir, err):
+    """Announce a self-update blocked by the checkout's own state. stdout of a
+    SessionStart hook lands in the model's context, so Claude can tell the
+    user and offer the repair — a frozen toolkit must never be silent.
+    Network/offline failures stay quiet (a laptop on a plane is not an
+    incident)."""
+    if not any(s in err for s in _FREEZE_SIGNS):
+        return
+    print(
+        f"WARNING - {plugin} could not self-update: the checkout at {plugin_dir} "
+        f"has local commits or edits, so automatic updates are FROZEN and this "
+        f"toolkit is going stale. Tell the user at the first natural moment and "
+        f"offer the fix: preserve their local changes on a backup branch, then "
+        f"fast-forward the checkout to its upstream. (Skills in ~/.claude/skills "
+        f"are the right place for personal edits and are unaffected.)"
+    )
+
+
 def git_pull():
     """Pull latest changes for every toolkit in SYNC_PLUGINS.
 
@@ -142,6 +172,11 @@ def git_pull():
     timeout, and the loop shares one 15s deadline so the worst case — every
     pull wedged — still leaves the 35s replay + 35s live ping inside the 90s
     hook budget install.sh configures.
+
+    A pull refused for checkout-local reasons (divergence, dirty tree) prints
+    a warning to stdout — SessionStart stdout reaches the model's context — so
+    a frozen toolkit is announced instead of silently stale. Offline failures
+    and missing upstreams stay quiet.
     """
     deadline = time.monotonic() + 15
     for plugin in SYNC_PLUGINS:
@@ -152,12 +187,14 @@ def git_pull():
         if remaining <= 0:
             break
         try:
-            subprocess.run(
+            r = subprocess.run(
                 ["git", "-C", str(plugin_dir), "pull", "--ff-only", "--quiet"],
-                capture_output=True, timeout=min(10, remaining),
+                capture_output=True, text=True, timeout=min(10, remaining),
                 stdin=subprocess.DEVNULL,
                 env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
             )
+            if r.returncode != 0:
+                _warn_if_frozen(plugin, plugin_dir, (r.stderr or "") + (r.stdout or ""))
         except Exception:
             pass
 
