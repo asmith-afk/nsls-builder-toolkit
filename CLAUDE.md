@@ -100,7 +100,16 @@ to route around the toolkit, and then it protects nobody.
 
 ## Automation Tracking
 
-**Always register automations** with `/register-automation` when you build something new. This feeds the org-wide Automation Tracker so leadership has visibility into what's being built, by whom, and at what stage.
+**Register Tier 2 and Tier 3 automations** with `/register-automation` — anything
+someone else would use, anything touching NSLS data, anything member-facing. This
+feeds the org-wide Automation Tracker so leadership has visibility into what's
+being built, by whom, and at what stage.
+
+**Tier 1 personal builds need nothing.** Offer registration once, lightly, only if
+the builder would want credit or others might want the tool — then drop it. Don't
+raise it again. Nagging someone about a script only they will ever run is how
+builders learn to work outside the toolkit, which costs far more than the missing
+row. See § Builder Guardrails above.
 
 ## Google Workspace
 - **Always use `gws` for Google Docs, Sheets, Slides, Drive URLs** — never WebFetch, WebSearch, or Firecrawl for google.com URLs
