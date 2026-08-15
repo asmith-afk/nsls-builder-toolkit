@@ -677,11 +677,51 @@ def session_ping(replayed=None):
         print(directive)
 
 
+def emit_guardrails_context():
+    """Print the Builder Guardrails section of the plugin's CLAUDE.md.
+
+    WHY THIS EXISTS. A plugin's root CLAUDE.md is not loaded into anyone's
+    session — plugin.json doesn't reference it, no hook injected it, and it
+    isn't on any path Claude Code reads as memory. It is documentation for
+    people browsing the repo. That was fine when the file held conventions,
+    and became a hole the moment it held the guardrail tiers: the four hard
+    gates fire (guardrail-gate.py is wired through hooks.json) but the entire
+    soft half — tiers, escalation triggers, the voice guide — reached Claude
+    only if a skill happened to trigger, which is description-matched, which
+    is the exact failure the hook exists to cover.
+
+    Found by the Phase 6 voice run, 2026-08-15. Stdout from a SessionStart
+    hook reaches Claude as context (same channel the announcement directive
+    below already uses), so printing the section is the whole fix.
+
+    Fails silent: a missing file, an unreadable one, or a renamed heading
+    prints nothing rather than breaking session start for every builder.
+    """
+    try:
+        text = (PLUGIN_DIR / "CLAUDE.md").read_text(errors="ignore")
+    except Exception:
+        return
+
+    start = text.find("## Builder Guardrails")
+    if start == -1:
+        return
+    nxt = text.find("\n## ", start + 1)
+    section = text[start:nxt if nxt != -1 else len(text)].strip()
+    if not section:
+        return
+
+    print(
+        "[NSLS Builder Toolkit — org guardrail policy, active this session]\n\n"
+        + section
+    )
+
+
 def main():
     git_pull()
     run_plugin_migration()
     ensure_plugin_fresh()
     sync_pointers()
+    emit_guardrails_context()
     replayed = replay_failed_ping()
     session_ping(replayed=replayed)
 
