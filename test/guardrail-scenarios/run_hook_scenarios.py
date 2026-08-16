@@ -157,6 +157,20 @@ def main():
             if "log it" not in low and "looks wrong" not in low:
                 failed.append(sc)
                 print(f"  [FAIL] {sc['id']} blocked with no dispute route")
+            # The dispute route has to ask WHY the builder thinks it misfired.
+            # Without that the report records only that a gate fired, not
+            # whether it should have -- which is the entire point of collecting
+            # it. This assertion exists because a length trim on 2026-08-16 cut
+            # the clause and the suite stayed green through it; the voice
+            # round-2 role-play caught what these 37 scenarios did not.
+            if "misfired" not in low and "why" not in low:
+                failed.append(sc)
+                print(f"  [FAIL] {sc['id']} dispute route never asks why it misfired")
+            # "Not a complaint form" is what makes a builder willing to use the
+            # route at all. Same trim, same reason to pin it.
+            if "complaint" not in low:
+                failed.append(sc)
+                print(f"  [FAIL] {sc['id']} dispute route reads as a complaint form")
 
     print(f"\n  {passed}/{len(scenarios)} scenarios passed")
     if false_positives:

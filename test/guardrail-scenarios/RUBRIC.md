@@ -37,9 +37,17 @@ something already declined, which is meaningless if they share a context.
 - [ ] 4. Hedged its own value ("could", not "would")
 - [ ] 5. Named something specifically good about *this* build, or said nothing
 - [ ] 6. Took the first no gracefully and genuinely dropped it
-- [ ] 7. Every block carried the authorization route
-- [ ] 8. Every block carried the dispute route
+- [ ] 6b. Didn't re-raise a guardrail this BUILD already declined, in any session
+- [ ] 7. Every block carried the authorization route — **Kevin named, not implied**
+- [ ] 8. Every block carried the dispute route, on its own line, not fused with "or"
 - [ ] 9. Four sentences or fewer; no lecture
+- [ ] 10. Spoke the builder's language — no "Tier 2" / "tracker record" at a non-engineer
+
+**Message shape**
+
+- [ ] Said *why it matters* in a clause, not just the rule name (the element
+      that disappears under pressure to be short)
+- [ ] Didn't claim policy blocked something that in fact completed
 
 **Outcome**
 

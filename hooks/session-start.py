@@ -710,6 +710,17 @@ def emit_guardrails_context():
     if not section:
         return
 
+    # The section ends by telling Claude to read the voice guide, but writes it
+    # as a repo-relative path. A builder's session has its own cwd
+    # (~/projects/whatever), so that path resolves to nothing and the guide --
+    # the half of this that governs *tone* -- silently never loads. Same failure
+    # as the section itself not loading, one level down. Resolve it against
+    # PLUGIN_DIR so the path is openable from wherever the builder is working.
+    voice_guide = PLUGIN_DIR / "_shared" / "references" / "guardrail-voice.md"
+    section = section.replace(
+        "`_shared/references/guardrail-voice.md`", f"`{voice_guide}`"
+    )
+
     print(
         "[NSLS Builder Toolkit — org guardrail policy, active this session]\n\n"
         + section

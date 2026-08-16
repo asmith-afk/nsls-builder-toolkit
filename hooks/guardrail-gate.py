@@ -58,8 +58,15 @@ EMIT_TIMEOUT = 1.5
 # Signal's guardrail report where Davo will actually see it.
 FEEDBACK = (
     "\n\n---\n"
-    "If this block looks wrong, say so — I'll log it for Davo with what you "
-    "were doing. Getting these wrong is worse than not having them."
+    # Two clauses here are load-bearing and were lost in the first length trim.
+    # "why you think it misfired" is the reason the dispute event is worth
+    # emitting at all -- without it the report says a gate fired and nothing
+    # about whether it should have. "not a complaint form" is what makes a
+    # builder willing to use it; people who think they're filing a complaint
+    # against the tooling mostly just don't.
+    "If this block looks wrong, say so — I'll log what you were doing and why "
+    "you think it misfired, straight to Davo. Genuinely useful, not a "
+    "complaint form: getting these wrong is worse than not having them."
 )
 
 
