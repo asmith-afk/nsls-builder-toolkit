@@ -58,10 +58,8 @@ EMIT_TIMEOUT = 1.5
 # Signal's guardrail report where Davo will actually see it.
 FEEDBACK = (
     "\n\n---\n"
-    "If this block looks wrong, say so — I'll log it as a disputed guardrail "
-    "with what you were doing and why you think it misfired, and it goes "
-    "straight to Davo. Getting these wrong is worse than not having them, so "
-    "the report is genuinely useful, not a complaint form."
+    "If this block looks wrong, say so — I'll log it for Davo with what you "
+    "were doing. Getting these wrong is worse than not having them."
 )
 
 
@@ -321,17 +319,12 @@ def gate_personal_repo(tool: str, ti: dict):
         owner = f"{m.group(1)}/{m.group(2)}"
 
     block(
-        f"Critical flag — this looks like an NSLS tool sitting in a personal "
-        f"repo ({owner}). If you're away or you move on, no one else can open it.\n\n"
-        f"Moving it into the NSLS org takes about a minute, keeps your entire "
-        f"commit history, and you stay the owner: repo Settings → Danger Zone → "
-        f"Transfer ownership → thensls. Two things worth doing in the same "
-        f"sitting — scan the git history for credentials first (private repos "
-        f"get no secret scanning), and add your reviewers explicitly afterwards "
-        f"(org default permission is none).\n\n"
-        f"NSLS policy blocks the push until then. It's not a flat no — Kevin can "
-        f"authorize it staying where it is, and I can draft that note now if "
-        f"you'd rather. Say the word and I'll do either.",
+        f"Critical flag — this looks like an NSLS tool in a personal repo "
+        f"({owner}). If you're away or you move on, no one else can open it.\n\n"
+        f"Moving it to the NSLS org takes about a minute, keeps your full "
+        f"history, and you stay the owner. Or Kevin can authorize it staying "
+        f"put — I'll draft that note now if you'd rather.\n\n"
+        f"Which one?",
         gate="personal_repo",
         automation=Path(root).name,
     )
@@ -457,14 +450,11 @@ def gate_bulk_production_write(tool: str, ti: dict):
         return
 
     block(
-        "Critical flag — this looks like a bulk write to a system of record in "
-        "production, and I can't see a dry run or a rollback path.\n\n"
-        "I'm not worried about the code; I'm worried about the version of this "
-        "that runs twice. Before it goes: a tracker record, a reviewer, and a "
-        "dry-run pass so we can see what it would touch. Want me to set those up?\n\n"
-        "If it's already been reviewed and you're re-running it deliberately, "
-        "re-run with --dry-run first, or ask Kevin to authorize and I'll draft "
-        "the note.",
+        "Critical flag — this writes to a production system of record in bulk, "
+        "with no dry run and no rollback path I can see. I'm not worried about "
+        "the code; I'm worried about the version of this that runs twice.\n\n"
+        "A dry-run pass first shows what it would touch — want me to set that "
+        "up? Kevin can also authorize it as-is, and I'll draft that note.",
         gate="bulk_production_write",
     )
 

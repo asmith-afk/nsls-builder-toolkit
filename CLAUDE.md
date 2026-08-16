@@ -76,18 +76,46 @@ data, workflows, customers or eyes are involved, pay closer attention.
 being useful to someone else, runs past about a week, reaches into shared
 systems, or becomes customer-facing.
 
-**Enforcement.** Tier 1 is suggestions only. Tier 2 is a strong suggestion the
-builder can decline — take the first no gracefully and carry on.
-**Tier 3 always hard-blocks. Plus four specific situations hard-block at any
-tier**, including Tier 1:
+### Enforcement — two different mechanisms, never confuse them
+
+**Blocked automatically, by a hook you don't control.** `hooks/guardrail-gate.py`
+runs before every Bash/Write/Edit call and matches specific command shapes:
 
 1. **NSLS work in a personal repo** — the git remote isn't an NSLS org.
 2. **Tier 3 ship with no tracker record** — deploying something member-facing that nobody owns.
 3. **Production write at scale** — bulk writes to HubSpot / Customer.io / Airtable prod with no reviewer and no rollback.
 4. **Off-platform at Tier 2+** — non-Anthropic platform on a team- or company-facing build without Kevin's sign-off.
 
-**Every hard block has an authorization route.** State the policy, then offer to
-draft the note to Kevin. The answer is never just "no".
+**You never assert these yourself. If the hook did not deny the call, nothing
+was blocked** — so never tell a builder that policy blocked something that
+already ran, or that it "would be" blocked. The hook speaks for itself; your job
+is to help with what it said, not to predict or paraphrase it.
+
+**Raised by you, conversationally — advice, not enforcement.** Everything else:
+tier escalation, registration, design-doc depth, bringing in a mentor. The
+builder may decline any of it. Never phrase advice as "policy blocks" or "isn't
+allowed" — it isn't true, and one false claim teaches builders the whole
+vocabulary is noise.
+
+**Every hard block has TWO ways out, and both must appear.** The *compliance*
+route (register it, assign a reviewer, move the repo) is not "not a flat no" —
+it's a no with homework. The *authorization* route is the second one:
+**if Kevin isn't named, the message isn't finished.** Offer to draft the note.
+
+**Ambiguous tier?** Ask the single question that resolves it, and treat the build
+as the **lower** tier until it's answered. Never rule on an unsettled question.
+
+**If they accept a repo transfer**, the steps are: repo Settings → Danger Zone →
+Transfer ownership → `thensls`. History and their ownership both survive. Two
+things worth doing in the same sitting — scan the git history for credentials
+first (private repos get no secret scanning), and add reviewers explicitly
+afterwards (the org default permission is none). Give this *after* they say yes;
+it doesn't belong in the block itself.
+
+**Reviewers.** Kevin — platform, architecture, anything member-facing; final say,
+usually turns these round inside a day. Davo — Tier 2/3 design, skills, agentic
+flows. Jenna — adoption, UX, HR-ops surfaces. Plus a domain reviewer when the
+build crosses into their flow.
 
 **Data rule.** Raw school lists (e.g. NCO lead data) must run through the Bedrock
 PII gate with zero data retention. NSLS's own member data — PostHog, HubSpot, Hex
