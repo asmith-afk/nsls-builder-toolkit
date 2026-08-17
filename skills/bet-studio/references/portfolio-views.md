@@ -28,6 +28,22 @@ unfiltered call also works and costs the same round trip either way; either
 is fine. `list_bets` takes `stage?` and `status?`, both optional, and returns
 the same bet rows ordered by `rank_score` desc.)
 
+**`handed_off` is NOT part of this recipe.** It is a fourth status and a
+different story — see recipe 2b. Never fold it in here.
+
+## Recipe 2b — handed down (squad work, not bets)
+
+```
+list_bets({ status: "handed_off" })
+list_squads()                        // charter, roster, open load
+```
+
+Bets that left the board as WORK, not as losses: good ideas that weren't
+bet-shaped, now owned by a squad or one named person. `get_bet` carries the
+`handoffs` array (newest first) with each one's `assigneeLabel`, `workStatus`
+(todo | active | done | dropped), `open` flag, and the rationale for why it
+wasn't bet-shaped.
+
 ## Recipe 3 — taxonomy labels
 
 ```
@@ -71,11 +87,21 @@ confidence and notes on one bet, drill in with `get_bet` (recipe 4).
 `confidence` field at all (not even `null`), the engine predates the
 aggregate — render `—` rather than guessing from stage.
 
+**Handed down before the graveyard, and NOT collapsed into it.** Handed-down
+bets (recipe 2b) render after the active cohorts under their own "Handed
+down" heading, each row naming the squad or person who has it and the work
+status. Never list them under "Graveyard" and never count them in a kill
+rate: nobody stopped believing in these, and a builder scanning the board
+should be able to see at a glance that work is out there happening. If a
+hand-down's `workStatus` is still `todo` months later, that's worth saying
+out loud — the point of the tracking is to catch spun-out work that never
+landed.
+
 **Graveyard last, collapsed.** Parked and killed bets (recipe 2) render after
-every active cohort, under a single "Graveyard" heading, collapsed to
-name + stage-at-exit + status by default — expand only if asked. Killed bets
-keep their full history in the engine; this view doesn't need to surface it
-unless the builder asks.
+every active cohort AND after the handed-down section, under a single
+"Graveyard" heading, collapsed to name + stage-at-exit + status by default —
+expand only if asked. Killed bets keep their full history in the engine; this
+view doesn't need to surface it unless the builder asks.
 
 **Owner faces.** `get_stack_rank`'s `ownerPerson` is the only recipe here that
 resolves a face — use it for the active cohorts. The graveyard listing

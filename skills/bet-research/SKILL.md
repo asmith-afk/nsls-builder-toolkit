@@ -34,7 +34,8 @@ description: >-
    (`log_evidence` and `tag_evidence_competitor` return `created_stub: true`)
    the same way you announce a section write.
 3. **Write to shared systems** — `save_targets` (names real schools onto a
-   rep-visible call list), `advance_stage`, `set_status`, `upsert_taxonomy`.
+   rep-visible call list), `advance_stage`, `set_status`, `hand_off_bet`
+   (assigns the work to a real squad or person), `upsert_taxonomy`.
    **Confirm the exact values with the human before writing.**
 
 Every write in every tier passes `via: "bet-research"`.
@@ -117,6 +118,11 @@ one over with a `bet_id`. Call `get_bet` first.
 - **If `planned`+** → route to `bet-plan` (or `bet-studio` if unsure which).
 - **If `parked`/`killed`** → say so, offer a confirmed `set_status` revive,
   or stop.
+- **If `handed_off`** → say who has it and the work status (`get_bet`'s
+  `handoffs[0]`). Research is over for this one: it left the board as squad
+  work. Reviving it as a bet is a confirmed `set_status(active)` — which also
+  closes the hand-down — and it needs a reason the materiality bars are now
+  met, not just renewed enthusiasm.
 
 **On resume:** inventory engine state — which `market.*`/`econ.*` fields are
 empty, assumption statuses, evidence counts and distinct institutions,
@@ -211,6 +217,14 @@ plainly, present the fork:
 - **Pivot** — revise the affected sections and re-interrogate the chain.
 - **Kill** — `set_status(bet_id, status: "killed", rationale)`, rationale
   required, confirmed with the owner.
+- **Hand it down** — `hand_off_bet(bet_id, squad_id | individual_email,
+  rationale)`, confirmed with the owner. This is the RIGHT fork for the
+  finding research produces most often and nobody plans for: the problem is
+  real and the buyers confirmed it, but the ceiling is well under the
+  materiality bars. That is not an invalidation and it is not a kill — the
+  work is worth doing, it just isn't a bet. Killing it here is the single
+  most common way a true finding gets filed as a failure. Read `list_squads`
+  first so the work goes to a group that exists.
 
 Never bury an invalidation in a progress summary — it's the headline of that
 session, not a footnote.

@@ -21,7 +21,8 @@ description: >-
    `proof.*` on this bet), `add_experiment`, `update_experiment`,
    `upsert_assumption`, `score_rubric`. Say out loud what's being written as you go — which
    field, what tag or grade — no per-call confirmation.
-3. **Write to shared systems** — `advance_stage`, `set_status`. **Confirm
+3. **Write to shared systems** — `advance_stage`, `set_status`,
+   `hand_off_bet` (assigns the work to a real squad or person). **Confirm
    the exact values with the human before writing.** No-token/no-server
    branch prints the would-be calls instead of guessing or failing silently.
 
@@ -216,6 +217,14 @@ audit text that lands in the shared system same as `to_stage` does.
 - **No** → the bet stays `planned`. Offer `set_status(bet_id, status:
   "parked", rationale)` (confirmed) if the owner wants it shelved instead of
   left active.
+- **No, because the model came in small** → that's a different answer, and
+  parking it is the wrong home. When the hardened economics land under the
+  materiality bars (roughly: no ≥ $500K commitment at stake and no credible
+  ≥ $1M/yr path), the honest outcome is a **hand-down**:
+  `hand_off_bet(bet_id, squad_id | individual_email, rationale)`, confirmed,
+  with the rationale citing the number the model actually produced. The
+  economics did their job — they told us this is squad work, not a bet.
+  Read `list_squads` first so it goes to a group that exists.
 
 Force is available only to `STRATEGY_FORCE_APPROVERS`, with a mandatory
 rationale. It is invoked via the `advance_stage` tool with `force: true` and a

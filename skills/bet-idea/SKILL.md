@@ -26,7 +26,9 @@ description: >-
    `evidence_tag`) but don't stop to confirm each individual call.
 3. **Write to shared systems** — `upsert_taxonomy` (a new market/segment/
    buyer becomes visible to every other bet in the portfolio), `advance_stage`,
-   `set_status`. **Confirm the exact values with the human before writing.**
+   `set_status`, `hand_off_bet` and `create_squad` (a hand-down assigns work to
+   a real group or person, and a squad becomes visible portfolio-wide).
+   **Confirm the exact values with the human before writing.**
    If no `STRATEGY_MCP_TOKEN` is available, print what WOULD be written and
    say so plainly — never fail silently, never fake a write.
 
@@ -57,7 +59,8 @@ one of our scarce research slots? Never assumed, always asked.
 
 ## Quick Start
 
-Idea → **1** Sketch capture → **1.5** Board-worthiness gate (materiality) →
+Idea → **1** Sketch capture → **1.5** Board-worthiness gate (materiality —
+below both bars, capture it and **hand it down** to a squad, then stop) →
 **2** Taxonomy + growth vector + `create_bet` → **3**
 Office-hours diagnostic → **4** Causal-chain interrogation → **5** Stress test
 → **6** Rubric → **7** The gate offer → a bet at Idea stage (or Research, if
@@ -196,11 +199,37 @@ With the step-1 sketch in hand, ask the owner both legs:
 2. *"Is there a **credible path to revenue material at NSLS scale** — rule of
    thumb, ≥ $1M/yr net-new or protected?"*
 
-**Either yes → proceed to step 2.** Both no → this is real work but not a
-bet: name where it belongs (an LOP, a squad backlog, an ops channel), offer
-to write the sketch up for that home, and stop — no `create_bet`. Full
-definitions live in the Studio guide at `market.nsls.org/strategy/guide`
-("What belongs on the board").
+**Either yes → proceed to step 2.**
+
+**Both no → hand it down. Do not stop with nothing on the record.** This is
+real work that isn't bet-shaped, and the outcome for that is a **hand-down**,
+not a shrug and not a kill. Say it in those words — *"that's a hand-down, not
+a no"* — then:
+
+1. `create_bet` with the name and one-liner from the step-1 sketch. **Skip
+   the rest of this skill** — no canvas interrogation, no assumption chain, no
+   rubric. Nobody should owe a lean canvas for a $120K idea.
+2. Ask **who should own the work**: a standing squad (`list_squads` — offer
+   `create_squad` with a charter if the right one doesn't exist yet) or one
+   named person.
+3. `hand_off_bet(bet_id, squad_id | individual_email, rationale)` where the
+   rationale is the materiality answer in plain words — *"real but ~$120K/yr;
+   nothing to prove through the gates."*
+4. Tell the human two things: it's recorded and visible in the **Handed down**
+   section of the portfolio (never the graveyard, never the kill rate), and
+   **telling the squad is still their conversation to have** — the hand-down
+   is a record, not a notification.
+
+Why this replaces "write it up for that home and stop": an idea that ends the
+conversation unrecorded evaporates, and so does the credit for raising it.
+The one thing this gate must never produce is a good small idea that nobody
+can find next quarter.
+
+If the human is emphatic that it shouldn't be in the Studio at all, respect
+that — but say what's being given up before you drop it.
+
+Full definitions live in the Studio guide at
+`market.nsls.org/strategy/guide` ("What belongs on the board").
 
 ## Step 2 — Taxonomy + growth vector
 
@@ -375,6 +404,9 @@ statements, scores) so the human can enter them by hand, and point at
 | "The alternative canvas is good, I'll just write it in too." | Conversation-only unless the human adopts it. Writing it unasked pollutes the real bet's history. |
 | "It's just a new segment, I'll create it and move on." | Shared-system tier — every other bet sees this taxonomy. Confirm first. |
 | "No token, I'll skip the write and keep going quietly." | Print what would have been written. Silent skips lose the human's own idea. |
-| "This is obviously a bet, skipping the materiality gate." | The gate exists because the SLT asked what qualifies. Ask both legs out loud — a great idea below both bars is LOP work, and saying so is the skill working. |
+| "This is obviously a bet, skipping the materiality gate." | The gate exists because the SLT asked what qualifies. Ask both legs out loud — a great idea below both bars is squad work, and saying so is the skill working. |
+| "Below both bars — I'll tell them it isn't a bet and we're done." | Half the job. Capture it and `hand_off_bet` to a squad or a person, with the reason on the record. An unrecorded idea evaporates, and so does the credit for raising it. |
+| "It's too small, I'll park it / kill it to keep the board clean." | Neither. Park and kill are verdicts on the idea; this idea is fine and just isn't bet-shaped. A hand-down keeps it out of the graveyard AND out of the kill rate. |
+| "I'll run the full canvas first, then hand it down." | Backwards. Once both materiality legs are no, skip to the hand-down — nobody owes a lean canvas for a $120K idea. |
 | "The vector is obvious from the sketch, I'll just set it." | Propose it, but the owner confirms — the vector files the bet in every portfolio review. |
 | "Running unattended, and the cluster is clearly material — I'll estimate the $ path." | Cite-or-abort. No citable path in the claims → no bet, theme stays `brewing`. A junk bet costs more than an abort. |

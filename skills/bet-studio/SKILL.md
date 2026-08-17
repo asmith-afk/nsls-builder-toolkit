@@ -18,16 +18,18 @@ description: >-
 ## SAFETY: THREE-TIER PERMISSION MODEL
 
 1. **Read-only** — `list_bets`, `get_stack_rank`, `get_bet`, `list_taxonomy`,
-   `list_moves`, `list_competitors`, `get_competition_grid`, `get_competitor`.
-   Everything this skill does. Free, no confirmation needed.
+   `list_moves`, `list_squads`, `list_competitors`, `get_competition_grid`,
+   `get_competitor`. Everything this skill does. Free, no confirmation needed.
 2. **Configuration / new-content** — none. This skill is a **router**; it never
    drafts canvas content, sections, or scores itself. Any authoring happens in
    the sub-skill it hands off to, under that skill's own tier for it.
 3. **Write to shared systems** — this skill never calls a write tool. If the
-   interim guidance below ever puts `advance_stage` or `set_status` in front of
-   a builder (e.g. flagging a bet to kill in the review interim), that call is
-   **always confirmed with the human first** — named the bet, named the tool,
-   said out loud what it does — never assumed on their behalf.
+   interim guidance below ever puts `advance_stage`, `set_status` or
+   `hand_off_bet` in front of a builder (e.g. flagging a bet to kill in the
+   review interim, or handing one down to a squad), that call is **always
+   confirmed with the human first** — named the bet, named the tool, named the
+   assignee, said out loud what it does — never assumed on their behalf. A
+   hand-down in particular is the OWNER's call to make and to communicate.
 
 ## Purpose
 
@@ -50,6 +52,7 @@ lifecycle question, reads the live portfolio, and hands off — the real work
 | **Portfolio review** | *Phase 5 `bet-review` — not built.* Interim: render the stack rank + portfolio overview yourself — `get_stack_rank` plus `list_bets` (see `references/portfolio-views.md`) — then drill into `get_bet` only for the 1–3 bets the human picks, to check that bet's status update and flag invalidated assumptions. Per-bet health across the whole board arrives with the Phase 3 UI / a future bulk endpoint — the engine has no bulk status tool today, so don't loop `get_bet` over the full portfolio. | n/a (cross-cutting) |
 | **Run experiments** | *Phase 5 `bet-run` — not built.* Interim: say plainly it's coming. | Live → Running → Scaling |
 | **"Who are we up against?" / "where's the blue ocean?"** | Cross-bet, not a single bet — call `get_competition_grid` and render `/strategy/competition`: jobs down, companies across (status quo pinned first), with `blue_ocean` computed per job. Read it on one side at a time (`side: "b2b"` \| `"b2c"`) when the market is two-sided — a company can own the institution's budget and barely touch the student experience, and the merged view cannot tell you which. Cell states: `covered` (validated) \| `provisional` (hypothesis only) \| `open-water` (assessed absent) \| `unassessed`. **`unassessed` is not opportunity** — it means nobody looked, and the honest answer is "that's a research gap," not "that's open water." Drill into a company with `get_competitor`; if its `freshness` is `stale` or `never`, say so before anyone leans on it. Competitor pages GROW OUT OF `bet-research` — route there rather than authoring here, and route on three triggers, not one: a company that is **missing**, a page that is **stale/never reviewed**, or — the one the grid makes visible and nobody thinks to look for — a company **covering a job one of your bets delivers with no stance on record**. Read that last one off the row: the bet-overlay chips say which bets deliver the job, the cells say who covers it, and `get_bet`'s `competitors` array says whether a stance exists. A fresh page with no stance is a real gap that looks like nothing. | n/a (cross-cutting) |
+| **Hand a bet down** (it's good work but not bet-shaped — no material revenue thesis, so the gates are ceremony) | Stays here: this is an outcome, not a lifecycle stage. Read `list_squads` for the standing groups (charter, roster, current open load), then draft `hand_off_bet(bet_id, squad_id \| individual_email, rationale)` for the OWNER to fire — the rationale says why it isn't bet-shaped. **Never route this to park or kill:** those are verdicts on the idea, and a hand-down is the opposite. If no squad fits, `create_squad` (name + charter) is the owner's call too, or hand it to one named person. Then say plainly that telling the squad is still a human conversation — the record isn't a notification. An idea that arrives already below the materiality bars belongs to `bet-idea`, which captures and hands it down in one pass. | Active → Handed down (stage unchanged) |
 | **"What should I work on?"** | Cross-bet to-dos, not a single bet — call `list_moves` and render `/strategy/moves` (todo/active first). A **move** is one piece of work that advances more than one bet at once ("build once, deploy everywhere" — e.g. one lead scrape + campaign to career-services buyers that serves several bets' hypotheses through relationships we already have). Point the builder at the move's linked bets and owner before routing anywhere else. | n/a (cross-cutting) |
 
 ## Flow
@@ -62,10 +65,12 @@ lifecycle question, reads the live portfolio, and hands off — the real work
    nothing to compare against). Call `get_stack_rank` for active bets and
    `list_bets` for the graveyard, grouped by stage cohort with each bet's
    confidence surfaced beside its rank — never let a low-confidence idea-stage
-   sketch read as comparable to an evidence-backed research-stage bet. Parked
-   and killed bets render last, under a collapsed "Graveyard." Exact recipes
-   and rendering rules: `references/portfolio-views.md`. Ask which bet they
-   want, or confirm the intent is genuinely a new one.
+   sketch read as comparable to an evidence-backed research-stage bet.
+   **Handed-down bets get their own section** — squad work, not bets, and
+   never filed under the graveyard — followed last by parked and killed bets
+   under a collapsed "Graveyard." Exact recipes and rendering rules:
+   `references/portfolio-views.md`. Ask which bet they want, or confirm the
+   intent is genuinely a new one.
 3. **Sanity-check stage vs. intent.** The bet's `stage` (from the listing) is
    the signal — an idea-stage bet has no economics to plan yet. "Research a
    bet" on an IDEA-stage bet needs the stage gate first: evidence logged
@@ -90,7 +95,8 @@ lifecycle question, reads the live portfolio, and hands off — the real work
 ## Heartbeat rule
 
 Report every read before acting on it — "portfolio: 6 active (2 idea, 3
-research, 1 planned), 2 in the graveyard" — and report every hand-off ("routing
+research, 1 planned), 1 handed down to a squad, 2 in the graveyard" — and
+report every hand-off ("routing
 to `bet-idea` with your one-liner carried over"). Never silently skip the
 portfolio view, and never silently substitute a different bet than the one
 named.
@@ -114,7 +120,7 @@ Kevin, SLT authors only) and suggest running `/connect`.
 
 ## Reference index
 - `references/portfolio-views.md` — tool-call recipes and rendering rules for
-  the stack rank, stage grouping, and graveyard.
+  the stack rank, stage grouping, handed-down bets, and the graveyard.
 - Hand-off targets: `bet-idea`, `bet-research`, `bet-plan` (built);
   `bet-review`, `bet-run` (Phase 5, not yet built).
 - Competitor pages and the competition grid live at `/strategy/competition`;
