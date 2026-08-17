@@ -1,5 +1,5 @@
 # Lines of Priority (LOPs)
-_Last synced: 2026-08-03_
+_Last synced: 2026-08-17_
 
 ## L1: Scalable Operating Engine
 **Owner**: Chelsea Byers | **Health**: No update
@@ -14,10 +14,6 @@ _Last synced: 2026-08-03_
 ### L2: Transition off of Drupal by end of Q3 of 2026
 **Owner**: Kevin Prentiss | **Health**: At Risk | **Deadline**: 2026-09-30
 > Technical work is progressing on track, but DRI is concerned about the timeline for full deprecation. The new invite/list creation system must be fully migrated before Drupal can be safely removed. A hard cutoff at end of Q3 while invites are flowing is deemed risky; DRI anticipates leaving Drupal in place longer to ensure responsible shutdown.
-
-### L2: Contract simplification (employees + contractors)
-**Owner**: Anish Patel | **Health**: Hit Goal
-> Contract simplification for employees and contractors has been completed.
 
 ### L2: Move all Society and FOL lifecycle marketing emails to Customer.io by end of 2026
 **Owner**: Adam Stone | **Health**: On Track | **Deadline**: 2026-12-31
@@ -50,7 +46,7 @@ _Last synced: 2026-08-03_
 
 ### L2: Complete job framework and compensation leveling project by the end of Q2
 **Owner**: Heather Darnell | **Health**: At Risk | **Deadline**: 2026-06-30
-> Job framework and compensation leveling project is fragmented and blocking progress. DRI identified that the framework (KPI base, LOP work, Knowledge Base) needs unification; a follow-up is scheduled for July 27. Ashleigh's comp offer remains unresolved with Cory, William, and Kevin still working it out. Quarterly reviews are scheduled for next week, but core framework alignment is pending.
+> Job framework and compensation leveling project is fragmented and blocking progress. DRI identified that the framework (KPI base, LOP work, Knowledge Base) needs unification; a follow-up is scheduled for July 27. A dependent compensation decision remains open and is being handled outside this goal. Quarterly reviews are scheduled for next week, but core framework alignment is pending.
 
 ### L2: Host Meaningful 25th Anniversary Event
 **Owner**: Chelsea Byers | **Health**: On Track | **Deadline**: 2026-10-27
@@ -86,10 +82,6 @@ _Last synced: 2026-08-03_
 **Owner**: Adam Stone | **Health**: On Track | **Deadline**: 2026-12-31
 > DRI reports the Invite-to-Enrollment Conversion Rate goal is on track.
 
-### L2: (Archive - Moved to L3) Send 4.25M+ invitations to the 10.6M Serviceable Addressable Market; 80% needs to be standard invitations (excludes SNHU)
-**Owner**: Ashleigh Smith | **Health**: On Track | **Deadline**: 2026-12-31
-> Approximately 40k invitations still needed to reach budgeted amount for Spring. Alumni cohort pending, indicating progress is being made toward the 40%+ target of 10.6M.
-
 ### L2: Launch 3 stakeholder engagement programs & 9 event programs to drive meaningful engagement
 **Owner**: Adam Stone | **Health**: No update | **Deadline**: 2026-12-31
 > NSLS Applied is 5 of 7 sessions complete with the final two scheduled for August, and with Impact Day and Summit we're on course for all 9 event programs. Engagement quality signals based on the NSLS Applied dashboard: https://nslsappliedeventsreport.netlify.app/. Example signals: 5,300+ registrations, 97%+ positive satisfaction on every session, zero negative feedback, and 98% of respondents planning to attend future events.
@@ -104,10 +96,6 @@ _Last synced: 2026-08-03_
 > No update yet.
 
 ### L2: Define product requirements for 2027 product lead growth in to market footprint expansion and/or a new market
-**Owner**: Kevin Prentiss | **Health**: No update
-> No update yet.
-
-### L2: Make Society 'Welcome' and 'Personal Insights' available to new NSLS members 
 **Owner**: Kevin Prentiss | **Health**: No update
 > No update yet.
 

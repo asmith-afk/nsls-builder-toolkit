@@ -19,7 +19,7 @@
   },
   {
     "name": "Isaia Cirillo",
-    "title": "",
+    "title": "Contractor",
     "manager": "Royce Rowan",
     "email": "icirillo@nsls.org",
     "slack": "U09K0NK755M",
@@ -63,6 +63,15 @@
     "manager": "James Corriveau",
     "email": "ttorres@nsls.org",
     "slack": "U074E7H9C07",
+    "department": "Client Services",
+    "manages": []
+  },
+  {
+    "name": "Chris Higbee",
+    "title": "Contractor",
+    "manager": "Ashleigh Smith",
+    "email": "chigbee@nsls.org",
+    "slack": "U0A955W2BS4",
     "department": "Client Services",
     "manages": []
   },
@@ -182,6 +191,7 @@
     "slack": "UEWBC2R08",
     "department": "Client Services",
     "manages": [
+      "Chris Higbee",
       "Kimberly Campbell",
       "Melvin Rosal",
       "Timothy Duffy"
@@ -215,8 +225,8 @@
     ]
   },
   {
-    "name": "Davo Wood",
-    "title": "AI Support",
+    "name": "David Wood",
+    "title": "Contractor",
     "manager": "Kevin Prentiss",
     "email": "davowood@nsls.org",
     "slack": "U0B2B0L7858",
@@ -303,7 +313,9 @@
     "slack": "U02FSV479GC",
     "department": "Marketing",
     "manages": [
-      "Noah Camenker"
+      "Elizabeth Garretson",
+      "Noah Camenker",
+      "Stefani Stout"
     ]
   },
   {
@@ -313,7 +325,9 @@
     "email": "ahesse@nsls.org",
     "slack": "U04LPUT7WT1",
     "department": "Marketing",
-    "manages": []
+    "manages": [
+      "Jake Arcangeli"
+    ]
   },
   {
     "name": "Michael Adamian",
@@ -333,6 +347,7 @@
     "department": "Marketing",
     "manages": [
       "Boris Savoie Doyer",
+      "Collin Wood",
       "Devin Lasker",
       "Dylan Blaty",
       "Jordyn Tannenbaum",
@@ -351,10 +366,12 @@
     "department": "Marketing",
     "manages": [
       "Andrew Hesse",
+      "Boris Doyer",
       "Bruno Drouin",
-      "Gabriela R Cordeiro",
+      "Gabriela Cordeiro",
       "Joshua Hrala",
       "Michael Adamian",
+      "Pascal Zamprelli",
       "Rachel Porter",
       "Tatiana McGrath"
     ]
@@ -405,7 +422,9 @@
     "email": "ncamenker@nsls.org",
     "slack": "U03ATLQ2BL1",
     "department": "Marketing",
-    "manages": []
+    "manages": [
+      "Angel Gonzalez"
+    ]
   },
   {
     "name": "Timothy Duffy",
@@ -426,8 +445,17 @@
     "manages": []
   },
   {
-    "name": "Gabriela R Cordeiro",
-    "title": "",
+    "name": "David Avila",
+    "title": "Contractor",
+    "manager": "Juan Maggi",
+    "email": "davila@nsls.org",
+    "slack": "U09HEHF778A",
+    "department": "Unknown",
+    "manages": []
+  },
+  {
+    "name": "Gabriela Cordeiro",
+    "title": "Contractor",
     "manager": "Michael O'Brien",
     "email": "gcordeiro@nsls.org",
     "slack": "U0AF9KUEVAM",
@@ -445,7 +473,7 @@
   },
   {
     "name": "Bruno Drouin",
-    "title": "",
+    "title": "Contractor",
     "manager": "Michael O'Brien",
     "email": "bdrouin@nsls.org",
     "slack": "U097SSUQB6J",
@@ -453,9 +481,27 @@
     "manages": []
   },
   {
+    "name": "Adam Carpenter",
+    "title": "Contractor",
+    "manager": "Kevin Prentiss",
+    "email": "acarpenter@nsls.org",
+    "slack": "U0BPDNUNQD9",
+    "department": "Unknown",
+    "manages": []
+  },
+  {
+    "name": "Boris Doyer",
+    "title": "Contractor",
+    "manager": "Michael O'Brien",
+    "email": "bdoyer@nsls.org",
+    "slack": "U096X7F82MP",
+    "department": "Unknown",
+    "manages": []
+  },
+  {
     "name": "Elizabeth Garretson",
-    "title": "",
-    "manager": "",
+    "title": "Contractor",
+    "manager": "Tatiana McGrath",
     "email": "egarretson@nsls.org",
     "slack": "U07SRF50VGD",
     "department": "Unknown",
@@ -463,17 +509,53 @@
   },
   {
     "name": "Janine Walsh",
-    "title": "",
-    "manager": "",
+    "title": "Contractor",
+    "manager": "Jordan Perry",
     "email": "jwalsh@nsls.org",
     "slack": "U0ADTNZUB8D",
     "department": "Unknown",
     "manages": []
   },
   {
+    "name": "Bogdan Tarbujaru",
+    "title": "Contractor",
+    "manager": "Juan Maggi",
+    "email": "tbogdan@nsls.org",
+    "slack": "U08DNV4U0CE",
+    "department": "Unknown",
+    "manages": []
+  },
+  {
+    "name": "Patricia Pina",
+    "title": "Contractor",
+    "manager": "Alejandro Gabriel",
+    "email": "ppina@nsls.org",
+    "slack": "U0A3PH2G2MU",
+    "department": "Unknown",
+    "manages": []
+  },
+  {
+    "name": "Malvin Vital",
+    "title": "Contractor",
+    "manager": "Alejandro Gabriel",
+    "email": "mvital@nsls.org",
+    "slack": "U0ASU1LFNKU",
+    "department": "Unknown",
+    "manages": []
+  },
+  {
+    "name": "Christophre Munns",
+    "title": "Contractor",
+    "manager": "Kevin Prentiss",
+    "email": "mmunns@nsls.org",
+    "slack": "",
+    "department": "Unknown",
+    "manages": []
+  },
+  {
     "name": "Jasmine Artis",
-    "title": "",
-    "manager": "",
+    "title": "Contractor",
+    "manager": "Jordan Perry",
     "email": "jartis@nsls.org",
     "slack": "U0ABXMAAVEU",
     "department": "Unknown",
@@ -481,8 +563,8 @@
   },
   {
     "name": "Tattiana Alfaro",
-    "title": "",
-    "manager": "",
+    "title": "Contractor",
+    "manager": "David Adams",
     "email": "talfaro@nsls.org",
     "slack": "U0B0244Q9AS",
     "department": "Unknown",
@@ -508,8 +590,8 @@
   },
   {
     "name": "Matthew Schuman",
-    "title": "",
-    "manager": "",
+    "title": "Contractor",
+    "manager": "Jordan Perry",
     "email": "mschuman@nsls.org",
     "slack": "U0AAX0KFAR1",
     "department": "Unknown",
@@ -517,8 +599,8 @@
   },
   {
     "name": "Stefani Stout",
-    "title": "",
-    "manager": "",
+    "title": "Contractor",
+    "manager": "Tatiana McGrath",
     "email": "sstout@nsls.org",
     "slack": "U098K2VA01E",
     "department": "Unknown",
@@ -526,17 +608,26 @@
   },
   {
     "name": "Pascal Zamprelli",
-    "title": "",
-    "manager": "",
+    "title": "Contractor",
+    "manager": "Michael O'Brien",
     "email": "pzamprelli@nsls.org",
     "slack": "U08T2KEUB0Q",
     "department": "Unknown",
     "manages": []
   },
   {
+    "name": "Aicel Tavares",
+    "title": "Contractor",
+    "manager": "Alejandro Gabriel",
+    "email": "atavares@nsls.org",
+    "slack": "U0A3A57KSB1",
+    "department": "Unknown",
+    "manages": []
+  },
+  {
     "name": "Jake Arcangeli",
-    "title": "",
-    "manager": "",
+    "title": "Contractor",
+    "manager": "Andrew Hesse",
     "email": "jarcangeli@nsls.org",
     "slack": "U0ACL36HJ2F",
     "department": "Unknown",
@@ -552,26 +643,71 @@
     "manages": []
   },
   {
+    "name": "Jose Perdomo",
+    "title": "Contractor",
+    "manager": "Alejandro Gabriel",
+    "email": "jperdomo@nsls.org",
+    "slack": "U0BELDDRV60",
+    "department": "Unknown",
+    "manages": []
+  },
+  {
     "name": "Robert Stoica",
-    "title": "",
-    "manager": "",
+    "title": "Contractor",
+    "manager": "Juan Maggi",
     "email": "rstoica@nsls.org",
     "slack": "U0515D8001W",
     "department": "Unknown",
     "manages": []
   },
   {
+    "name": "Angel Gonzalez",
+    "title": "Contractor",
+    "manager": "Noah Camenker",
+    "email": "agonzalez@nsls.org",
+    "slack": "U0BPJ1E73PY",
+    "department": "Unknown",
+    "manages": []
+  },
+  {
+    "name": "Angelyn Kempe",
+    "title": "Contractor",
+    "manager": "Kevin Prentiss",
+    "email": "akempe@nsls.org",
+    "slack": "U0B6JBUSKF0",
+    "department": "Unknown",
+    "manages": []
+  },
+  {
     "name": "Collin Wood",
-    "title": "",
-    "manager": "",
+    "title": "Contractor",
+    "manager": "Adam Stone",
     "email": "cwood@nsls.org",
     "slack": "U08RLLMFJTU",
     "department": "Unknown",
     "manages": []
   },
   {
+    "name": "Steffanie Punde",
+    "title": "Contractor",
+    "manager": "Alejandro Gabriel",
+    "email": "spunde@nsls.org",
+    "slack": "U0A44G21LQ1",
+    "department": "Unknown",
+    "manages": []
+  },
+  {
+    "name": "Ionut Mutascu",
+    "title": "Contractor",
+    "manager": "Juan Maggi",
+    "email": "imutascu@nsls.org",
+    "slack": "U08EJFSTVPS",
+    "department": "Unknown",
+    "manages": []
+  },
+  {
     "name": "Kyle Coberly",
-    "title": "",
+    "title": "Contractor",
     "manager": "Kevin Prentiss",
     "email": "kcoberly@nsls.org",
     "slack": "U0B286J7NUE",
@@ -658,14 +794,13 @@
       "Atrayu Polhemus",
       "Charlotte Donnelly",
       "Melissa Baggett",
-      "Monica Cerrato",
-      "Nancy Castillo"
+      "Monica Cerrato"
     ]
   },
   {
     "name": "Naomi Ariza",
     "title": "Membership Experience Specialist",
-    "manager": "Kimberly Campbell",
+    "manager": "Alejandro Gabriel",
     "email": "nariza@nsls.org",
     "slack": "U0B24LCLQMP",
     "department": "Member Experience",
@@ -688,10 +823,24 @@
     "slack": "U0A7E0JCNBU",
     "department": "Member Experience",
     "manages": [
+      "Aicel Tavares",
+      "Angel Guzman",
+      "Elian Castro",
+      "Emilia Santana",
       "Franklin Ortega",
       "Jennifer Arias",
+      "Jose Perdomo",
+      "Maikel Berbi",
+      "Malvin Vital",
       "Mia Vasquez",
-      "Samantha Montas"
+      "Naomi Ariza",
+      "Patricia Pina",
+      "Rauly Villar",
+      "Reiny Garcia",
+      "Samantha Montas",
+      "Saray Rosado",
+      "Sofia Fader",
+      "Steffanie Punde"
     ]
   },
   {
@@ -706,7 +855,7 @@
   {
     "name": "Maikel Berbi",
     "title": "Membership Experience Specialist",
-    "manager": "Kimberly Campbell",
+    "manager": "Alejandro Gabriel",
     "email": "mberbi@nsls.org",
     "slack": "U0B1A9YPKHV",
     "department": "Member Experience",
@@ -715,7 +864,7 @@
   {
     "name": "Sofia Fader",
     "title": "Membership Experience Specialist",
-    "manager": "Kimberly Campbell",
+    "manager": "Alejandro Gabriel",
     "email": "skurtenbach@nsls.org",
     "slack": "U0B1NBN7UN9",
     "department": "Member Experience",
@@ -724,7 +873,7 @@
   {
     "name": "Elian Castro",
     "title": "Membership Experience Specialist",
-    "manager": "Kimberly Campbell",
+    "manager": "Alejandro Gabriel",
     "email": "ecastro@nsls.org",
     "slack": "U0B1NBFJACD",
     "department": "Member Experience",
@@ -742,18 +891,9 @@
   {
     "name": "Emilia Santana",
     "title": "Membership Experience Specialist",
-    "manager": "Kimberly Campbell",
+    "manager": "Alejandro Gabriel",
     "email": "esantana@nsls.org",
     "slack": "U0B1PMSKT0E",
-    "department": "Member Experience",
-    "manages": []
-  },
-  {
-    "name": "Nancy Castillo",
-    "title": "Member Experience Specialist",
-    "manager": "Kara Klimuszko",
-    "email": "ncastillo@nsls.org",
-    "slack": "U05516H7B8A",
     "department": "Member Experience",
     "manages": []
   },
@@ -769,7 +909,7 @@
   {
     "name": "Angel Guzman",
     "title": "Membership Experience Specialist",
-    "manager": "Kimberly Campbell",
+    "manager": "Alejandro Gabriel",
     "email": "aguzman@nsls.org",
     "slack": "U0B1VBGR6DS",
     "department": "Member Experience",
@@ -784,24 +924,14 @@
     "department": "Member Experience",
     "manages": [
       "Alejandro Gabriel",
-      "Angel Guzman",
       "ELIANA VALLEJO",
-      "Edgar Segura",
-      "Elian Castro",
-      "Emilia Santana",
-      "Kara Klimuszko",
-      "Maikel Berbi",
-      "Naomi Ariza",
-      "Rauly Villar",
-      "Reiny Garcia",
-      "Saray Rosado",
-      "Sofia Fader"
+      "Kara Klimuszko"
     ]
   },
   {
     "name": "Reiny Garcia",
     "title": "Membership Experience Specialist",
-    "manager": "Kimberly Campbell",
+    "manager": "Alejandro Gabriel",
     "email": "rcalderon@nsls.org",
     "slack": "U0B1KCAN9SP",
     "department": "Member Experience",
@@ -826,18 +956,9 @@
     "manages": []
   },
   {
-    "name": "Edgar Segura",
-    "title": "Client Services Manager",
-    "manager": "Kimberly Campbell",
-    "email": "esegura@nsls.org",
-    "slack": "U0A3PH5EA3G",
-    "department": "Member Experience",
-    "manages": []
-  },
-  {
     "name": "Rauly Villar",
     "title": "Membership Experience Specialist",
-    "manager": "Kimberly Campbell",
+    "manager": "Alejandro Gabriel",
     "email": "rvillar@nsls.org",
     "slack": "U0B24L8CQD7",
     "department": "Member Experience",
@@ -855,7 +976,7 @@
   {
     "name": "Saray Rosado",
     "title": "Membership Experience Specialist",
-    "manager": "Kimberly Campbell",
+    "manager": "Alejandro Gabriel",
     "email": "srosado@nsls.org",
     "slack": "U0B1NBK7C21",
     "department": "Member Experience",
@@ -869,11 +990,14 @@
     "slack": "U07TS8X7T7X",
     "department": "Engineering",
     "manages": [
+      "Adam Carpenter",
       "Angelica Evans",
+      "Angelyn Kempe",
       "Brandon Evans",
       "Chelsea Byers",
+      "Christophre Munns",
       "David Adams",
-      "Davo Wood",
+      "David Wood",
       "Jana Amsellem",
       "Juan Maggi",
       "Kyle Coberly",
@@ -906,7 +1030,9 @@
     "email": "dadams@nsls.org",
     "slack": "U0A9KTSG4J2",
     "department": "Engineering",
-    "manages": []
+    "manages": [
+      "Tattiana Alfaro"
+    ]
   },
   {
     "name": "Juan Maggi",
@@ -916,8 +1042,12 @@
     "slack": "U02G96B39GQ",
     "department": "Engineering",
     "manages": [
+      "Bogdan Tarbujaru",
+      "David Avila",
       "Evgeny Pokrovskiy",
+      "Ionut Mutascu",
       "Kibaek Kim",
+      "Robert Stoica",
       "Vadim Geroim"
     ]
   },
@@ -1029,7 +1159,10 @@
     "manages": [
       "Dasha Cherkasov",
       "Freda Hobbs",
-      "Judy Mai-Vargas"
+      "Janine Walsh",
+      "Jasmine Artis",
+      "Judy Mai-Vargas",
+      "Matthew Schuman"
     ]
   },
   {
@@ -1116,7 +1249,9 @@
     "email": "emuskat@nsls.org",
     "slack": "U08VCAK3L0Z",
     "department": "Finance",
-    "manages": []
+    "manages": [
+      "Jeffrey Billmann"
+    ]
   },
   {
     "name": "Irina Haikin",
@@ -1124,6 +1259,15 @@
     "manager": "Valerie English",
     "email": "ihaikin@nsls.org",
     "slack": "U070LSYH9DF",
+    "department": "Finance",
+    "manages": []
+  },
+  {
+    "name": "Jeffrey Billmann",
+    "title": "IT Operations Administrator",
+    "manager": "Erin Muskat",
+    "email": "jbillmann@nsls.org",
+    "slack": "",
     "department": "Finance",
     "manages": []
   },

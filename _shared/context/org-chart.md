@@ -1,5 +1,5 @@
 # NSLS Org Chart
-_Last synced: 2026-08-10_
+_Last synced: 2026-08-17_
 
 ## Business Intelligence
 
@@ -20,10 +20,11 @@ _Last synced: 2026-08-10_
 | Arianne Stinson | Chapter Success Manager (Silver) | James Corriveau | astinson@nsls.org | U0393VBME00 |
 | Ashleigh Smith | Chief Revenue Officer | Gary Tuerack | asmith@nsls.org | UEWBC2R08 |
 | Brielle Jones | Chapter Success Manager (Silver) | James Corriveau | bjones@nsls.org | U091ZV57M29 |
+| Chris Higbee | Contractor | Ashleigh Smith | chigbee@nsls.org | U0A955W2BS4 |
 | Dejeahn Brown | Chapter Success Manager (Silver) | James Corriveau | dbrown@nsls.org | U098M2E1M5X |
 | Dillon Cook | Chapter Success Manager (Silver) | James Corriveau | dcook@nsls.org | U0A2A9Q95JN |
 | Gregg Gudelinis | Chapter Success Manager (Gold) | James Corriveau | ggudelinis@nsls.org | U034ZAPBHAT |
-| Isaia Cirillo |  | Royce Rowan | icirillo@nsls.org | U09K0NK755M |
+| Isaia Cirillo | Contractor | Royce Rowan | icirillo@nsls.org | U09K0NK755M |
 | Jakita Cofer | Senior Strategic Chapter Manager | Marissa Curry | jcofer@nsls.org | U03K8GYD6MC |
 | James Corriveau | Director of Chapter Management (Mid-Market) | Melvin Rosal | jcorriveau@nsls.org | U096ZFUQU7M |
 | Liliana Gonzalez | Strategic Chapter Manager | Marissa Curry | lgonzalez@nsls.org | U02CXBF0Z9P |
@@ -69,6 +70,7 @@ _Last synced: 2026-08-10_
 | Anish Patel | Chief Financial Officer | Gary Tuerack | apatel@nsls.org | U04MU8SUEVA |
 | Erin Muskat | Senior Director, Financial Planning & Analysis | Anish Patel | emuskat@nsls.org | U08VCAK3L0Z |
 | Irina Haikin | Payroll Administrator and Accountant | Valerie English | ihaikin@nsls.org | U070LSYH9DF |
+| Jeffrey Billmann | IT Operations Administrator | Erin Muskat | jbillmann@nsls.org |  |
 | Juan Cardenas | Jr. Staff Accountant | Sandra Suarez | jcardenas@nsls.org | U05BAL618QY |
 | Sandra Suarez | Supervisor, Accounts Payable | Valerie English | ssuarez@nsls.org | U09DZ8YQRUZ |
 | Valerie English | Manager, Accounting | Anish Patel | venglish@nsls.org | U03JPRXN2BV |
@@ -106,28 +108,26 @@ _Last synced: 2026-08-10_
 | Name | Title | Manager | Email | Slack |
 |------|-------|---------|-------|-------|
 | Alejandro Gabriel | QA Specialist | Kimberly Campbell | agabriel@nsls.org | U0A7E0JCNBU |
-| Angel Guzman | Membership Experience Specialist | Kimberly Campbell | aguzman@nsls.org | U0B1VBGR6DS |
+| Angel Guzman | Membership Experience Specialist | Alejandro Gabriel | aguzman@nsls.org | U0B1VBGR6DS |
 | Atrayu Polhemus | Membership Experience Specialist | Kara Klimuszko | apolhemus@nsls.org | U08E6QG6KUM |
 | Charlotte Donnelly | Member Experience Specialist | Kara Klimuszko | cdonnelly@nsls.org | U05DKQE1J3H |
 | ELIANA VALLEJO | Workforce and AI Operations Analyst | Kimberly Campbell | esantos@nsls.org | U0BAK4ZT3EF |
-| Edgar Segura | Client Services Manager | Kimberly Campbell | esegura@nsls.org | U0A3PH5EA3G |
-| Elian Castro | Membership Experience Specialist | Kimberly Campbell | ecastro@nsls.org | U0B1NBFJACD |
-| Emilia Santana | Membership Experience Specialist | Kimberly Campbell | esantana@nsls.org | U0B1PMSKT0E |
+| Elian Castro | Membership Experience Specialist | Alejandro Gabriel | ecastro@nsls.org | U0B1NBFJACD |
+| Emilia Santana | Membership Experience Specialist | Alejandro Gabriel | esantana@nsls.org | U0B1PMSKT0E |
 | Franklin Ortega | Member Experience Specialist | Alejandro Gabriel | fortega@nsls.org | U0A7BUY5EG6 |
 | Jennifer Arias | Member Experience Specialist | Alejandro Gabriel | apeguero@nsls.org | U0AS9A3RLJY |
 | Kara Klimuszko | Member Experience Team Lead | Kimberly Campbell | kklimuszko@nsls.org | U01B6B0T831 |
 | Kimberly Campbell | Director of Member Experience | Ashleigh Smith | kcampbell@nsls.org | U021ZK0NW07 |
-| Maikel Berbi | Membership Experience Specialist | Kimberly Campbell | mberbi@nsls.org | U0B1A9YPKHV |
+| Maikel Berbi | Membership Experience Specialist | Alejandro Gabriel | mberbi@nsls.org | U0B1A9YPKHV |
 | Melissa Baggett | Membership Experience Specialist | Kara Klimuszko | mbaggett@nsls.org | U081X01AQA2 |
 | Mia Vasquez | Member Experience Specialist | Alejandro Gabriel | mvasquez@nsls.org | U0B720AV5U7 |
 | Monica Cerrato | Member Experience Specialist | Kara Klimuszko | mcerrato@nsls.org | U02EG4YQ2UF |
-| Nancy Castillo | Member Experience Specialist | Kara Klimuszko | ncastillo@nsls.org | U05516H7B8A |
-| Naomi Ariza | Membership Experience Specialist | Kimberly Campbell | nariza@nsls.org | U0B24LCLQMP |
-| Rauly Villar | Membership Experience Specialist | Kimberly Campbell | rvillar@nsls.org | U0B24L8CQD7 |
-| Reiny Garcia | Membership Experience Specialist | Kimberly Campbell | rcalderon@nsls.org | U0B1KCAN9SP |
+| Naomi Ariza | Membership Experience Specialist | Alejandro Gabriel | nariza@nsls.org | U0B24LCLQMP |
+| Rauly Villar | Membership Experience Specialist | Alejandro Gabriel | rvillar@nsls.org | U0B24L8CQD7 |
+| Reiny Garcia | Membership Experience Specialist | Alejandro Gabriel | rcalderon@nsls.org | U0B1KCAN9SP |
 | Samantha Montas | Membership Experience Specialist | Alejandro Gabriel | smontas@nsls.org | U0B7FB0EM5L |
-| Saray Rosado | Membership Experience Specialist | Kimberly Campbell | srosado@nsls.org | U0B1NBK7C21 |
-| Sofia Fader | Membership Experience Specialist | Kimberly Campbell | skurtenbach@nsls.org | U0B1NBN7UN9 |
+| Saray Rosado | Membership Experience Specialist | Alejandro Gabriel | srosado@nsls.org | U0B1NBK7C21 |
+| Sofia Fader | Membership Experience Specialist | Alejandro Gabriel | skurtenbach@nsls.org | U0B1NBN7UN9 |
 
 ## Operations
 
@@ -147,7 +147,7 @@ _Last synced: 2026-08-10_
 | Name | Title | Manager | Email | Slack |
 |------|-------|---------|-------|-------|
 | Angelica Evans | Technical Product Manager | Kevin Prentiss | aevans@nsls.org | U02EQ4E2WDC |
-| Davo Wood | AI Support | Kevin Prentiss | davowood@nsls.org | U0B2B0L7858 |
+| David Wood | Contractor | Kevin Prentiss | davowood@nsls.org | U0B2B0L7858 |
 | Jana Amsellem | AI Product Architect | Kevin Prentiss | rakasha@nsls.org | U070WE56UU9 |
 | Lauren Prentiss | Senior Product Manager | Chelsea Byers | lprentiss@nsls.org | U08RN7X685A |
 | Trina Limpert | Contractor | Kevin Prentiss | tlimpert@nsls.org | U0AJ5H67WET |
@@ -184,21 +184,34 @@ _Last synced: 2026-08-10_
 
 | Name | Title | Manager | Email | Slack |
 |------|-------|---------|-------|-------|
+| Adam Carpenter | Contractor | Kevin Prentiss | acarpenter@nsls.org | U0BPDNUNQD9 |
 | Adam Carpenter |  |  |  |  |
 | Adam Munns |  |  | hello@munnsmedia.com | U0AM0JG42F6 |
-| Bruno Drouin |  | Michael O'Brien | bdrouin@nsls.org | U097SSUQB6J |
-| Collin Wood |  |  | cwood@nsls.org | U08RLLMFJTU |
+| Aicel Tavares | Contractor | Alejandro Gabriel | atavares@nsls.org | U0A3A57KSB1 |
+| Angel Gonzalez | Contractor | Noah Camenker | agonzalez@nsls.org | U0BPJ1E73PY |
+| Angelyn Kempe | Contractor | Kevin Prentiss | akempe@nsls.org | U0B6JBUSKF0 |
+| Bogdan Tarbujaru | Contractor | Juan Maggi | tbogdan@nsls.org | U08DNV4U0CE |
+| Boris Doyer | Contractor | Michael O'Brien | bdoyer@nsls.org | U096X7F82MP |
+| Bruno Drouin | Contractor | Michael O'Brien | bdrouin@nsls.org | U097SSUQB6J |
+| Christophre Munns | Contractor | Kevin Prentiss | mmunns@nsls.org |  |
+| Collin Wood | Contractor | Adam Stone | cwood@nsls.org | U08RLLMFJTU |
+| David Avila | Contractor | Juan Maggi | davila@nsls.org | U09HEHF778A |
 | David Weber  |  |  | dweber@nsls.org | U086Y4L1ZED |
-| Elizabeth Garretson |  |  | egarretson@nsls.org | U07SRF50VGD |
-| Gabriela R Cordeiro |  | Michael O'Brien | gcordeiro@nsls.org | U0AF9KUEVAM |
-| Jake Arcangeli |  |  | jarcangeli@nsls.org | U0ACL36HJ2F |
-| Janine Walsh |  |  | jwalsh@nsls.org | U0ADTNZUB8D |
-| Jasmine Artis |  |  | jartis@nsls.org | U0ABXMAAVEU |
-| Kyle Coberly |  | Kevin Prentiss | kcoberly@nsls.org | U0B286J7NUE |
+| Elizabeth Garretson | Contractor | Tatiana McGrath | egarretson@nsls.org | U07SRF50VGD |
+| Gabriela Cordeiro | Contractor | Michael O'Brien | gcordeiro@nsls.org | U0AF9KUEVAM |
+| Ionut Mutascu | Contractor | Juan Maggi | imutascu@nsls.org | U08EJFSTVPS |
+| Jake Arcangeli | Contractor | Andrew Hesse | jarcangeli@nsls.org | U0ACL36HJ2F |
+| Janine Walsh | Contractor | Jordan Perry | jwalsh@nsls.org | U0ADTNZUB8D |
+| Jasmine Artis | Contractor | Jordan Perry | jartis@nsls.org | U0ABXMAAVEU |
+| Jose Perdomo | Contractor | Alejandro Gabriel | jperdomo@nsls.org | U0BELDDRV60 |
+| Kyle Coberly | Contractor | Kevin Prentiss | kcoberly@nsls.org | U0B286J7NUE |
 | Leila McAvoy |  |  |  |  |
 | Luis Fernando Yupanqui Taco |  |  |  |  |
-| Matthew Schuman |  |  | mschuman@nsls.org | U0AAX0KFAR1 |
-| Pascal Zamprelli |  |  | pzamprelli@nsls.org | U08T2KEUB0Q |
-| Robert Stoica |  |  | rstoica@nsls.org | U0515D8001W |
-| Stefani Stout |  |  | sstout@nsls.org | U098K2VA01E |
-| Tattiana Alfaro |  |  | talfaro@nsls.org | U0B0244Q9AS |
+| Malvin Vital | Contractor | Alejandro Gabriel | mvital@nsls.org | U0ASU1LFNKU |
+| Matthew Schuman | Contractor | Jordan Perry | mschuman@nsls.org | U0AAX0KFAR1 |
+| Pascal Zamprelli | Contractor | Michael O'Brien | pzamprelli@nsls.org | U08T2KEUB0Q |
+| Patricia Pina | Contractor | Alejandro Gabriel | ppina@nsls.org | U0A3PH2G2MU |
+| Robert Stoica | Contractor | Juan Maggi | rstoica@nsls.org | U0515D8001W |
+| Stefani Stout | Contractor | Tatiana McGrath | sstout@nsls.org | U098K2VA01E |
+| Steffanie Punde | Contractor | Alejandro Gabriel | spunde@nsls.org | U0A44G21LQ1 |
+| Tattiana Alfaro | Contractor | David Adams | talfaro@nsls.org | U0B0244Q9AS |
