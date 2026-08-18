@@ -57,13 +57,18 @@ seen it before and owes the author nothing. It ends the way `bet-idea` and
 
 ## Quick Start
 
-Planned-stage bet → **P1** Economics hardening → **P2** Execution & risk →
-**P3** Proof plan → **P4** Adversarial review loop (max 2 rounds) → **P5**
-The advance offer → a live-ready bet (or an honest "not board-ready yet,
-here's what's failing").
+Planned-stage bet → **P0** Size the review to the bet → **P1** Economics
+hardening → **P2** Execution & risk → **P3** Proof plan → **P4** Adversarial
+review loop (max 2 rounds) → **P5** The advance offer → a live-ready bet (or
+an honest "not board-ready yet, here's what's failing").
 
 ## Operating rules
 
+- **Proportion the rigor to the ask (per Step P0).** Read the investment
+  number BEFORE deciding how deep to go. A $5K reversible test and a $2M
+  partnership get the same five gate checks and very different depth. Asking
+  "does this memo meet board standard?" of a cheap pilot is the wrong
+  question; "is this test worth its cost?" is the right one.
 - **Show the gate progress bar** (per `references/gate-progress.md`) after
   every `exec.*`/`proof.*` write and at the end of every session.
 - **Never call `advance_stage` as a probe** — planned→live carries no
@@ -107,6 +112,55 @@ hands one over with a `bet_id`. Call `get_bet` first.
   entry after every completed round, even when no fixes were accepted; the
   section's prose stays exactly the top five risks). The planned→live
   progress bar IS the resume agenda — don't re-derive a different one.
+
+## Step P0 — Size the review to the bet
+
+**Do this first, out loud, before any `econ.*` write.** Read the investment
+ask — `proof.investment` if `bet-research` drafted one, otherwise ask the
+owner for the number and the reversibility in one question. Then say which
+band the bet is in and what that changes.
+
+**Small and reversible** (roughly: under ~$25K all-in, no hire, no build, no
+multi-year commitment, stoppable inside a quarter):
+
+- `econ.*` at honest-estimate depth. A unit-economic sketch and a stated
+  breakeven beat a three-case model built on invented drivers.
+- ONE primary experiment, thresholds stated as **decision aids for the
+  owner**, not automated tests. A directional read with the interval
+  reported is the honest output of a small pilot; a significance bar it
+  cannot clear is not.
+- Empty `market.*`/`econ.*` from a force-advanced gate are **recorded gaps**,
+  not launch blockers — say so plainly and put them in what a continue buys.
+- One review round is usually enough.
+
+**Material or irreversible** (a hire, a build, a multi-year commitment, or
+enough spend that being wrong is expensive):
+
+- Full `references/economics-model.md` treatment, three differentiated
+  cases, named assumptions on every driver.
+- Formal thresholds with inference rules, and the economics page as a real
+  gate rather than an open item.
+- Both review rounds, and the score floor in
+  `references/adversarial-review.md` taken seriously.
+
+### What NEVER scales down
+
+The crowding-out test in `exec.core_impact`. A stop threshold that exists and
+that the owner would honour. Sell-first. Honest evidence tagging. The review
+happening at all. Cheap does not mean unexamined — it means examined at the
+right altitude.
+
+### Two failure modes this step exists to prevent
+
+1. **Inventing a bar and then failing the work against it.** If a threshold
+   comes from portfolio-scale ambition arithmetic rather than from the
+   decision in front of you, say where it came from and whether it belongs.
+   A pilot that cannot clear a bar you invented is not a broken pilot.
+2. **Reporting tautologies as findings.** On a bet whose experiment has not
+   run, the evidence axis is capped by construction and the completeness axis
+   largely measures which stage gates were skipped. Both are category
+   statements about where the bet sits, not discoveries. Name them as such
+   instead of stacking them into a verdict.
 
 ## Step P1 — Economics hardening
 
@@ -257,6 +311,16 @@ Called by `bet-studio`'s "Plan economics / proof plan" hand-off.
   threshold.
 - More than 2 fix rounds. → Analysis paralysis. Record the dissent in
   `exec.top_risks` and let the owner decide.
+- A power calculation, a three-case model, or a significance bar on a
+  sub-$25K reversible pilot. → Step P0. The rigor is out of proportion to the
+  decision, and the most likely outcome is failing the bet against a standard
+  you introduced.
+- Reporting "evidence 2/10" or "completeness 3/10" as a finding on a bet
+  whose experiment has not run. → Those are restatements of "this is early,"
+  not discoveries. Say so.
+- A markdown on a rubric criterion that is really about a different
+  criterion. → Real finding, wrong variable. It double-counts, and it moves
+  the stack rank on a mis-mapping.
 - Advancing to `live` without the review on record and without the owner's
   explicit skip. → The review is a required step, not a formality around
   one.
@@ -295,3 +359,6 @@ and point at `/connect` or the README's Strategy Studio setup section
 | "It's a dogfood bet, I'll just note the build wasn't really tested." | The internal need is a first-class rationale, not an apology — and it still doesn't excuse testing external willingness to pay. |
 | "I'll just call `advance_stage` to see the planned→live checklist." | It moves the bet when the gate passes. Compute progress from `get_bet` instead. |
 | "The core business impact is basically zero, I'll write 'none.'" | Apply the crowding-out test honestly — "none" is almost never true, and it's the fastest way to lose the board's trust in the rest of the page. |
+| "More rigor is never wrong." | It is when it fails a cheap test against a bar you invented, and when it costs the owner review rounds on axes that only restate the bet's stage. Step P0. |
+| "The pilot can't detect the threshold, so the pilot is broken." | Check which one you chose first. If the bar came from 2028 portfolio arithmetic and the pilot costs $5K, the bar is the broken part. |
+| "The owner keeps pushing back on my framing; I should explain it better." | Repeated pushback on framing is evidence about the frame. Re-derive it before defending it. |
