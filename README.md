@@ -58,6 +58,7 @@ Then open Claude Code and say `/setup` to connect your tools and optionally inst
 | **/llm-email-workflow** | The pipeline around an LLM email — data profiling, audience segmentation, node wiring, safety nodes, sandbox-to-live rollout |
 | **/feature-branch-protocol-template** | Template for building your own work-discipline skill — setup, checkpoints, irreversible-step rules, final handoff. Copy to `~/.claude/skills/` and fill in your own preferences. Red's developer version included as a seed. |
 | **/receipts** | Find Ramp transactions missing receipts, fetch them from Anthropic billing or Gmail, upload to Ramp (dry run by default; `--send` executes) |
+| **/email-ab-test-analysis** | Read an email A/B test end to end — join the copy that shipped to the outcomes it got, gate on significance and on whether the arms were comparable at all, and refuse to name a cause the data cannot carry. Customer.io, HubSpot, or numbers read off any screen |
 
 ## Strategy & Knowledge Work
 
@@ -233,6 +234,7 @@ They form a cycle: `/data-model-discovery` explores a new system → maps it aga
 | **llm-email-workflow** | End-to-end pipeline for LLM-generated emails — data, audience, node wiring, guardrails, rollout |
 | **kw:brainstorm / kw:plan / kw:review / kw:compound** | Strategy & knowledge-work pipeline (non-software) |
 | **receipts** | Find Ramp transactions missing receipts, fetch them from Anthropic billing or Gmail, upload to Ramp (dry run by default; `--send` executes) |
+| **email-ab-test-analysis** | Read an email A/B test honestly — copy diff joined to outcomes, significance and cohort gates, no invented causes |
 
 ## Updates
 

@@ -1,0 +1,9 @@
+{
+  "_comment": "Copy to esp.json next to your working directory, or point ESP_CONFIG at it. Never put a credential in here — keys come from --key-file or the environment.",
+  "esp": "customerio",
+  "region": "us",
+  "workspace": "YOUR_WORKSPACE_ID",
+  "exclude": "RS2NO|resend.{0,3}to.{0,3}non.{0,3}opener",
+  "key_file": null,
+  "_exclude_note": "Regex matching the resend-to-non-opener legs in YOUR workspace, by whatever name they carry there. Their denominator is not comparable to an initial send."
+}
