@@ -138,13 +138,19 @@ What it refuses on, beyond the integrity checks above:
 |---|---|
 | `deployed-mismatch` | What is deployed is not what was approved. Usually the deploy has not finished; sometimes the content changed after handoff. Both hashes are shown. |
 | `deployed-unknown` | It could not read what is deployed. It will say why — commonly a missing `GITHUB_TOKEN` in Studio. |
-| `manifest-not-fresh` | The capability manifest is stale or unverifiable, so ignite-next support cannot be proven. Regenerate (`pnpm gen:capabilities` in ignite-next) and re-vendor (`node scripts/sync-capabilities.mjs` in track-studio). |
+| `manifest-not-fresh` | The capability manifest describes different capabilities than the branch the gate compares against, or could not be checked at all — either way ignite-next support cannot be proven. **Three causes, three fixes:** (1) the check could not RUN — the message says why, commonly a missing `GITHUB_TOKEN` in Studio; fix that and re-run, because neither other fix applies. As of 2026-08-18 this is the live cause: no such token exists yet. (2) The capability has not been DEPLOYED yet — wait for the deploy; re-vendoring cannot clear it, because the gate asks what is live. (3) Our copy is behind — run `npm run sync:capabilities` in track-studio. The message names the branch compared and every capability that differs. |
 | `capability-gap` | A field type, DB column, or runtime capability the content needs is not in ignite-next yet. These are the handoff items — they must be **deployed**, not merely closed. |
 
-Studio reads deployed content and manifest freshness from **GitHub**, not from a local
+Studio reads deployed content and the capability manifest from **GitHub**, not from a local
 checkout: it has none on Railway, and a stale checkout is not evidence. A manifest built from
 a `staging` that was 423 commits behind was once published, quoted in a PR and an issue, and
 used to "correct" a bug report that had been right all along. Only CI caught it.
+
+**It compares capabilities, not commit SHAs.** It used to ask whether the manifest was
+generated from the current ignite-next commit, which went red whenever ignite-next moved at
+all — across 156 commits of staging the capability data did not change once, and go-live
+refused the whole time over a manifest that was entirely correct. A commit that merely lags
+is fine and no longer blocks; only changed capabilities do.
 
 ## Red flags
 
