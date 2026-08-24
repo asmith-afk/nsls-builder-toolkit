@@ -192,7 +192,6 @@
     "department": "Client Services",
     "manages": [
       "Chris Higbee",
-      "Kimberly Campbell",
       "Melvin Rosal",
       "Timothy Duffy"
     ]
@@ -548,7 +547,7 @@
     "title": "Contractor",
     "manager": "Kevin Prentiss",
     "email": "mmunns@nsls.org",
-    "slack": "",
+    "slack": "U0BPDNT2Q8K",
     "department": "Unknown",
     "manages": []
   },
@@ -567,24 +566,6 @@
     "manager": "David Adams",
     "email": "talfaro@nsls.org",
     "slack": "U0B0244Q9AS",
-    "department": "Unknown",
-    "manages": []
-  },
-  {
-    "name": "Adam Munns",
-    "title": "",
-    "manager": "",
-    "email": "hello@munnsmedia.com",
-    "slack": "U0AM0JG42F6",
-    "department": "Unknown",
-    "manages": []
-  },
-  {
-    "name": "Adam Carpenter",
-    "title": "",
-    "manager": "",
-    "email": "",
-    "slack": "",
     "department": "Unknown",
     "manages": []
   },
@@ -918,7 +899,7 @@
   {
     "name": "Kimberly Campbell",
     "title": "Director of Member Experience",
-    "manager": "Ashleigh Smith",
+    "manager": "Chelsea Byers",
     "email": "kcampbell@nsls.org",
     "slack": "U021ZK0NW07",
     "department": "Member Experience",
@@ -1116,10 +1097,7 @@
     "slack": "U08U4FS008H",
     "department": "Operations",
     "manages": [
-      "Derald Dryman",
-      "Jordan Perry",
-      "LaShaundra Randolph",
-      "Whitney Jett"
+      "Derald Dryman"
     ]
   },
   {
@@ -1152,7 +1130,7 @@
   {
     "name": "Jordan Perry",
     "title": "Director, Programming",
-    "manager": "Joseph Cupka",
+    "manager": "Chelsea Byers",
     "email": "jperry@nsls.org",
     "slack": "UCG43J6JW",
     "department": "Operations",
@@ -1173,13 +1151,17 @@
     "slack": "U0AT9R3DAT1",
     "department": "Operations",
     "manages": [
-      "Lauren Prentiss"
+      "Jordan Perry",
+      "Kimberly Campbell",
+      "LaShaundra Randolph",
+      "Lauren Prentiss",
+      "Whitney Jett"
     ]
   },
   {
     "name": "Whitney Jett",
     "title": "Compliance and Accreditation Manager",
-    "manager": "Joseph Cupka",
+    "manager": "Chelsea Byers",
     "email": "wjett@nsls.org",
     "slack": "U05RKE7AAM7",
     "department": "Operations",
@@ -1286,12 +1268,11 @@
   {
     "name": "LaShaundra Randolph",
     "title": "Director, Education",
-    "manager": "Joseph Cupka",
+    "manager": "Chelsea Byers",
     "email": "lrandolph@nsls.org",
     "slack": "U0322AS36JZ",
     "department": "Education",
     "manages": [
-      "Alexander Taylor",
       "Marcus Walker"
     ]
   },
@@ -1301,15 +1282,6 @@
     "manager": "LaShaundra Randolph",
     "email": "mwalker@nsls.org",
     "slack": "U05CQKCEW94",
-    "department": "Education",
-    "manages": []
-  },
-  {
-    "name": "Alexander Taylor",
-    "title": "Grading and Support Specialist",
-    "manager": "LaShaundra Randolph",
-    "email": "ataylor@nsls.org",
-    "slack": "U08SE3J72JE",
     "department": "Education",
     "manages": []
   },

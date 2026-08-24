@@ -1,5 +1,5 @@
 # NSLS Org Chart
-_Last synced: 2026-08-17_
+_Last synced: 2026-08-24_
 
 ## Business Intelligence
 
@@ -40,8 +40,7 @@ _Last synced: 2026-08-17_
 
 | Name | Title | Manager | Email | Slack |
 |------|-------|---------|-------|-------|
-| Alexander Taylor | Grading and Support Specialist | LaShaundra Randolph | ataylor@nsls.org | U08SE3J72JE |
-| LaShaundra Randolph | Director, Education | Joseph Cupka | lrandolph@nsls.org | U0322AS36JZ |
+| LaShaundra Randolph | Director, Education | Chelsea Byers | lrandolph@nsls.org | U0322AS36JZ |
 | Marcus Walker | Success Coach | LaShaundra Randolph | mwalker@nsls.org | U05CQKCEW94 |
 
 ## Engineering
@@ -117,7 +116,7 @@ _Last synced: 2026-08-17_
 | Franklin Ortega | Member Experience Specialist | Alejandro Gabriel | fortega@nsls.org | U0A7BUY5EG6 |
 | Jennifer Arias | Member Experience Specialist | Alejandro Gabriel | apeguero@nsls.org | U0AS9A3RLJY |
 | Kara Klimuszko | Member Experience Team Lead | Kimberly Campbell | kklimuszko@nsls.org | U01B6B0T831 |
-| Kimberly Campbell | Director of Member Experience | Ashleigh Smith | kcampbell@nsls.org | U021ZK0NW07 |
+| Kimberly Campbell | Director of Member Experience | Chelsea Byers | kcampbell@nsls.org | U021ZK0NW07 |
 | Maikel Berbi | Membership Experience Specialist | Alejandro Gabriel | mberbi@nsls.org | U0B1A9YPKHV |
 | Melissa Baggett | Membership Experience Specialist | Kara Klimuszko | mbaggett@nsls.org | U081X01AQA2 |
 | Mia Vasquez | Member Experience Specialist | Alejandro Gabriel | mvasquez@nsls.org | U0B720AV5U7 |
@@ -137,10 +136,10 @@ _Last synced: 2026-08-17_
 | Dasha Cherkasov | Chapter Event Manager | Jordan Perry | dcherkasov@nsls.org | U02A8NJN1QF |
 | Derald Dryman | Senior Manager of Brand and Community Engagement | Joseph Cupka | ddryman@nsls.org | UCG6HQQ05 |
 | Freda Hobbs | Chapter Events Manager | Jordan Perry | fhobbs@nsls.org | U06QJ0XDH0E |
-| Jordan Perry | Director, Programming | Joseph Cupka | jperry@nsls.org | UCG43J6JW |
+| Jordan Perry | Director, Programming | Chelsea Byers | jperry@nsls.org | UCG43J6JW |
 | Joseph Cupka | National Organizing Director | Adam Stone | jcupka@nsls.org | U08U4FS008H |
 | Judy Mai-Vargas | Operations Enablement Coordinator | Jordan Perry | jvargas@nsls.org | U090NHBA79A |
-| Whitney Jett | Compliance and Accreditation Manager | Joseph Cupka | wjett@nsls.org | U05RKE7AAM7 |
+| Whitney Jett | Compliance and Accreditation Manager | Chelsea Byers | wjett@nsls.org | U05RKE7AAM7 |
 
 ## Product
 
@@ -185,15 +184,13 @@ _Last synced: 2026-08-17_
 | Name | Title | Manager | Email | Slack |
 |------|-------|---------|-------|-------|
 | Adam Carpenter | Contractor | Kevin Prentiss | acarpenter@nsls.org | U0BPDNUNQD9 |
-| Adam Carpenter |  |  |  |  |
-| Adam Munns |  |  | hello@munnsmedia.com | U0AM0JG42F6 |
 | Aicel Tavares | Contractor | Alejandro Gabriel | atavares@nsls.org | U0A3A57KSB1 |
 | Angel Gonzalez | Contractor | Noah Camenker | agonzalez@nsls.org | U0BPJ1E73PY |
 | Angelyn Kempe | Contractor | Kevin Prentiss | akempe@nsls.org | U0B6JBUSKF0 |
 | Bogdan Tarbujaru | Contractor | Juan Maggi | tbogdan@nsls.org | U08DNV4U0CE |
 | Boris Doyer | Contractor | Michael O'Brien | bdoyer@nsls.org | U096X7F82MP |
 | Bruno Drouin | Contractor | Michael O'Brien | bdrouin@nsls.org | U097SSUQB6J |
-| Christophre Munns | Contractor | Kevin Prentiss | mmunns@nsls.org |  |
+| Christophre Munns | Contractor | Kevin Prentiss | mmunns@nsls.org | U0BPDNT2Q8K |
 | Collin Wood | Contractor | Adam Stone | cwood@nsls.org | U08RLLMFJTU |
 | David Avila | Contractor | Juan Maggi | davila@nsls.org | U09HEHF778A |
 | David Weber  |  |  | dweber@nsls.org | U086Y4L1ZED |
