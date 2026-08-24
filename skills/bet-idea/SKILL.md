@@ -177,6 +177,10 @@ calls. Every box is `assumption` or `opinion` — never `data` — with ONE
 exception: internal-origin problem/solution content grounded in cited
 internal usage (see the origin fork above) may be `data` or `estimate`.
 
+(The canvas holds **11** keys, not 9. The other two — `canvas.descope` and
+`canvas.derisk` — are asked in step 3, after there is a scope to cut and a
+plan to de-risk. Don't draft them here.)
+
 As you go, **note the order** in which the human actively engages with (adds
 to, argues with, corrects) the first three boxes. Don't overthink this — it's
 a light read of what they care about first — but keep it; the causal-chain
@@ -256,6 +260,31 @@ smallest thing someone would pay for **this week**. Push past the first
 polished answer — that's the whole point of the reference's anti-sycophancy
 rule. Update the relevant sections with the sharpened content once the human
 lands on something truer than the first draft.
+
+**Then the two shaping questions.** Ask both, close to verbatim — the wording
+is deliberately plain because the people answering are executives, not product
+managers:
+
+1. *"If you had to de-scope this bet to its most basic form and still have an
+   impactful MVP, what would you do?"* → `canvas.descope`
+2. *"If you had to de-risk this bet before committing real time and money,
+   what would you do?"* → `canvas.derisk`
+
+**Two questions, not one, on purpose.** De-scoping (build less) and de-risking
+(do the scary part first, cheaply) are different moves. Asked together, people
+answer only the first — you get a smaller version of the same plan, when the
+more useful answer is *which belief would kill this and what the cheapest way
+to find out is*. If the answer to (2) names a belief, carry it into step 4's
+chain as a candidate assumption rather than letting it die here.
+
+**Ask them after the canvas is drafted, never before** — you cannot de-scope
+something that has not been scoped. That is why they live in step 3 and not in
+step 1's sketch.
+
+Write both with `update_section(bet_id, "canvas.descope" | "canvas.derisk",
+content_md, evidence_tag: "opinion")` — these are the owner's judgement about
+a plan, not evidence about a market, and tagging them `data` would be a
+category error.
 
 ## Step 4 — Causal-chain interrogation
 
