@@ -110,12 +110,22 @@ anything else, send it back to bet-studio with one sentence why. **Skip
 `create_bet` entirely.** Inventory what's incomplete (empty canvas/thesis
 sections, missing assumptions, unscored rubric), announce the inventory
 (heartbeat), then continue the normal workflow from the earliest incomplete
-step, writing against the existing `bet_id`. Two steps leave no engine
-trace and can't be inventoried: the office-hours diagnostic (step 3) and
-the stress test (step 5). On resume, ALWAYS re-run the stress test (it's
-fast, reads current content, and its fix-first list is the resume agenda),
-and re-ask diagnostic questions only for boxes that are still weak. Ask the
-origin question only if it can't be inferred from existing content.
+step, writing against the existing `bet_id`. Two steps leave little or no
+engine trace and can't be fully inventoried: the office-hours diagnostic
+(step 3) and the stress test (step 5). On resume, ALWAYS re-run the stress
+test (it's fast, reads current content, and its fix-first list is the resume
+agenda), and re-ask diagnostic questions only for boxes that are still weak.
+
+**Step 3 is a partial exception — inventory it.** Its two shaping questions
+DO leave a trace: `canvas.descope` and `canvas.derisk` are real sections.
+Read them like any other box and ask only the ones that are empty or thin.
+Re-asking an owner something they already answered — and overwriting the
+answer with a worse second pass — is the exact failure the inventory exists
+to prevent, and it stings most on these two because they take real thought.
+The rest of step 3 (sharpening whichever boxes are weakest) still leaves no
+trace and still gets judged on current content.
+
+Ask the origin question only if it can't be inferred from existing content.
 
 **Starting a genuinely new bet:** before `create_bet`, check `list_bets` for a
 same-name/one-liner match and surface it as a resume candidate first.
@@ -263,7 +273,8 @@ lands on something truer than the first draft.
 
 **Then the two shaping questions.** Ask both, close to verbatim — the wording
 is deliberately plain because the people answering are executives, not product
-managers:
+managers. (**On a resume, ask only the ones that are empty or thin** — both
+write real sections, so read them first; see *Entry: resume vs. new*.)
 
 1. *"If you had to de-scope this bet to its most basic form and still have an
    impactful MVP, what would you do?"* → `canvas.descope`
