@@ -87,6 +87,14 @@ an honest "not board-ready yet, here's what's failing").
   skipped. How many rounds it runs is Step P0's call (never more than 2;
   normally one for a small, reversible bet) — the review happening at all
   is what's non-negotiable, not its length.
+- **A `data` write REPLACES the whole object — never merge it in your head.**
+  `update_section(..., data: {...})` overwrites the section's existing `data`
+  wholesale, so any key already there and not repeated in the new call is
+  gone. Every write to a section that carries durable keys — `rigor_band` on
+  `proof.investment` (Step P0), `review_log` on `exec.top_risks` (Step P4) —
+  reads the section first and carries the existing keys forward. The loss is
+  silent: nothing errors, and the next resumed session simply finds the key
+  missing and behaves as if it was never set.
 - **Consume `staleAssumptions`** from every `update_section` response —
   announce it and re-interrogate the listed assumptions, never skip
   silently.
@@ -148,11 +156,16 @@ enough spend that being wrong is expensive):
 ### Record the band — the later steps read it, they don't re-derive it
 
 The band is a decision, not a mood. Write it down as soon as you say it, on
-the `proof.investment` section's DATA (`content_md` untouched):
-`update_section(bet_id, "proof.investment", data: { rigor_band: "small" |
-"material", band_basis: "<the ask and the reversibility that decided it>" },
-summary: "rigor band", via: "bet-plan")`. If `proof.investment` has no
-`content_md` yet, record the band on the first write that gives it one.
+the `proof.investment` section's DATA (`content_md` untouched) — **reading
+the section first and carrying its existing `data` keys forward**, per the
+replace-semantics rule in Operating rules:
+`update_section(bet_id, "proof.investment", data: { ...existing data,
+rigor_band: "small" | "material", band_basis: "<the ask and the
+reversibility that decided it>" }, summary: "rigor band", via: "bet-plan")`.
+
+**Step P3 writes this same section**, so its write must carry `rigor_band`
+and `band_basis` forward too — dropping them there would silently erase the
+band and send the next resumed session back to full rigor.
 
 Steps P1 and P4 branch on this value explicitly. A resumed session reads it
 rather than guessing — and a resumed session that finds no `rigor_band`
@@ -236,7 +249,10 @@ worth arguing with.
 
 `add_experiment` with a falsifiable hypothesis (a hypothesis with a number
 in it, not "we'll learn a lot"). Write `proof.experiment_2026`,
-`proof.investment`, `proof.milestones`, and the three thresholds
+`proof.investment` — **reading it first and carrying `rigor_band` /
+`band_basis` forward in `data`, since Step P0 recorded them there and a
+`data` write replaces the whole object** — `proof.milestones`, and the three
+thresholds
 (`proof.threshold_continue`, `proof.threshold_accelerate`,
 `proof.threshold_stop`) with numeric `data` where possible, prose-only only
 when a metric genuinely resists a number — and say so explicitly when it
@@ -292,6 +308,19 @@ Per `references/adversarial-review.md`:
    list) from step 5. Noted dissent, never silent consensus.
 
 ## Step P5 — The advance offer
+
+**Reading the review scores — apply the band before applying the floor.**
+The board-readiness rule is: any axis below 5 after the final round means
+say plainly the memo is not board-ready. On band `material` that stands as
+written. On band `small` there is one carve-out, and only one: the reviewer
+instructions cap `evidence` at 4 for a memo that is mostly `assumption`-
+tagged, which every pre-experiment pilot is **by construction**. That score
+is a statement about where the bet sits, not a finding about its quality —
+report it, say why it is capped, and **do not let it alone block the advance
+offer**. Everything else holds: a `completeness` or `consistency` below 5 is
+a real failure on any band, and a small-band `evidence` score that is low
+for some reason OTHER than the unrun experiment is a real finding too. Name
+which of the two you are looking at rather than waving the axis through.
 
 Render the planned→live checklist (client-side, per
 `references/gate-progress.md` — never a probe). Draft the exact `rationale`

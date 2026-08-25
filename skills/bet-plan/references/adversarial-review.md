@@ -97,3 +97,14 @@ is not board-ready and recommend against advancing. The owner can still
 overrule this — record the overrule and its rationale in the `advance_stage`
 rationale, so the decision to advance over a low score is itself on the
 record, not silently absorbed.
+
+**One carve-out, band `small` only.** The EVIDENCE instruction above caps a
+mostly-`assumption`-tagged memo at 4 — which is every pilot whose experiment
+has not run yet. On a small, reversible bet that 4 is the rubric restating
+the bet's stage, not a judgement on the work, and it must not by itself
+carry a "not board-ready" verdict. Report the score, say why it is capped,
+and let the owner decide. This does NOT extend to `completeness` or
+`consistency` — those below 5 are real failures on any band — nor to an
+`evidence` score that is low for reasons beyond the unrun experiment. Say
+which case you're in; the carve-out is narrow on purpose, because a blanket
+"scores don't apply to cheap bets" would hollow out the review entirely.
