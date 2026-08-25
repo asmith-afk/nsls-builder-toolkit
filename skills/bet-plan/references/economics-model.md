@@ -6,6 +6,17 @@ non-empty `content_md` on all five). This reference is how `bet-plan` turns
 that first cut into the model a board would actually read — sharper numbers,
 named assumptions, three honestly-differentiated cases.
 
+> **Scope — this document describes the `material` band only.** Step P0 sets
+> `rigor_band` before any `econ.*` write. On a `small` band bet, the required
+> output is a unit-economic sketch and a stated breakeven, and the three-case
+> `data` shape below is explicitly NOT required — building it from invented
+> drivers is the failure P0 exists to prevent, not compliance with this page.
+> Two sections still apply to BOTH bands: **Named-assumption discipline** and
+> **Reuse the research** — a cheap bet may carry fewer numbers, but every
+> number it does carry still names its assumption and still starts from
+> `market.obtainable` rather than a second market size invented here. The
+> honest-tagging rule in *Case honesty rules* applies to both bands too.
+
 ## Named-assumption discipline
 
 Every number in the model carries the assumption that produces it, inline —

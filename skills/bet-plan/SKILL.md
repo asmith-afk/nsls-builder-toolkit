@@ -83,8 +83,10 @@ an honest "not board-ready yet, here's what's failing").
   rationale, and a dogfood bet's internal-need rationale is first-class, not
   an apology.
 - **The adversarial review is mandatory, not optional busywork** — it runs
-  in a fresh subagent with zero shared context, max 2 fix rounds, and it
-  cannot be silently skipped.
+  in a fresh subagent with zero shared context and cannot be silently
+  skipped. How many rounds it runs is Step P0's call (never more than 2;
+  normally one for a small, reversible bet) — the review happening at all
+  is what's non-negotiable, not its length.
 - **Consume `staleAssumptions`** from every `update_section` response —
   announce it and re-interrogate the listed assumptions, never skip
   silently.
@@ -143,6 +145,20 @@ enough spend that being wrong is expensive):
 - Both review rounds, and the score floor in
   `references/adversarial-review.md` taken seriously.
 
+### Record the band — the later steps read it, they don't re-derive it
+
+The band is a decision, not a mood. Write it down as soon as you say it, on
+the `proof.investment` section's DATA (`content_md` untouched):
+`update_section(bet_id, "proof.investment", data: { rigor_band: "small" |
+"material", band_basis: "<the ask and the reversibility that decided it>" },
+summary: "rigor band", via: "bet-plan")`. If `proof.investment` has no
+`content_md` yet, record the band on the first write that gives it one.
+
+Steps P1 and P4 branch on this value explicitly. A resumed session reads it
+rather than guessing — and a resumed session that finds no `rigor_band`
+re-runs P0 rather than defaulting to full rigor, because defaulting silently
+is exactly the failure this step exists to prevent.
+
 ### What NEVER scales down
 
 The crowding-out test in `exec.core_impact`. A stop threshold that exists and
@@ -163,6 +179,20 @@ right altitude.
    instead of stacking them into a verdict.
 
 ## Step P1 — Economics hardening
+
+**Read `rigor_band` from Step P0 first — it decides which of the two
+paths below you run.** Where this step and P0 disagree, **P0 wins**; the
+depth described below is the `material` path.
+
+**Band `small`** — honest-estimate depth. `econ.model_2026_2028` gets a
+single honest trajectory with its drivers named; `econ.cases` gets a stated
+breakeven and the one assumption that would have to be wrong for the bet to
+lose money, in `content_md`, with whatever `data` is genuinely known. The
+three-case `data` shape is **not** required, and a three-case model built on
+invented drivers is a worse answer than a sketch that admits what it doesn't
+know. Skip to the tagging paragraph below — it applies to both bands.
+
+**Band `material`** — the full treatment that follows.
 
 Per `references/economics-model.md`: revise `econ.model_2026_2028` and
 `econ.cases` from `bet-research`'s first-cut estimates into the full
@@ -246,9 +276,16 @@ Per `references/adversarial-review.md`:
    only trace a clean round leaves in `get_bet` — skip it and a resumed
    session has no way to tell the review ran, and will re-run it
    needlessly.
-6. **Re-dispatch a NEW fresh-context reviewer** — never the same subagent
-   context, it would be grading its own suggestions.
-7. **Max 2 fix rounds.** After round 2, remaining disagreements are
+6. **Decide whether round 2 happens — read `rigor_band` from Step P0.**
+   - Band `small` — **stop after round 1.** One round is the expected end
+     state, not a short-changed one. Go to item 7 and record the round's
+     unresolved findings exactly as you would after round 2. Run a second
+     round only if round 1 surfaced a finding that materially changes the
+     bet, and say out loud why this cheap bet earned it.
+   - Band `material` — **re-dispatch a NEW fresh-context reviewer.** Never
+     the same subagent context; it would be grading its own suggestions.
+7. **Never more than 2 fix rounds** (and for band `small`, normally one).
+   After the final round, remaining disagreements are
    RECORDED, not resolved: a challenge that names a genuine RISK joins the
    top-five prose in `exec.top_risks` (displacing a lesser risk if needed);
    everything else lands in the round's `data.review_log` entry (`unresolved`
