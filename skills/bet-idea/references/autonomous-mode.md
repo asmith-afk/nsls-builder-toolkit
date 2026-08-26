@@ -48,6 +48,31 @@ theme brewing, report why. Abort is cheap; a junk bet is not.
 - **Taxonomy is read-only.** `upsert_taxonomy` is shared-system tier and
   requires a human confirm. No existing market/segment/buyer fits → that is
   ambiguity → abort to `brewing`.
+- **The both-no hand-down (step 1.5) drafts; it never fires.** Same reason as
+  taxonomy: `hand_off_bet` assigns real work to a real group or person, and
+  `create_squad` stands up a team visible portfolio-wide. Both are
+  shared-system tier and both need the owner's confirmation of the exact
+  assignee and rationale — and there is no owner here. Nothing in this file
+  may be read as licence for either call.
+
+  So in autonomous mode a both-no idea:
+  1. `create_bet` as normal (stage `idea`), skipping the rest of the skill.
+  2. **Does NOT call `list_squads` to pick an assignee, and does NOT call
+     `hand_off_bet` or `create_squad`.** Choosing who gets work is the
+     owner's judgement, not a clustering agent's.
+  3. Records the proposed hand-down in the FIRST status update instead —
+     "materiality: both legs no (cite the claims); proposed outcome:
+     hand-down, assignee NOT chosen, owner to confirm" — so the idea is on
+     the board and findable, with the recommendation attached and the
+     decision still open.
+  4. Leaves `status` alone. `handed_off` is a state an owner puts a bet in;
+     an agent must not put it there, or the Handed-down section starts
+     showing assignments nobody made.
+
+  This is the same shape as the growth vector: propose, mark it proposed,
+  let the owner confirm interactively. Recording a skip is honest; a
+  hand-down nobody authorised is an unauthorised assignment wearing a
+  record's clothes.
 - Heartbeats become run-output log lines; everything not listed here runs
   exactly as the interactive flow writes it, and every write still passes
   `via: "bet-idea"`.

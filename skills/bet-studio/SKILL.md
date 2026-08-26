@@ -24,12 +24,14 @@ description: >-
    drafts canvas content, sections, or scores itself. Any authoring happens in
    the sub-skill it hands off to, under that skill's own tier for it.
 3. **Write to shared systems** — this skill never calls a write tool. If the
-   interim guidance below ever puts `advance_stage`, `set_status` or
-   `hand_off_bet` in front of a builder (e.g. flagging a bet to kill in the
-   review interim, or handing one down to a squad), that call is **always
-   confirmed with the human first** — named the bet, named the tool, named the
-   assignee, said out loud what it does — never assumed on their behalf. A
-   hand-down in particular is the OWNER's call to make and to communicate.
+   interim guidance below ever puts `advance_stage`, `set_status`,
+   `hand_off_bet` or `create_squad` in front of a builder (e.g. flagging a bet
+   to kill in the review interim, handing one down to a squad, or standing up
+   a squad because no existing one fits), that call is **always confirmed with
+   the human first** — named the bet, named the tool, named the assignee, said
+   out loud what it does — never assumed on their behalf. A hand-down in
+   particular is the OWNER's call to make and to communicate, and a new squad
+   becomes visible portfolio-wide the moment it exists.
 
 ## Purpose
 
@@ -68,9 +70,11 @@ lifecycle question, reads the live portfolio, and hands off — the real work
    sketch read as comparable to an evidence-backed research-stage bet.
    **Handed-down bets get their own section** — squad work, not bets, and
    never filed under the graveyard — followed last by parked and killed bets
-   under a collapsed "Graveyard." Exact recipes and rendering rules:
-   `references/portfolio-views.md`. Ask which bet they want, or confirm the
-   intent is genuinely a new one.
+   under a collapsed "Graveyard." Their assignee and work status live only in
+   `get_bet`'s `handoffs`, so recipe 2b drills in **once per handed-down bet,
+   capped** — a small terminal cohort, not the whole-portfolio loop banned
+   above. Exact recipes and rendering rules: `references/portfolio-views.md`.
+   Ask which bet they want, or confirm the intent is genuinely a new one.
 3. **Sanity-check stage vs. intent.** The bet's `stage` (from the listing) is
    the signal — an idea-stage bet has no economics to plan yet. "Research a
    bet" on an IDEA-stage bet needs the stage gate first: evidence logged

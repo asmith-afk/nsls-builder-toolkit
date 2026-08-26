@@ -143,7 +143,9 @@ section is tagged `assumption`, the materiality gate is cite-or-abort from
 the cluster's own claims (no citable path → no bet, theme stays `brewing`),
 the interactive checkpoints are skipped and recorded as skipped in the
 first status update, and `advance_stage` / evidence attestation /
-`upsert_taxonomy` are off-limits entirely.
+`upsert_taxonomy` / `hand_off_bet` / `create_squad` are off-limits entirely.
+**The both-no hand-down at step 1.5 is therefore a DRAFT in autonomous mode**
+— never a fired assignment. See `references/autonomous-mode.md`.
 
 ## Step 1 — Sketch capture
 
@@ -215,6 +217,13 @@ a no"* — then:
 3. `hand_off_bet(bet_id, squad_id | individual_email, rationale)` where the
    rationale is the materiality answer in plain words — *"real but ~$120K/yr;
    nothing to prove through the gates."*
+
+   > **Steps 2–3 need a human in the room.** Both calls are shared-system
+   > tier: one assigns real work to real people, the other creates a team
+   > everyone can see. In **autonomous mode** neither fires — the run records
+   > the proposed hand-down in the bet's first status update with no assignee
+   > chosen, and the owner confirms it later. See
+   > `references/autonomous-mode.md`.
 4. Tell the human two things: it's recorded and visible in the **Handed down**
    section of the portfolio (never the graveyard, never the kill rate), and
    **telling the squad is still their conversation to have** — the hand-down

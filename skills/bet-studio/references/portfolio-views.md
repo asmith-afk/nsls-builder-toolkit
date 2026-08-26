@@ -39,10 +39,32 @@ list_squads()                        // charter, roster, open load
 ```
 
 Bets that left the board as WORK, not as losses: good ideas that weren't
-bet-shaped, now owned by a squad or one named person. `get_bet` carries the
-`handoffs` array (newest first) with each one's `assigneeLabel`, `workStatus`
-(todo | active | done | dropped), `open` flag, and the rationale for why it
-wasn't bet-shaped.
+bet-shaped, now owned by a squad or one named person.
+
+**Where the per-row fields actually come from — read this before rendering.**
+The two calls above return bet rows and squad metadata. They do NOT return
+`assigneeLabel`, `workStatus` (todo | active | done | dropped), `open`, or the
+hand-down rationale: those live only in `get_bet`'s `handoffs` array (newest
+first). So the "name the squad or person and the work status" rule below, and
+the stale-`todo` flag, cannot be satisfied by recipe 2b's calls alone.
+
+**The bounded drill-in.** Call `get_bet` once per handed-down bet, and only
+for this cohort. That is not the N+1 the skill forbids: the ban is on looping
+`get_bet` over the whole portfolio, and handed-down is a small terminal
+cohort — typically a handful, and it only grows when an owner deliberately
+hands something down.
+
+- **≤ 10 handed-down bets** → drill in on each and render the full row.
+- **More than 10** → drill in on the 10 most recent, render the rest as
+  name-only with a plain line saying so ("+7 more handed down — assignee and
+  status not fetched"). Never render a row with an invented or blank assignee
+  as though it were known.
+- **No `STRATEGY_MCP_TOKEN` / `get_bet` unavailable** → render the cohort
+  name-only and say the work status could not be read. A handed-down bet with
+  an unknown assignee is still worth showing; a silent blank is not.
+
+When the engine grows a bulk hand-off endpoint, replace the drill-in with it
+and delete this note.
 
 ## Recipe 3 — taxonomy labels
 
