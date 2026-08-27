@@ -55,10 +55,15 @@ cohort — typically a handful, and it only grows when an owner deliberately
 hands something down.
 
 - **≤ 10 handed-down bets** → drill in on each and render the full row.
-- **More than 10** → drill in on the 10 most recent, render the rest as
-  name-only with a plain line saying so ("+7 more handed down — assignee and
-  status not fetched"). Never render a row with an invented or blank assignee
-  as though it were known.
+- **More than 10** → drill in on the first 10 **in the order `list_bets`
+  returned them**, and say which order that was. It is `rank_score` desc, the
+  same as every other listing. It is **not** hand-off recency: the only
+  timestamp for a hand-down lives inside `get_bet`'s `handoffs`, so "the 10
+  most recent" cannot be selected without already having fetched all of them.
+  Render the remainder name-only with a plain line — "+7 more handed down,
+  assignee and status not fetched (top 10 by rank, not by recency)". Never
+  render a row with an invented or blank assignee as though it were known,
+  and never describe a rank-ordered slice as the newest.
 - **No `STRATEGY_MCP_TOKEN` / `get_bet` unavailable** → render the cohort
   name-only and say the work status could not be read. A handed-down bet with
   an unknown assignee is still worth showing; a silent blank is not.

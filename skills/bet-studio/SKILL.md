@@ -75,7 +75,18 @@ lifecycle question, reads the live portfolio, and hands off — the real work
    capped** — a small terminal cohort, not the whole-portfolio loop banned
    above. Exact recipes and rendering rules: `references/portfolio-views.md`.
    Ask which bet they want, or confirm the intent is genuinely a new one.
-3. **Sanity-check stage vs. intent.** The bet's `stage` (from the listing) is
+3. **Check `status` BEFORE `stage`.** A hand-down leaves `stage` untouched
+   (see the lifecycle map), so a bet handed down while it sat at research or
+   planned still reads `stage: "research"` forever. Routing on stage alone
+   would send it straight back into `bet-research` or `bet-plan` and reopen
+   lifecycle work that is deliberately terminal. If `status` is
+   `handed_off`, say who has it and the work state from `get_bet`'s
+   `handoffs` and stop — reviving it as a bet is a confirmed
+   `set_status(active)` by the owner, which also closes the hand-down, and it
+   needs the materiality bars to be met now, not renewed enthusiasm. Only
+   then fall through to the stage check.
+
+   **Sanity-check stage vs. intent.** The bet's `stage` (from the listing) is
    the signal — an idea-stage bet has no economics to plan yet. "Research a
    bet" on an IDEA-stage bet needs the stage gate first: evidence logged
    while the bet sits at Idea is preliminary and does not advance anything.
