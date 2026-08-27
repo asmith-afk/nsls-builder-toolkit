@@ -60,9 +60,15 @@ lifecycle question, reads the live portfolio, and hands off — the real work
 ## Flow
 
 1. **Ask the lifecycle question:** *"What would you like to do — add an idea,
-   research a bet, plan its economics, review the portfolio, track a live
-   bet's experiments, see the competition grid, or see what cross-bet moves
-   are ready to pick up?"*
+   research a bet, plan its economics, hand a bet down to a squad, review the
+   portfolio, track a live bet's experiments, see the competition grid, or
+   see what cross-bet moves are ready to pick up?"*
+
+   The hand-down has to be **offered**, not just supported. It is the one
+   option nobody arrives already knowing they want, and the failure it
+   prevents is a builder pushing below-materiality work through the idea,
+   research or planning paths because no other outcome was on the menu — or
+   parking it, which the lifecycle map is explicit is the wrong home.
 2. **Show the live portfolio** (skip only when adding a brand-new idea with
    nothing to compare against). Call `get_stack_rank` for active bets and
    `list_bets` for the graveyard, grouped by stage cohort with each bet's
