@@ -108,9 +108,27 @@ def _done_schema():
         return 1 if raw else None
 
 
-def _needs_stage_b():
+def _stage_b_reason():
+    """Why stage B should run this session: "full", "reappeared", or None.
+
+    The done-marker is permanent, and both installers deliberately re-create any
+    missing settings.json shim. So a builder who re-runs the installer after
+    migrating gets every shim back, for good, silently duplicating whatever the
+    plugin already registers — which is the permanent-overlap failure the marker
+    versioning was meant to end, arriving by a different door. Live state
+    therefore outranks the marker: if a shim or an org stub is present, stage B
+    has work regardless of what the marker says.
+
+    "reappeared" runs the cheap half only. The signal MCP check is a CLI call
+    against a 15 s timeout, and it was settled the first time through; paying
+    for it every session to re-confirm would be a real cost on every machine.
+    """
     schema = _done_schema()
-    return schema is None or schema < _MIGRATION_SCHEMA
+    if schema is None or schema < _MIGRATION_SCHEMA:
+        return "full"
+    if _shims_present() or _org_stubs_exist():
+        return "reappeared"
+    return None
 
 
 def _read_json(path):
@@ -352,7 +370,7 @@ def _remove_user_scope_signal():
     return (True, True) if removed else (False, False)
 
 
-def _stage_b():
+def _stage_b(reason="full"):
     """Retire the shims now that the plugin is live.
 
     Re-runs every session until the machine VERIFIES clean, then writes the
@@ -368,7 +386,10 @@ def _stage_b():
     # CLI calls first: the claude CLI may normalize/rewrite settings.json as a
     # side effect (observed live: it rewrote a model alias during `mcp get`),
     # so our own settings edit must come after every CLI invocation.
-    signal_moved, signal_clean = _remove_user_scope_signal()
+    if reason == "full":
+        signal_moved, signal_clean = _remove_user_scope_signal()
+    else:
+        signal_moved, signal_clean = False, True  # settled on the first pass
     hooks_removed = _remove_settings_hooks()
     stubs_removed = _remove_org_stubs()
 
@@ -477,8 +498,10 @@ def run_migration():
             _stage_a()
         elif _plugin_disabled_by_user():
             return
-        elif _needs_stage_b():
-            _stage_b()
+        else:
+            reason = _stage_b_reason()
+            if reason:
+                _stage_b(reason)
     except Exception:
         pass  # fail-open: shims still work; retry next session
     finally:

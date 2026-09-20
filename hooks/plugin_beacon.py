@@ -30,21 +30,55 @@ from pathlib import Path
 
 _CONFIG_DIR = Path(os.environ.get("CLAUDE_CONFIG_DIR") or (Path.home() / ".claude"))
 BEACON_DIR = _CONFIG_DIR / ".nsls-plugin-beacons"
-# Written only by hooks the plugin runtime launched. `${CLAUDE_PLUGIN_ROOT}` is
-# exported into the process for both hook forms, and the cache path is the
-# corroborating evidence when it is not.
-_CACHE_PARTS = ("plugins", "cache")
+_MARKETPLACE = "nsls-toolkit"
+_PLUGIN = "nsls-builder-toolkit"
+
+
+def _cache_prefix() -> Path:
+    """Where Claude Code keeps THIS plugin's installed copies."""
+    return _CONFIG_DIR / "plugins" / "cache" / _MARKETPLACE / _PLUGIN
+
+
+def _installed_root() -> str:
+    """The plugin copy the CLI says is installed, or "" if that is unreadable.
+
+    This is the strongest available statement of which copy is live. Without
+    it, a beacon left by a version that has since been replaced would keep
+    vouching for a hook shape that no longer exists.
+    """
+    try:
+        reg = json.loads(
+            (_CONFIG_DIR / "plugins" / "installed_plugins.json")
+            .read_text(encoding="utf-8")
+        )
+        for key, entries in (reg.get("plugins") or {}).items():
+            if not str(key).startswith(_PLUGIN + "@"):
+                continue
+            if isinstance(entries, dict):
+                entries = [entries]
+            for entry in entries or []:
+                path = (entry or {}).get("installPath")
+                if path:
+                    return str(Path(path).resolve())
+    except Exception:
+        pass
+    return ""
 
 
 def plugin_root(running_file) -> str:
-    """The plugin cache root this file is running from, or "" if it is not."""
+    """The installed plugin root this file is running from, or "" if it is not.
+
+    Anchored on this plugin's own cache directory, not on any path that happens
+    to contain "plugins/cache". A shim living anywhere else — including the
+    local clone the PowerShell hook runs session-start.py from — gets "".
+    """
     try:
+        prefix = _cache_prefix().resolve()
         parts = Path(running_file).resolve().parts
         for i in range(len(parts) - 1):
-            if parts[i:i + 2] == _CACHE_PARTS:
-                # .../plugins/cache/<marketplace>/<plugin>/<version>/...
-                root = Path(*parts[:i + 5])
-                return str(root) if root.is_dir() else ""
+            root = Path(*parts[:i + 1])
+            if root.parent == prefix and root.is_dir():
+                return str(root)
     except Exception:
         pass
     return ""
@@ -90,11 +124,35 @@ def record(hook: str, running_file) -> bool:
 
 
 def fired(hook: str) -> bool:
-    """True when the PLUGIN copy of this hook has been seen running here."""
+    """True when the PLUGIN copy of this hook has been seen running here.
+
+    Every clause is a way the answer could be wrong, and each costs one more
+    session of waiting rather than one wrongly retired hook:
+
+    * the beacon must be for the hook being asked about — one hook's evidence
+      says nothing about another's;
+    * the root it names must still exist — a beacon from a cache directory that
+      has since been removed proves nothing about today;
+    * that root must sit directly under this plugin's own cache prefix — a
+      forged file naming any cache-shaped path is not evidence;
+    * and it must be the copy the CLI currently reports as installed, when that
+      can be read, so an upgrade re-earns its evidence rather than inheriting it.
+    """
     try:
         data = json.loads((BEACON_DIR / f"{hook}.json").read_text(encoding="utf-8"))
-        root = data.get("root") or ""
-        parts = Path(root).parts
-        return any(parts[i:i + 2] == _CACHE_PARTS for i in range(len(parts) - 1))
+        if not isinstance(data, dict) or data.get("hook") != hook:
+            return False
+        recorded = str(data.get("root") or "")
+        if not recorded:
+            return False
+        root = Path(recorded).resolve()
+        if not root.is_dir():
+            return False
+        if root.parent != _cache_prefix().resolve():
+            return False
+        installed = _installed_root()
+        if installed and str(root) != installed:
+            return False
+        return True
     except Exception:
         return False

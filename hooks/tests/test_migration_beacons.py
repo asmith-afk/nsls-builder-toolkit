@@ -94,26 +94,81 @@ with tempfile.TemporaryDirectory() as tmp:
     check("a beacon naming a non-cache root is not evidence",
           beacon.fired("session-start") is False)
 
-print("\nthe done-marker is versioned")
+    # A forged beacon whose path merely LOOKS like a cache path.
+    decoy = cfg / "evil" / "plugins" / "cache" / "nsls-toolkit" / "nsls-builder-toolkit" / "9.9.9"
+    decoy.mkdir(parents=True)
+    (beacon.BEACON_DIR / "skill-event.json").write_text(
+        json.dumps({"hook": "skill-event", "root": str(decoy)}) + "\n")
+    check("a cache-shaped path outside the real cache is not evidence",
+          beacon.fired("skill-event") is False)
+
+    # A beacon whose root has since been removed.
+    gone = cache.parent / "3.0.0"
+    gone.mkdir(parents=True)
+    (beacon.BEACON_DIR / "skill-event.json").write_text(
+        json.dumps({"hook": "skill-event", "root": str(gone)}) + "\n")
+    check("a beacon from a directory that still exists is evidence",
+          beacon.fired("skill-event") is True)
+    gone.rmdir()
+    check("a beacon from a directory that is gone is not",
+          beacon.fired("skill-event") is False)
+
+    # And once the CLI names an installed copy, only that copy counts, so an
+    # upgrade re-earns its evidence instead of inheriting it.
+    registry = cfg / "plugins" / "installed_plugins.json"
+    registry.parent.mkdir(parents=True, exist_ok=True)
+    registry.write_text(json.dumps({"plugins": {
+        "nsls-builder-toolkit@nsls-toolkit": [
+            {"installPath": str(cache), "version": "3.8.5"}]}}))
+    check("the current installed copy still counts",
+          beacon.fired("guardrail-gate") is True)
+    older = cache.parent / "3.7.0"
+    (older / "hooks").mkdir(parents=True)
+    (beacon.BEACON_DIR / "guardrail-gate.json").write_text(
+        json.dumps({"hook": "guardrail-gate", "root": str(older)}) + "\n")
+    check("a beacon from a superseded version does not",
+          beacon.fired("guardrail-gate") is False)
+
+print("\nstage B runs when the marker says done but the shims came back")
 with tempfile.TemporaryDirectory() as tmp:
     cfg = Path(tmp) / "claude"
     cfg.mkdir()
+    (cfg / "settings.json").write_text(json.dumps({"hooks": {}}))
     mig = load(HOOKS / "migrate_to_plugin.py", cfg)
 
-    check("never migrated -> stage B runs", mig._needs_stage_b() is True)
+    check("never migrated -> the full pass", mig._stage_b_reason() == "full")
 
     mig._DONE.write_text("migrated\n", encoding="utf-8")
     check("a pre-versioning marker reads as schema 1", mig._done_schema() == 1)
-    check("and earns one more pass, which is what sweeps the leftover gate",
-          mig._needs_stage_b() is True)
+    check("and earns one more full pass, which sweeps the leftover gate",
+          mig._stage_b_reason() == "full")
 
     mig._DONE.write_text(json.dumps({"schema": mig._MIGRATION_SCHEMA}) + "\n",
                          encoding="utf-8")
-    check("a current marker does not re-run", mig._needs_stage_b() is False)
+    check("a current marker on a clean machine does not re-run",
+          mig._stage_b_reason() is None)
+
+    # The regression Codex named: the marker is permanent, and both installers
+    # deliberately re-create any missing shim. Re-running one after migrating
+    # would otherwise leave every hook registered twice, for good.
+    (cfg / "settings.json").write_text(json.dumps({"hooks": {"SessionStart": [
+        {"matcher": "startup", "hooks": [{"type": "command", "command":
+         'python3 "/Users/x/.claude/local-plugins/nsls-builder-toolkit/hooks/session-start.py"'}]}]}}))
+    check("a shim that reappeared after the marker re-opens stage B",
+          mig._stage_b_reason() == "reappeared")
+
+    # An org stub reappearing counts too.
+    (cfg / "settings.json").write_text(json.dumps({"hooks": {}}))
+    stub = cfg / "skills" / "gws"
+    stub.mkdir(parents=True)
+    (stub / "SKILL.md").write_text(
+        "points at local-plugins/nsls-builder-toolkit/skills/gws\n")
+    check("a stub that reappeared after the marker re-opens stage B",
+          mig._stage_b_reason() == "reappeared")
 
     mig._DONE.write_text("{ not json\n", encoding="utf-8")
     check("an unreadable marker is treated as old, not as done",
-          mig._needs_stage_b() is True)
+          mig._stage_b_reason() == "full")
 
 print("\nthe inert @local key")
 

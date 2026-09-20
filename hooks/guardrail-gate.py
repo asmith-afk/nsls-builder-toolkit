@@ -172,6 +172,12 @@ def allow():
 
 
 def block(reason: str, gate: str = "", automation: str = ""):
+    # Every block names a fix the builder can apply in the next minute —
+    # assign the reviewer, register the automation. Serving them cached
+    # evidence afterwards would block them again for having done what they
+    # were asked. The cache exists to spare a repeated round trip inside one
+    # burst of calls, never to outlive the state it describes.
+    _tracker_cache_clear()
     emit("guardrail_blocked", f"{gate}: {reason.splitlines()[0]}", automation)
     print(
         json.dumps(
@@ -310,21 +316,37 @@ def _cache_key(path: str) -> str:
 
 
 def _tracker_cached(path: str):
-    """A recent reply for this path, or None. Only ever caches a real answer."""
+    """A recent page for this path, or None. Only ever caches a real answer."""
     try:
         f = _TRACKER_CACHE_DIR / _cache_key(path)
         if time.time() - f.stat().st_mtime > _TRACKER_CACHE_TTL:
             return None
-        recs = json.loads(f.read_text(encoding="utf-8"))
-        return recs if isinstance(recs, list) else None
+        page = json.loads(f.read_text(encoding="utf-8"))
+        if isinstance(page, dict) and isinstance(page.get("records"), list):
+            return page
+        return None
     except Exception:
         return None
 
 
-def _tracker_store(path: str, recs):
+def _tracker_cache_clear():
+    """Drop every cached page. Best-effort and bounded."""
+    try:
+        for i, entry in enumerate(_TRACKER_CACHE_DIR.iterdir()):
+            if i > 200:
+                return
+            try:
+                entry.unlink()
+            except OSError:
+                continue
+    except Exception:
+        pass
+
+
+def _tracker_store(path: str, page):
     # None means "I don't know" and must never be cached: it would turn one
     # tracker hiccup into two minutes of blind spots.
-    if not isinstance(recs, list):
+    if not isinstance(page, dict) or not isinstance(page.get("records"), list):
         return
     try:
         _TRACKER_CACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -334,54 +356,74 @@ def _tracker_store(path: str, recs):
             pass
         f = _TRACKER_CACHE_DIR / _cache_key(path)
         tmp = f.with_suffix(".tmp")
-        tmp.write_text(json.dumps(recs), encoding="utf-8")
+        tmp.write_text(json.dumps(page), encoding="utf-8")
         os.replace(tmp, f)
     except Exception:
         pass
 
 
-def tracker_records(path: str):
-    """Fetch automation records.
+def _http_get(url: str):
+    """Raw bytes from the tracker, or None. A seam so the evidence rules below
+    can be tested without a network."""
+    try:
+        import urllib.request
 
-    Returns a LIST on a well-formed reply, or None for "I don't know".
+        with urllib.request.urlopen(urllib.request.Request(url),
+                                    timeout=NET_TIMEOUT) as r:
+            return r.read(MAX_BODY)
+    except Exception:
+        return None
 
-    The distinction is load-bearing. Callers block on an empty list (the tracker
-    positively said there's no such automation) and stay silent on None. So any
-    reply we can't confidently parse — HTTP error, unreadable body, a 200
-    carrying an error object, an unexpected shape — must be None. Codex review
-    2026-08-15 caught the original returning [] for a malformed 200, which turned
-    a tracker hiccup into a denied deploy: a fail-open violation.
+
+def tracker_page(path: str):
+    """One page of automation records: {"records": [...], "total": N|None}.
+
+    None means "I don't know", and every caller must treat it as silence.
+
+    The distinction is load-bearing and has been got wrong twice. Callers block
+    on a positively empty answer and stay silent on None, so ANY reply we cannot
+    confidently read — HTTP error, unreadable body, a 200 carrying an error
+    object, an unexpected shape, an explicit success:false — has to be None.
+    Codex review 2026-08-15 caught the original returning [] for a malformed
+    200, which turned a tracker hiccup into a denied deploy. Codex review
+    2026-09-20 caught {"success": false, "records": []} doing the same thing.
     """
     cached = _tracker_cached(path)
     if cached is not None:
         return cached
 
+    raw = _http_get(f"{TRACKER_URL}{path}")
+    if raw is None:
+        return None
     try:
-        import urllib.request
-
-        req = urllib.request.Request(f"{TRACKER_URL}{path}")
-        with urllib.request.urlopen(req, timeout=NET_TIMEOUT) as r:
-            raw = r.read(MAX_BODY)
         data = json.loads(raw.decode(errors="replace"))
     except Exception:
         return None
 
+    total = None
     if isinstance(data, list):
         recs = data
     elif isinstance(data, dict):
+        # An explicit failure flag outranks whatever else the body carries.
+        if "success" in data and not data.get("success"):
+            return None
         # The tracker answers {"count": N, "records": [...], "success": true}.
-        # This code only ever accepted an "automations" key, so every reply
-        # parsed as None — which is the fail-open path — and gates 2 and 4 have
-        # therefore been incapable of firing for as long as they have existed,
+        # This client only ever accepted an "automations" key, so every reply
+        # parsed as None — the fail-open path — and gates 2 and 4 have therefore
+        # been incapable of firing for as long as they have existed,
         # independently of the hooks.json wiring. Verified against the live
-        # endpoint 2026-09-20. "automations" is still accepted in case the API
-        # is ever corrected toward the name this client expected.
+        # endpoint 2026-09-20. "automations" stays accepted in case the API is
+        # ever corrected toward the name this client expected.
         if "records" in data:
             recs = data.get("records")
         elif "automations" in data:
             recs = data.get("automations")
         else:
             return None  # unrecognised shape — do not infer "none found"
+        count = data.get("count")
+        if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+            count = None
+        total = count
     else:
         return None
 
@@ -390,12 +432,47 @@ def tracker_records(path: str):
     # A list with a non-dict inside is a half-garbled reply. Filtering the
     # garbage out silently turned "temporary error" strings into an empty
     # result — which callers read as "positively no record" and BLOCKED on.
-    # Fail-open rule: anything not confidently parsed is "I don't know".
     for r in recs:
         if not isinstance(r, dict):
             return None
-    _tracker_store(path, recs)
-    return recs
+
+    page = {"records": recs, "total": total}
+    _tracker_store(path, page)
+    return page
+
+
+# The tracker returns at most this many records and honours no name, search or
+# pagination parameter — every query comes back as the same first page of the
+# table (151 rows on 2026-09-20; verified against the live endpoint with name=,
+# search=, q=, limit= and offset=, all ignored). So a name missing from the
+# reply means "not in the first 50", NOT "not registered", and blocking on that
+# would be a false positive on two thirds of the tracker — the failure mode
+# these gates care most about. Until the endpoint can answer the question,
+# absence is treated as unknown and only a positive match is acted on.
+_TRACKER_PAGE_CAP = 50
+
+
+def tracker_lookup(name: str):
+    """("found", record) | ("absent", None) | ("unknown", None).
+
+    Callers must treat "unknown" as silence. Collapsing it into "absent" is what
+    turns a tracker hiccup — or a paging limit — into a blocked deploy.
+    """
+    from urllib.parse import quote
+
+    page = tracker_page(f"/automations?name={quote(name, safe='')}")
+    if page is None:
+        return "unknown", None
+    recs = page["records"]
+    for r in recs:
+        if (r.get("name") or "").lower() == name.lower():
+            return "found", r
+    total = page.get("total")
+    if total is not None and total > len(recs):
+        return "unknown", None  # the reply is one page of a larger table
+    if len(recs) >= _TRACKER_PAGE_CAP:
+        return "unknown", None  # a capped page proves nothing about absence
+    return "absent", None
 
 
 # ── Command segmentation ────────────────────────────────────────────────────
@@ -664,37 +741,6 @@ DEPLOY_HARMLESS_RE = re.compile(
     r"--help|-h\b|--dry-run|--alias|--preview|\bnetlify\s+deploy(?!.*--prod)",
     re.I,
 )
-
-
-# The tracker returns at most this many records and honours no name, search or
-# pagination parameter — every query comes back as the same first page of the
-# table (151 rows on 2026-09-20; verified against the live endpoint with name=,
-# search=, q=, limit= and offset=, all ignored). So a name missing from the
-# reply means "not in the first 50", NOT "not registered", and blocking on that
-# would be a false positive on two thirds of the tracker — the failure mode
-# these gates care most about. Until the endpoint can answer the question,
-# absence is treated as unknown and only a positive match is acted on.
-_TRACKER_PAGE_CAP = 50
-
-
-def tracker_lookup(name: str):
-    """("found", record) | ("absent", None) | ("unknown", None).
-
-    Callers must treat "unknown" as silence. Collapsing it into "absent" is
-    what turns a tracker hiccup — or, today, a paging limit — into a blocked
-    deploy.
-    """
-    from urllib.parse import quote
-
-    recs = tracker_records(f"/automations?name={quote(name, safe='')}")
-    if recs is None:
-        return "unknown", None
-    for r in recs:
-        if (r.get("name") or "").lower() == name.lower():
-            return "found", r
-    if len(recs) >= _TRACKER_PAGE_CAP:
-        return "unknown", None  # a capped page proves nothing about absence
-    return "absent", None
 
 
 def gate_unregistered_ship(tool: str, ti: dict):
@@ -992,8 +1038,13 @@ def gate_off_platform(tool: str, ti: dict):
     # Documentation quoting `from openai import OpenAI` is prose, not a
     # platform choice — a README example was getting the same block as real
     # code. Judge only files that execute.
-    path = str(ti.get("file_path") or "").lower()
-    name = Path(path).name
+    # Normalised to forward slashes first: a Windows Edit carries
+    # C:\\repo\\docs\\example.py, which the "/docs/" test below never matched, so
+    # documentation quoting an OpenAI import was judged as executable code —
+    # a false positive, and this gate only started reaching Windows at all
+    # with the parity change.
+    path = str(ti.get("file_path") or "").lower().replace("\\", "/")
+    name = path.rsplit("/", 1)[-1]
     if (path.endswith((".md", ".mdx", ".markdown", ".rst", ".txt", ".adoc"))
             or "/docs/" in path
             or name.startswith(("readme", "changelog", "license", "contributing"))):
