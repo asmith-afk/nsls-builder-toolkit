@@ -202,7 +202,16 @@ else:
 # through the live harness while the same payload piped into the script was
 # denied, and the Events table held zero real guardrail_blocked rows ever.
 # The gates were documentation. This registration is what makes them real.
-GATE_HOOK_CMD = 'python3 "' + os.path.join(CONFIG_DIR, 'local-plugins/nsls-builder-toolkit/hooks/guardrail-gate.py') + '"'
+# The quotes are escaped because this whole program is inside a shell
+# double-quoted \`python3 -c \"...\"\`. Unescaped, they closed that string early:
+# the shell then took the rest of the line as words to execute, and settings.json
+# received the literal text \`python3  + os.path.join(CONFIG_DIR, local-plugins/...
+# /guardrail-gate.py) + \` as the hook command. That is not a runnable command, so
+# on every Mac the installer touched, the gate could not have fired even before
+# the migration deleted it — and every matching tool call would have printed a
+# hook-error notice. The session-start hook two blocks up escapes them correctly;
+# this one did not. See test_installer_registration.py.
+GATE_HOOK_CMD = 'python3 \"' + os.path.join(CONFIG_DIR, 'local-plugins/nsls-builder-toolkit/hooks/guardrail-gate.py') + '\"'
 GATE_MARKER = 'nsls-builder-toolkit/hooks/guardrail-gate.py'
 GATE_STATUS = 'Checking builder guardrails…'
 gate_entry = None
