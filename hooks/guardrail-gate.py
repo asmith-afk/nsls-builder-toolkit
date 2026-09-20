@@ -33,6 +33,7 @@ import re
 import shlex
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 TRACKER_URL = os.environ.get(
@@ -115,6 +116,20 @@ def emit(event_type: str, description: str, automation: str = ""):
     means the block events we believed were being recorded were landing about
     half the time. EMIT_TIMEOUT in guardrail_emit.py has the measurements.
     """
+    log = os.environ.get("NSLS_GUARDRAIL_EVENT_LOG")
+    if log:
+        # Test seam. Never set in normal use: the tests need to count events
+        # per decision (a double-fire writes TWO guardrail_blocked rows, which
+        # would corrupt the very metric the gates are measured by) and that
+        # cannot be asserted against a detached network POST.
+        try:
+            with open(log, "a", encoding="utf-8") as fh:
+                fh.write(json.dumps({"type": event_type,
+                                     "description": description,
+                                     "automation": automation}) + "\n")
+        except Exception:
+            pass
+        return
     try:
         _emit(event_type, description, automation=automation, dedupe=False)
     except Exception:
@@ -923,6 +938,103 @@ GATES = (
 )
 
 
+_INFLIGHT_DIR = Path(
+    os.environ.get("CLAUDE_CONFIG_DIR") or (Path.home() / ".claude")
+) / ".nsls-gate-inflight"
+# Comfortably above the hook's own 10s timeout, so a slow winner is never
+# overtaken; comfortably below any interval at which a builder could produce a
+# genuinely new call carrying the same id (Claude Code does not reuse them).
+_INFLIGHT_TTL = 90
+_TOOL_USE_ID_RE = re.compile(r"\A[A-Za-z0-9_-]{1,128}\Z")
+
+
+def _sweep_inflight():
+    """Drop markers nothing will ever look at again. Bounded and best-effort."""
+    try:
+        cutoff = time.time() - (_INFLIGHT_TTL * 4)
+        for i, entry in enumerate(_INFLIGHT_DIR.iterdir()):
+            if i > 200:
+                return
+            try:
+                if entry.stat().st_mtime < cutoff:
+                    entry.unlink()
+            except OSError:
+                continue
+    except Exception:
+        pass
+
+
+def already_deciding(tool_use_id) -> bool:
+    """True when another copy of this hook already owns this exact tool call.
+
+    A machine can carry two live registrations of this gate at once: the
+    plugin's hooks.json entry and a settings.json entry the installer wrote
+    before the migration stopped stripping it. The docs are explicit that a
+    plugin's copy of a handler "stays separate" from a settings.json copy —
+    both run, in parallel. Two decisions would be survivable; two
+    `guardrail_blocked` rows per block would not, because emit() deliberately
+    does not deduplicate and those rows are the only measure the gates have.
+
+    The marker is deliberately NOT removed when the decision finishes. Removing
+    it reopens the race it exists to close: the winner can finish before the
+    loser has even started, and the loser would then claim a free marker and
+    decide again. It ages out instead.
+
+    Every failure path here returns False — deciding twice is a bad day;
+    skipping a decision because a marker could not be written is a hole.
+    """
+    tid = tool_use_id if isinstance(tool_use_id, str) else ""
+    if not _TOOL_USE_ID_RE.match(tid):
+        return False  # no usable id — decide, rather than skip a decision
+    marker = _INFLIGHT_DIR / tid
+    try:
+        _INFLIGHT_DIR.mkdir(parents=True, exist_ok=True)
+        try:
+            os.chmod(_INFLIGHT_DIR, 0o700)
+        except OSError:
+            pass
+        for _ in range(2):
+            try:
+                os.close(os.open(str(marker),
+                                 os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600))
+                _sweep_inflight()
+                return False  # we own this call
+            except FileExistsError:
+                try:
+                    if time.time() - marker.stat().st_mtime <= _INFLIGHT_TTL:
+                        return True  # a live sibling owns it
+                    marker.unlink()  # abandoned; try once more to claim it
+                except OSError:
+                    return True
+    except Exception:
+        return False
+    return False
+
+
+def normalize_call(tool: str, ti: dict):
+    """Show the gates the shapes they were written against.
+
+    The matcher admits five tool names; the gates read three. MultiEdit carries
+    its text in edits[].new_string and NotebookEdit in new_source, so without
+    this both are a silent bypass of gate 4 — the tool call is inspected, finds
+    no `content` or `new_string`, and is waved through.
+    """
+    if tool == "MultiEdit":
+        parts = []
+        edits = ti.get("edits")
+        if isinstance(edits, list):
+            for e in edits:
+                if isinstance(e, dict) and isinstance(e.get("new_string"), str):
+                    parts.append(e["new_string"])
+        return "Edit", {"file_path": ti.get("file_path"),
+                        "new_string": "\n".join(parts)}
+    if tool == "NotebookEdit":
+        source = ti.get("new_source")
+        return "Edit", {"file_path": ti.get("notebook_path") or ti.get("file_path"),
+                        "new_string": source if isinstance(source, str) else ""}
+    return tool, ti
+
+
 def main():
     if os.environ.get("NSLS_GUARDRAILS_DISABLED") == "1":
         allow()
@@ -936,6 +1048,11 @@ def main():
     ti = payload.get("tool_input") or {}
     if not isinstance(ti, dict):
         allow()
+
+    if already_deciding(payload.get("tool_use_id")):
+        allow()
+
+    tool, ti = normalize_call(tool, ti)
 
     for gate in GATES:
         try:

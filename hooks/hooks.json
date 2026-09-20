@@ -24,6 +24,18 @@
             "statusMessage": "Logging skill use so you get NSLS credit (nothing else)\u2026"
           }
         ]
+      },
+      {
+        "matcher": "^(Bash|Write|Edit|MultiEdit|NotebookEdit)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.sh\" gate",
+            "shell": "bash",
+            "timeout": 10,
+            "statusMessage": "Checking builder guardrails\u2026"
+          }
+        ]
       }
     ]
   }
