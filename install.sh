@@ -123,15 +123,20 @@ MARKER = 'nsls-builder-toolkit/hooks/session-start.py'
 # written by an older PowerShell installer, and plain utf-8 would choke on it.
 with open(SETTINGS_PATH, encoding='utf-8-sig') as f: cfg = json.load(f)
 
-# The toolkit is enabled by INSTALLING it (Step 3 runs `claude plugin install
-# nsls-builder-toolkit@nsls-toolkit`). This used to also write
-# `nsls-builder-toolkit@local` into enabledPlugins, which never did anything —
-# there is no marketplace called `local`, so Claude Code cannot resolve the key
-# — but it looked like a live second installation, and that appearance cost two
-# weeks of unguarded Macs: a test against it seemed to show that a plugin's
-# bundled hooks do not load, which is why the guardrail gate was taken out of
-# hooks.json. Machines that already carry the key have it removed by the
-# migration, once the absence of a `local` marketplace is confirmed.
+# The toolkit is enabled by INSTALLING it: Step 3 runs the plugin install. This
+# used to also write nsls-builder-toolkit@local into enabledPlugins, which never
+# did anything -- there is no marketplace named local, so Claude Code cannot
+# resolve the key -- but it looked like a live second installation, and that
+# appearance cost two weeks of unguarded Macs: a test against it seemed to show
+# that a plugin's bundled hooks do not load, which is why the guardrail gate was
+# taken out of hooks.json. Machines that already carry the key have it removed
+# by the migration, once the absence of that marketplace is confirmed.
+#
+# No backticks, no unescaped quotes, no bare dollar signs anywhere in this
+# block, comments included: it is a Python program inside a shell double-quoted
+# string, so the shell expands all three before Python ever sees them. An
+# earlier draft of this very comment put a plugin-install command in
+# backticks, and the shell ran it as a command substitution mid-install.
 
 # Register auto-update hook (idempotent)
 hooks = cfg.setdefault('hooks', {})
@@ -477,11 +482,13 @@ fi
 
 # --- Step 3.5: Register bundled MCP servers (signal, etc.) ---
 #
-# This installer sets up the SHIM path: a clone plus hand-written settings.json
-# entries. It also writes `nsls-builder-toolkit@local` into enabledPlugins,
-# which does nothing — there is no marketplace called `local`, so Claude Code
-# cannot resolve the key. This comment used to say that key "loads
-# skills/commands/hooks", and that sentence cost two weeks of unguarded Macs:
+# This installer also sets up the SHIM path: a clone plus hand-written
+# settings.json entries, as the safety net for the window before the plugin's
+# own hooks are proven on this machine. It used to additionally write
+# `nsls-builder-toolkit@local` into enabledPlugins, which did nothing — there is
+# no marketplace called `local`, so Claude Code cannot resolve the key. This
+# comment used to say that key "loads skills/commands/hooks", and that sentence
+# cost two weeks of unguarded Macs:
 # an 2026-08-23 test against it appeared to prove that a plugin's bundled hooks
 # do not load, which is why the guardrail gate was taken out of hooks.json on
 # 2026-09-06. The marketplace-installed plugin loads its bundled hooks exactly
