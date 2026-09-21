@@ -23,8 +23,10 @@ The failures this exists to prevent:
 3. The matcher used to be the unanchored "Bash|PowerShell|Write|Edit", which
    admitted BashOutput and KillBash (a Python process per poll) and reached
    MultiEdit only as a substring accident — while the gates themselves read
-   `new_string`/`content`, which a MultiEdit payload does not have. A
-   MultiEdit was a silent bypass of gate 4.
+   `new_string`/`content`, which a MultiEdit payload does not have. Anchoring
+   it fixes both. PowerShell stays in the list deliberately: it is a real tool,
+   enabled automatically on Windows, and the gates only judge it because
+   normalize_call presents it as Bash.
 
 No network: NSLS_GUARDRAIL_EVENT_LOG redirects the event emitter to a file.
 """
@@ -75,7 +77,8 @@ if gate_entries:
     check("matcher is anchored", matcher.startswith("^") and matcher.endswith("$"),
           f"({matcher!r})")
     rx = re.compile(matcher)
-    for tool in ("Bash", "Write", "Edit", "MultiEdit", "NotebookEdit"):
+    for tool in ("Bash", "PowerShell", "Write", "Edit", "MultiEdit",
+                 "NotebookEdit"):
         check(f"matcher admits {tool}", bool(rx.search(tool)))
     for tool in ("BashOutput", "KillBash", "Skill", "Read", "WebFetch"):
         check(f"matcher ignores {tool}", not rx.search(tool))
@@ -202,6 +205,9 @@ with tempfile.TemporaryDirectory() as tmp:
     check("NotebookEdit becomes an Edit the gates read", tool == "Edit")
     check("NotebookEdit text survives normalisation",
           "import openai" in ti["new_string"])
+    tool, ti = mod.normalize_call("PowerShell", {"command": "git push"})
+    check("PowerShell is judged as a Bash command", tool == "Bash")
+    check("PowerShell command survives normalisation", ti["command"] == "git push")
     tool, ti = mod.normalize_call("Bash", {"command": "ls"})
     check("other tools pass through untouched",
           tool == "Bash" and ti == {"command": "ls"})

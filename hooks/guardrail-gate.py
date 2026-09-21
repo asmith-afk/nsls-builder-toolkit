@@ -948,13 +948,41 @@ _INFLIGHT_TTL = 90
 _TOOL_USE_ID_RE = re.compile(r"\A[A-Za-z0-9_-]{1,128}\Z")
 
 
+_SWEEP_STAMP_NAME = ".last-sweep"
+# A tool_use_id can never be named this: _TOOL_USE_ID_RE forbids a leading dot.
+_SWEEP_INTERVAL = 60
+
+
 def _sweep_inflight():
-    """Drop markers nothing will ever look at again. Bounded and best-effort."""
+    """Drop markers nothing will ever look at again.
+
+    A FULL sweep, throttled to at most once a minute by a stamp file, rather
+    than a partial sweep on every call. Stopping after a fixed number of
+    entries looks like the cheap option and is in fact the broken one: the
+    directory is walked in whatever order the filesystem hands back, so
+    anything past the cut is never reached on any call and the directory grows
+    without limit. Throttling bounds the cost per tool call just as tightly
+    while still eventually removing everything.
+
+    Best-effort throughout. A sweep that cannot run is a few stale empty files,
+    never a missed decision.
+    """
     try:
-        cutoff = time.time() - (_INFLIGHT_TTL * 4)
-        for i, entry in enumerate(_INFLIGHT_DIR.iterdir()):
-            if i > 200:
+        now = time.time()
+        stamp = _INFLIGHT_DIR / _SWEEP_STAMP_NAME
+        try:
+            if now - stamp.stat().st_mtime < _SWEEP_INTERVAL:
                 return
+        except OSError:
+            pass  # no stamp yet, or unreadable — sweep and lay one down
+        try:
+            stamp.touch()  # claim it first, so parallel hooks do not all sweep
+        except OSError:
+            return
+        cutoff = now - (_INFLIGHT_TTL * 4)
+        for entry in _INFLIGHT_DIR.iterdir():
+            if entry.name == _SWEEP_STAMP_NAME:
+                continue
             try:
                 if entry.stat().st_mtime < cutoff:
                     entry.unlink()
@@ -1014,11 +1042,22 @@ def already_deciding(tool_use_id) -> bool:
 def normalize_call(tool: str, ti: dict):
     """Show the gates the shapes they were written against.
 
-    The matcher admits five tool names; the gates read three. MultiEdit carries
-    its text in edits[].new_string and NotebookEdit in new_source, so without
-    this both are a silent bypass of gate 4 — the tool call is inspected, finds
-    no `content` or `new_string`, and is waved through.
+    The matcher admits six tool names; the gates read three shapes — a Bash
+    command, a Write, an Edit.
+
+    PowerShell is a first-class tool, not a synonym: Claude Code enables it
+    automatically on Windows and its payload carries the command in the same
+    `command` field Bash uses. Three of the four gates open with
+    `if tool != "Bash": return`, so adding PowerShell to the matcher without
+    this line would admit the call and then wave it through every command
+    gate — the matcher would look fixed while nothing judged it.
+
+    MultiEdit carries its text in edits[].new_string and NotebookEdit in
+    new_source, so without this both are a silent bypass of gate 4 — the tool
+    call is inspected, finds no `content` or `new_string`, and is waved through.
     """
+    if tool == "PowerShell":
+        return "Bash", ti
     if tool == "MultiEdit":
         parts = []
         edits = ti.get("edits")
