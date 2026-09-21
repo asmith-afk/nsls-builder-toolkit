@@ -156,6 +156,43 @@ with tempfile.TemporaryDirectory() as tmp:
           blocks(r"C:\repo\src\client.py"))
     check("real POSIX product code is still judged", blocks("/repo/src/client.py"))
 
+print("\na field shape the tracker can legitimately send does not turn a gate off")
+# Airtable single-select fields serialise as {"id","name","color"}, not as a
+# string. `(x or "").lower()` raises AttributeError on one, main() swallows it
+# as "one broken gate never takes down the rest", and the deploy is allowed —
+# a gate switched off by a field shape, leaving the same empty events table a
+# working gate leaves.
+with tempfile.TemporaryDirectory() as tmp:
+    gate = load_gate(Path(tmp))
+    gate.emit = lambda *a, **k: None
+    gate.repo_root = lambda *a, **k: "/tmp/some-nsls-repo"
+    body = "import openai\nclient = openai.OpenAI()\n"
+
+    def blocks_on(scope):
+        gate.tracker_lookup = lambda name: ("found", {"name": name, "scope": scope})
+        with contextlib.redirect_stdout(io.StringIO()):
+            try:
+                gate.gate_off_platform("Edit", {"file_path": "/repo/src/client.py",
+                                                "new_string": body})
+            except SystemExit:
+                return True
+        return False
+
+    check("a plain string scope blocks", blocks_on("Company-wide"))
+    check("Airtable's {id,name,color} scope blocks too",
+          blocks_on({"id": "selA1", "name": "Company-wide", "color": "blueLight"}))
+    check("a scope of no usable shape is declined, not crashed on",
+          not blocks_on(["Company-wide"]))
+    check("_text unwraps the Airtable object",
+          gate._text({"id": "s", "name": "Department", "color": "red"}) == "Department")
+    check("_text passes a string through", gate._text("Company-wide") == "Company-wide")
+    check("_text refuses to guess at anything else",
+          gate._text(["x"]) == "" and gate._text(None) == "" and gate._text(7) == "")
+
+check("a name sent as an Airtable object still matches",
+      lookup({"count": 1, "records": [
+          {"name": {"id": "f1", "name": "my-service", "color": "grey"}}]}) == "found")
+
 print()
 if failures:
     print(f"FAILED: {len(failures)} check(s): {', '.join(failures)}")

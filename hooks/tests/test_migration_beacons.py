@@ -170,6 +170,50 @@ with tempfile.TemporaryDirectory() as tmp:
     check("an unreadable marker is treated as old, not as done",
           mig._stage_b_reason() == "full")
 
+print("\nstage B retires the signal server on the re-entry pass too")
+# The bug this closes: stage B used to run _remove_user_scope_signal() only on
+# the "full" pass, on the reasoning that the first pass settled it. But a
+# "reappeared" pass exists BECAUSE the installer ran again, and the installer
+# re-registers signal at user scope alongside the shims. The re-entry pass
+# would then leave it registered twice and write the done marker anyway.
+with tempfile.TemporaryDirectory() as tmp:
+    cfg = Path(tmp) / "claude"
+    cfg.mkdir()
+    mig = load(HOOKS / "migrate_to_plugin.py", cfg)
+
+    # A migrated machine whose installer was re-run: marker present, shim back.
+    mig._DONE.write_text(json.dumps({"schema": mig._MIGRATION_SCHEMA}) + "\n",
+                         encoding="utf-8")
+    (cfg / "settings.json").write_text(json.dumps({"hooks": {"SessionStart": [
+        {"matcher": "startup", "hooks": [{"type": "command", "command":
+         'python3 "/Users/x/.claude/local-plugins/nsls-builder-toolkit/hooks/session-start.py"'}]}]}}))
+    check("the fixture is a re-entry pass, not a first pass",
+          mig._stage_b_reason() == "reappeared")
+
+    signal_calls = []
+
+    def fake_signal():
+        signal_calls.append(1)
+        return True, True
+
+    mig._remove_user_scope_signal = fake_signal
+    mig._remove_settings_hooks = lambda: 1
+    mig._remove_org_stubs = lambda: 0
+    mig._remove_inert_local_enablement = lambda: False
+    # _shims_present and _org_stubs_exist are left real on purpose: they are
+    # what makes this machine read as "reappeared" in the first place, and
+    # stubbing them turns the fixture back into a clean machine.
+    mig._plugin_installed = lambda: True
+    mig._plugin_disabled_by_user = lambda: False
+    mig._announce = lambda text: None
+    os.environ.pop("NSLS_NO_PLUGIN_MIGRATION", None)
+    try:
+        mig.run_migration()
+    finally:
+        os.environ["NSLS_NO_PLUGIN_MIGRATION"] = "1"
+    check("the re-entry pass removes the user-scope signal server",
+          signal_calls == [1], f"(called {len(signal_calls)}x)")
+
 print("\nthe inert @local key")
 
 

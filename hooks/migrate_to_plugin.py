@@ -370,7 +370,7 @@ def _remove_user_scope_signal():
     return (True, True) if removed else (False, False)
 
 
-def _stage_b(reason="full"):
+def _stage_b():
     """Retire the shims now that the plugin is live.
 
     Re-runs every session until the machine VERIFIES clean, then writes the
@@ -386,10 +386,13 @@ def _stage_b(reason="full"):
     # CLI calls first: the claude CLI may normalize/rewrite settings.json as a
     # side effect (observed live: it rewrote a model alias during `mcp get`),
     # so our own settings edit must come after every CLI invocation.
-    if reason == "full":
-        signal_moved, signal_clean = _remove_user_scope_signal()
-    else:
-        signal_moved, signal_clean = False, True  # settled on the first pass
+    # Both passes, not just the first. A "reappeared" pass exists precisely
+    # because the installer ran again, and the installer re-registers the
+    # user-scope signal server alongside the shims it put back. Skipping the
+    # removal there leaves signal registered at user AND plugin scope while
+    # this run goes on to write the done marker, so nothing ever comes back
+    # for it.
+    signal_moved, signal_clean = _remove_user_scope_signal()
     hooks_removed = _remove_settings_hooks()
     stubs_removed = _remove_org_stubs()
 
@@ -499,9 +502,8 @@ def run_migration():
         elif _plugin_disabled_by_user():
             return
         else:
-            reason = _stage_b_reason()
-            if reason:
-                _stage_b(reason)
+            if _stage_b_reason():
+                _stage_b()
     except Exception:
         pass  # fail-open: shims still work; retry next session
     finally:

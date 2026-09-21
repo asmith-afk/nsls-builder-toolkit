@@ -329,12 +329,41 @@ def _tracker_cached(path: str):
         return None
 
 
+def _text(value) -> str:
+    """Coerce one tracker field to a string the gates can match on.
+
+    The tracker proxies Airtable, and an Airtable single-select field does not
+    come back as a string — it comes back as {"id", "name", "color"}. Calling
+    .lower() on one raises AttributeError, main() catches it as "one broken
+    gate never takes down the rest", and the action is allowed. A gate that
+    fails open on a field shape is worse than no gate, because the empty
+    events table reads identically either way.
+
+    A string is itself; the Airtable object yields its name; anything else
+    yields "", which every caller already treats as "no scope stated" and
+    declines to act on.
+    """
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        name = value.get("name")
+        if isinstance(name, str):
+            return name
+    return ""
+
+
 def _tracker_cache_clear():
-    """Drop every cached page. Best-effort and bounded."""
+    """Drop EVERY cached page. Best-effort, and deliberately unbounded.
+
+    Called from block(), where correctness depends on it finishing: a page
+    left behind is stale evidence that outlives the block that invalidated it.
+    A cap by iteration position would not even bound the work reliably — the
+    directory is walked in filesystem order, so the cap drops an arbitrary
+    subset rather than the cheapest one. The directory holds at most a couple
+    of minutes of pages and this runs only on a block, which is rare.
+    """
     try:
-        for i, entry in enumerate(_TRACKER_CACHE_DIR.iterdir()):
-            if i > 200:
-                return
+        for entry in _TRACKER_CACHE_DIR.iterdir():
             try:
                 entry.unlink()
             except OSError:
@@ -465,7 +494,7 @@ def tracker_lookup(name: str):
         return "unknown", None
     recs = page["records"]
     for r in recs:
-        if (r.get("name") or "").lower() == name.lower():
+        if _text(r.get("name")).lower() == name.lower():
             return "found", r
     total = page.get("total")
     if total is not None and total > len(recs):
@@ -801,7 +830,7 @@ def gate_unregistered_ship(tool: str, ti: dict):
         return  # unreachable, unparseable, or a capped page => allow
 
     if match:
-        scope = (match.get("scope") or "").lower()
+        scope = _text(match.get("scope")).lower()
         reviewer = match.get("reviewer")
         if "company" in scope and not reviewer:
             block(
@@ -1068,7 +1097,7 @@ def gate_off_platform(tool: str, ti: dict):
     if status != "found":
         return  # this gate needs a positive scope to have anything to say
 
-    scope = (record.get("scope") or "").lower()
+    scope = _text(record.get("scope")).lower()
 
     # Positive confirmation of Tier 2+ only. Previously any unrecognised scope
     # string ("", "n/a", "tbd") fell through to a block; Codex review
