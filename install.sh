@@ -123,13 +123,15 @@ MARKER = 'nsls-builder-toolkit/hooks/session-start.py'
 # written by an older PowerShell installer, and plain utf-8 would choke on it.
 with open(SETTINGS_PATH, encoding='utf-8-sig') as f: cfg = json.load(f)
 
-# Enable plugin
-ep = cfg.setdefault('enabledPlugins', {})
-if not ep.get('nsls-builder-toolkit@local'):
-    ep['nsls-builder-toolkit@local'] = True
-    print('  Enabled nsls-builder-toolkit in settings.json')
-else:
-    print('  Plugin already enabled')
+# The toolkit is enabled by INSTALLING it (Step 3 runs `claude plugin install
+# nsls-builder-toolkit@nsls-toolkit`). This used to also write
+# `nsls-builder-toolkit@local` into enabledPlugins, which never did anything —
+# there is no marketplace called `local`, so Claude Code cannot resolve the key
+# — but it looked like a live second installation, and that appearance cost two
+# weeks of unguarded Macs: a test against it seemed to show that a plugin's
+# bundled hooks do not load, which is why the guardrail gate was taken out of
+# hooks.json. Machines that already carry the key have it removed by the
+# migration, once the absence of a `local` marketplace is confirmed.
 
 # Register auto-update hook (idempotent)
 hooks = cfg.setdefault('hooks', {})

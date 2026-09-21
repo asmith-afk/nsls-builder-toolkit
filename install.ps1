@@ -368,11 +368,10 @@ if (Test-Path $Settings) {
     $cfg = [pscustomobject]@{}
 }
 
-# Enable the local plugin (merge; preserve other enabledPlugins).
-if (-not ($cfg.PSObject.Properties.Name -contains 'enabledPlugins') -or $null -eq $cfg.enabledPlugins) {
-    $cfg | Add-Member -NotePropertyName enabledPlugins -NotePropertyValue ([pscustomobject]@{}) -Force
-}
-$cfg.enabledPlugins | Add-Member -NotePropertyName 'nsls-builder-toolkit@local' -NotePropertyValue $true -Force
+# No `nsls-builder-toolkit@local` key. It named a marketplace that does not
+# exist, so it never enabled anything; what it did do was look like a second
+# live installation, and that appearance is what produced the false conclusion
+# that bundled plugin hooks do not load. Step 3 installs the real plugin.
 
 if (-not ($cfg.PSObject.Properties.Name -contains 'hooks') -or $null -eq $cfg.hooks) {
     $cfg | Add-Member -NotePropertyName hooks -NotePropertyValue ([pscustomobject]@{}) -Force
