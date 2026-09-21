@@ -120,6 +120,40 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
     if ($RunningFromFile) { exit 1 } else { return }
 }
 
+# Git Bash, specifically - not just git.exe. Every one of the plugin's hooks is
+# registered in hooks.json as a bash command, because hooks.json has no OS
+# conditional and bash is the one interpreter both platforms can share. Git for
+# Windows ships bash, so this normally passes the moment git does; it is checked
+# because the failure it prevents is silent. Without a callable bash the hooks
+# do not error, they simply never run, and a builder with no gate and no credit
+# logging looks exactly like a builder with nothing to report - which is the
+# whole outage this release exists to end.
+$bashOk = $false
+$bashCmd = Get-Command bash -ErrorAction SilentlyContinue
+if ($bashCmd) {
+    try {
+        $probe = (& bash -c 'printf NSLS-BASH-OK' 2>$null)
+        $bashOk = ($probe -eq 'NSLS-BASH-OK')
+    } catch { $bashOk = $false }
+}
+if (-not $bashOk) {
+    $gitBash = Join-Path $env:ProgramFiles 'Git\bin\bash.exe'
+    Write-Host ""
+    Write-Host "Warning: Git Bash isn't callable from this shell."
+    Write-Host "  The toolkit's hooks run through it, so without it the guardrails and the"
+    Write-Host "  work-credit logging will be installed but will never fire."
+    if (Test-Path $gitBash) {
+        Write-Host "  It IS installed at: $gitBash"
+        Write-Host "  Fix: add $(Split-Path $gitBash) to your PATH, then reopen PowerShell and re-run this installer."
+    } else {
+        Write-Host "  Fix: reinstall Git for Windows from https://git-scm.com/download/win,"
+        Write-Host "  accepting every default option, then reopen PowerShell and re-run this installer."
+    }
+    Write-Host "  Continuing - everything else installs normally, and the hooks start working"
+    Write-Host "  as soon as bash is on PATH."
+    Write-Host ""
+}
+
 if ($Test) {
     New-Item -ItemType Directory -Path $ConfigDir -Force | Out-Null
 } elseif (-not (Test-Path $ConfigDir)) {
@@ -444,6 +478,17 @@ if ($ClaudeBin) {
     }
     # superpowers needs its marketplace registered first - a bare install spec
     # with no marketplace can never resolve on a fresh machine.
+    # The org toolkit itself. Nothing on Windows has ever installed it: the
+    # self-migration's stage A only runs from session-start.py's main(), and
+    # session-start.ps1 enters Python solely through the guardrails block. That
+    # is why no PC has the plugin, its three agents, or its bundled hooks -
+    # not a shortage of installs. With the plugin present, hooks.json is what
+    # registers this machine's hooks, and the settings.json entries below
+    # become the transitional copy that stage B retires once per-hook beacons
+    # prove the plugin's own hooks fire here.
+    Install-Plugin 'nsls-builder-toolkit' 'nsls-builder-toolkit@nsls-toolkit' `
+        $RepoUrl
+
     Install-Plugin 'superpowers' 'superpowers@superpowers-marketplace' `
         'https://github.com/obra/superpowers-marketplace.git'
     Install-Plugin 'compound-engineering' 'compound-engineering@compound-engineering-plugin' `

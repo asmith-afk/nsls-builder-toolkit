@@ -2322,6 +2322,17 @@ if __name__ == "__guardrails__":
                     _plugin, _dir, deadline=time.monotonic() + 10)
     except Exception:
         pass
+    # Stage A on Windows. This run_name is the ONLY path from the PowerShell
+    # hook into Python, and it never called the migration — which is why no PC
+    # has ever had the plugin, nor its three agents, nor its bundled hooks. The
+    # docstring in migrate_to_plugin.py claimed stage A "runs" here; it did not.
+    # Installing the plugin is also what starts the beacons that let stage B
+    # retire this machine's shims, one hook at a time, once each is replaced.
+    try:
+        run_plugin_migration()
+    except Exception:
+        pass
+
     # Plugin freshness — Windows parity with main(). session-start.ps1 is the
     # hook that reliably fires on Windows (the plugin's own hooks.json invokes
     # `python3`, a Store alias there that exits without running), and this

@@ -6,9 +6,10 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start.py\"",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.sh\" session-start",
             "timeout": 90,
-            "statusMessage": "Syncing builder toolkit..."
+            "statusMessage": "Syncing builder toolkit...",
+            "shell": "bash"
           }
         ]
       }
@@ -21,7 +22,8 @@
             "type": "command",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/skill-event.sh\"",
             "timeout": 5,
-            "statusMessage": "Logging skill use so you get NSLS credit (nothing else)\u2026"
+            "statusMessage": "Logging skill use so you get NSLS credit (nothing else)\u2026",
+            "shell": "bash"
           }
         ]
       },

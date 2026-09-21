@@ -388,6 +388,17 @@ migrate_compound_marketplace() {
 if [ -n "$CLAUDE_BIN" ]; then
   # superpowers needs its marketplace registered first — a bare install spec
   # with no marketplace can never resolve on a fresh machine.
+  # The org toolkit itself, as a real plugin. Until now neither installer did
+  # this: on a Mac the self-migration installed it at the NEXT session start,
+  # and on Windows nothing ever did — session-start.ps1 is the hook that fires
+  # there and its only entry into Python runs the guardrails block, never
+  # main(), so stage A was never called and no PC has ever had the plugin, its
+  # three agents, or its bundled hooks. Installing it here makes both platforms
+  # arrive in the same state on day one, and leaves the migration as the path
+  # for machines installed before this change.
+  install_plugin "nsls-builder-toolkit" "nsls-builder-toolkit@nsls-toolkit" \
+    "https://github.com/thensls/nsls-builder-toolkit.git"
+
   install_plugin "superpowers" "superpowers@superpowers-marketplace" \
     "https://github.com/obra/superpowers-marketplace.git"
   migrate_compound_marketplace
