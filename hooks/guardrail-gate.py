@@ -118,6 +118,15 @@ def builder_email():
 # that fires without recording is worth far more than one that does not fire.
 try:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import plugin_beacon as _beacon
+except Exception:  # pragma: no cover - a missing beacon never blocks a decision
+    class _beacon:  # type: ignore
+        @staticmethod
+        def record(*a, **k):
+            return False
+
+try:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
     from guardrail_emit import emit_detached as _emit
 except Exception:  # pragma: no cover - reporting is optional, deciding is not
     def _emit(*a, **k):
@@ -279,6 +288,57 @@ def looks_like_nsls_work(root: str) -> bool:
 
 MAX_BODY = 1 << 20  # 1 MiB — a tracker reply is a few KB; anything else is wrong
 
+# Measured on this repo, 25 runs per shape, 2026-09-20: a plain Bash or Edit
+# call costs 27 ms p50 (Python startup, regexes, no I/O) and a `git push` 52 ms.
+# A deploy-shaped command costs 776 ms p50 / 831 ms p95 — all of it the tracker
+# round trip, and all of it paid again on the next call, because the hook is a
+# fresh process every time and the in-process cache dies with it. That is the
+# only number worth a cache: a builder iterating on a deploy pays it per
+# keystroke-turn, and thirty builders point it at one Railway instance. The git
+# lookups were measured and deliberately left alone — 25 ms does not justify
+# a staleness window on the answer to "whose repo is this".
+_TRACKER_CACHE_TTL = 120
+_TRACKER_CACHE_DIR = Path(
+    os.environ.get("CLAUDE_CONFIG_DIR") or (Path.home() / ".claude")
+) / ".nsls-gate-tracker-cache"
+
+
+def _cache_key(path: str) -> str:
+    import hashlib
+
+    return hashlib.sha256(f"{TRACKER_URL}{path}".encode()).hexdigest()[:32]
+
+
+def _tracker_cached(path: str):
+    """A recent reply for this path, or None. Only ever caches a real answer."""
+    try:
+        f = _TRACKER_CACHE_DIR / _cache_key(path)
+        if time.time() - f.stat().st_mtime > _TRACKER_CACHE_TTL:
+            return None
+        recs = json.loads(f.read_text(encoding="utf-8"))
+        return recs if isinstance(recs, list) else None
+    except Exception:
+        return None
+
+
+def _tracker_store(path: str, recs):
+    # None means "I don't know" and must never be cached: it would turn one
+    # tracker hiccup into two minutes of blind spots.
+    if not isinstance(recs, list):
+        return
+    try:
+        _TRACKER_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        try:
+            os.chmod(_TRACKER_CACHE_DIR, 0o700)
+        except OSError:
+            pass
+        f = _TRACKER_CACHE_DIR / _cache_key(path)
+        tmp = f.with_suffix(".tmp")
+        tmp.write_text(json.dumps(recs), encoding="utf-8")
+        os.replace(tmp, f)
+    except Exception:
+        pass
+
 
 def tracker_records(path: str):
     """Fetch automation records.
@@ -292,6 +352,10 @@ def tracker_records(path: str):
     2026-08-15 caught the original returning [] for a malformed 200, which turned
     a tracker hiccup into a denied deploy: a fail-open violation.
     """
+    cached = _tracker_cached(path)
+    if cached is not None:
+        return cached
+
     try:
         import urllib.request
 
@@ -305,9 +369,19 @@ def tracker_records(path: str):
     if isinstance(data, list):
         recs = data
     elif isinstance(data, dict):
-        if "automations" not in data:
+        # The tracker answers {"count": N, "records": [...], "success": true}.
+        # This code only ever accepted an "automations" key, so every reply
+        # parsed as None — which is the fail-open path — and gates 2 and 4 have
+        # therefore been incapable of firing for as long as they have existed,
+        # independently of the hooks.json wiring. Verified against the live
+        # endpoint 2026-09-20. "automations" is still accepted in case the API
+        # is ever corrected toward the name this client expected.
+        if "records" in data:
+            recs = data.get("records")
+        elif "automations" in data:
+            recs = data.get("automations")
+        else:
             return None  # unrecognised shape — do not infer "none found"
-        recs = data.get("automations")
     else:
         return None
 
@@ -320,6 +394,7 @@ def tracker_records(path: str):
     for r in recs:
         if not isinstance(r, dict):
             return None
+    _tracker_store(path, recs)
     return recs
 
 
@@ -591,6 +666,37 @@ DEPLOY_HARMLESS_RE = re.compile(
 )
 
 
+# The tracker returns at most this many records and honours no name, search or
+# pagination parameter — every query comes back as the same first page of the
+# table (151 rows on 2026-09-20; verified against the live endpoint with name=,
+# search=, q=, limit= and offset=, all ignored). So a name missing from the
+# reply means "not in the first 50", NOT "not registered", and blocking on that
+# would be a false positive on two thirds of the tracker — the failure mode
+# these gates care most about. Until the endpoint can answer the question,
+# absence is treated as unknown and only a positive match is acted on.
+_TRACKER_PAGE_CAP = 50
+
+
+def tracker_lookup(name: str):
+    """("found", record) | ("absent", None) | ("unknown", None).
+
+    Callers must treat "unknown" as silence. Collapsing it into "absent" is
+    what turns a tracker hiccup — or, today, a paging limit — into a blocked
+    deploy.
+    """
+    from urllib.parse import quote
+
+    recs = tracker_records(f"/automations?name={quote(name, safe='')}")
+    if recs is None:
+        return "unknown", None
+    for r in recs:
+        if (r.get("name") or "").lower() == name.lower():
+            return "found", r
+    if len(recs) >= _TRACKER_PAGE_CAP:
+        return "unknown", None  # a capped page proves nothing about absence
+    return "absent", None
+
+
 def gate_unregistered_ship(tool: str, ti: dict):
     """Tier 3 ship with no tracker record.
 
@@ -644,19 +750,9 @@ def gate_unregistered_ship(tool: str, ti: dict):
     if not looks_like_nsls_work(root):
         return
 
-    # Encoded, or a repo named `member-sync&v2` becomes two query fields, the
-    # lookup finds nothing, and a REGISTERED service gets blocked as unknown.
-    from urllib.parse import quote
-
-    records = tracker_records(f"/automations?name={quote(name, safe='')}")
-    if records is None:
-        return  # unreachable or unparseable => unknown => allow
-
-    match = None
-    for r in records:
-        if (r.get("name") or "").lower() == name.lower():
-            match = r
-            break
+    status, match = tracker_lookup(name)
+    if status == "unknown":
+        return  # unreachable, unparseable, or a capped page => allow
 
     if match:
         scope = (match.get("scope") or "").lower()
@@ -917,15 +1013,11 @@ def gate_off_platform(tool: str, ti: dict):
     if not root:
         return
     name = Path(root).name
-    records = tracker_records(f"/automations?name={name}")
-    if records is None:
-        return
+    status, record = tracker_lookup(name)
+    if status != "found":
+        return  # this gate needs a positive scope to have anything to say
 
-    scope = ""
-    for r in records:
-        if (r.get("name") or "").lower() == name.lower():
-            scope = (r.get("scope") or "").lower()
-            break
+    scope = (record.get("scope") or "").lower()
 
     # Positive confirmation of Tier 2+ only. Previously any unrecognised scope
     # string ("", "n/a", "tbd") fell through to a block; Codex review
@@ -1094,6 +1186,15 @@ def normalize_call(tool: str, ti: dict):
 
 
 def main():
+    # Before anything else, and regardless of the verdict: this is the only
+    # record that the gate runs at all. Blocks are counted; evaluations were
+    # not, which is why two weeks of no gate looked identical to two weeks of
+    # nothing worth blocking.
+    try:
+        _beacon.record("guardrail-gate", __file__)
+    except Exception:
+        pass
+
     if os.environ.get("NSLS_GUARDRAILS_DISABLED") == "1":
         allow()
 

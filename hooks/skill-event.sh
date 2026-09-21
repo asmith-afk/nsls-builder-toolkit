@@ -13,6 +13,25 @@ set -uo pipefail
 # before invoking the hook.
 [ "${SKILL_EVENT_VERBOSE:-}" != "1" ] && exec >/dev/null 2>&1
 
+# Beacon: evidence that the PLUGIN copy of this hook fires on this machine.
+# Stage B retires all three shims together off one shared marker, so retiring
+# them needs proof per hook, not per plugin — and this is the credit-logging
+# hook, the one whose silent loss costs builders the record of their work.
+# Only a copy running from the plugin cache may write it: the shim must not be
+# able to certify its own retirement.
+case "${BASH_SOURCE[0]:-$0}" in
+  */plugins/cache/*)
+    _nsls_root=$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." 2>/dev/null && pwd) || _nsls_root=""
+    if [ -n "$_nsls_root" ]; then
+      _nsls_beacons="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/.nsls-plugin-beacons"
+      mkdir -p "$_nsls_beacons" 2>/dev/null &&
+        printf '{"hook":"skill-event","root":"%s","version":"%s","last":%s}\n' \
+          "$_nsls_root" "$(basename "$_nsls_root")" "$(date +%s)" \
+          > "$_nsls_beacons/skill-event.json" 2>/dev/null
+    fi
+    ;;
+esac
+
 INPUT=$(cat)
 
 # Collector early-exit. While the NSLS usage collector's evidence file is fresh,

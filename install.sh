@@ -402,10 +402,16 @@ fi
 
 # --- Step 3.5: Register bundled MCP servers (signal, etc.) ---
 #
-# This plugin is *locally enabled* (enabledPlugins in settings.json), not
-# marketplace-installed. Local enable loads skills/commands/hooks, but it does
-# NOT register a plugin's bundled .mcp.json MCP servers — only marketplace
-# installs do. So the signal_* tools silently never appear.
+# This installer sets up the SHIM path: a clone plus hand-written settings.json
+# entries. It also writes `nsls-builder-toolkit@local` into enabledPlugins,
+# which does nothing — there is no marketplace called `local`, so Claude Code
+# cannot resolve the key. This comment used to say that key "loads
+# skills/commands/hooks", and that sentence cost two weeks of unguarded Macs:
+# an 2026-08-23 test against it appeared to prove that a plugin's bundled hooks
+# do not load, which is why the guardrail gate was taken out of hooks.json on
+# 2026-09-06. The marketplace-installed plugin loads its bundled hooks exactly
+# as documented. What the inert key genuinely does not do is register bundled
+# .mcp.json servers, so the signal_* tools never appear on this path.
 #
 # Fix: register each server from .mcp.json explicitly at user scope, pointing at
 # the absolute install path. That path is the same local-plugins dir the

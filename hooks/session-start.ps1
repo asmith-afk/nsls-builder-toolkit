@@ -605,10 +605,15 @@ if (Test-Path $bootstrapScript) {
 # Delegated to the Python emitter rather than reimplemented: one copy of the
 # section-extraction and path-resolution logic, not two that can drift.
 # The same Python entry point also runs ensure_plugin_fresh(): the daily
-# `claude plugin update` plus the commit-level drift check and self-heal. The
-# plugin's own hooks.json hook invokes `python3`, which on stock Windows is a
-# Store alias that exits without running, so THIS script is the only place the
-# freshness step reliably fires on Windows. It is a no-op unless the plugin is
+# `claude plugin update` plus the commit-level drift check and self-heal. THIS
+# script is the only place that fires on Windows — but not for the reason this
+# comment used to give. It said the plugin's hooks.json hook dies on the
+# `python3` Store alias; in fact no PC has the plugin at all, so nothing on
+# Windows loads hooks.json in the first place. (The interpreter problem was
+# real on Mac-authored entries and is why hooks.json now goes through
+# run-hook.sh, which resolves the interpreter and never selects the Store
+# alias.) Until the Windows-parity change installs the plugin on PCs, this
+# remains the only path. It is a no-op unless the plugin is
 # installed and enabled; clone-only machines stay fresh via the git pull above.
 # Interpreter: the stock Windows `python3` is a Store alias that exits without
 # running anything, so falling back to it emitted nothing at all - worse than
