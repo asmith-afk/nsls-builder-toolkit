@@ -33,8 +33,29 @@ import re
 import shlex
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
+
+
+def _config_dir() -> Path:
+    """The Claude config directory, resolved without ever raising.
+
+    `Path.home()` raises when neither HOME nor a password-database entry
+    resolves — a bare launchd job, a stripped container, some CI images. At
+    module scope that kills the hook during import, BEFORE main()'s fail-open
+    handler exists, so every gate is silently off and nothing says why. Each
+    hook resolves this for itself rather than sharing a helper: these scripts
+    are launched directly by the hook runner, and an import that can fail is
+    the same outage one level up.
+    """
+    raw = os.environ.get("CLAUDE_CONFIG_DIR")
+    if raw:
+        return Path(raw)
+    try:
+        return Path.home() / ".claude"
+    except Exception:
+        return Path(tempfile.gettempdir()) / "nsls-claude-config"
 
 TRACKER_URL = os.environ.get(
     "NSLS_TRACKER_URL", "https://web-production-6281e.up.railway.app"
@@ -938,9 +959,7 @@ GATES = (
 )
 
 
-_INFLIGHT_DIR = Path(
-    os.environ.get("CLAUDE_CONFIG_DIR") or (Path.home() / ".claude")
-) / ".nsls-gate-inflight"
+_INFLIGHT_DIR = _config_dir() / ".nsls-gate-inflight"
 # Comfortably above the hook's own 10s timeout, so a slow winner is never
 # overtaken; comfortably below any interval at which a builder could produce a
 # genuinely new call carrying the same id (Claude Code does not reuse them).

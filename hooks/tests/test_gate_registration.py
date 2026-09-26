@@ -246,7 +246,51 @@ with tempfile.TemporaryDirectory() as tmp:
         check("the cache records a real interpreter, not the alias",
               str(fake_bin) not in chosen, f"({chosen})")
         check("the cache is format-tagged so a change invalidates it",
-              chosen.startswith("v2|"), f"({chosen})")
+              chosen.startswith("v3"), f"({chosen})")
+        check("the cache is one field per line, not delimiter-packed",
+              "|" not in chosen.splitlines()[0], f"({chosen})")
+
+    print("\nan interpreter path containing the old delimiter still works")
+    # The launcher used to hand `path|flag` back through stdout and split it
+    # again. A path containing that character lost everything after it, and the
+    # launcher then ran something that does not exist -- silently, because this
+    # file fails open. The answer travels in globals now, and the cache is
+    # line-based, so there is no delimiter left to trip over.
+    odd = Path(tmp) / "py|dir"
+    odd.mkdir()
+    (odd / "python3").symlink_to(real_python3)
+    odd_cfg = Path(tmp) / "odd-cfg"
+    odd_cfg.mkdir()
+    oenv = dict(lenv)
+    oenv["PATH"] = os.pathsep.join([str(odd), "/usr/bin", "/bin"])
+    oenv["CLAUDE_CONFIG_DIR"] = str(odd_cfg)
+    oenv["NSLS_GUARDRAIL_EVENT_LOG"] = str(Path(tmp) / "odd-ev")
+    r = subprocess.run(["bash", str(LAUNCHER), "gate"],
+                       input=json.dumps(dict(PUSH, tool_use_id="toolu_pipepath")),
+                       capture_output=True, text=True, cwd=repo, env=oenv, timeout=60)
+    check("the launcher still decides from a path containing '|'", denied(r),
+          f"(exit {r.returncode}; stderr {r.stderr[:120]!r})")
+    odd_cache = odd_cfg / ".nsls-hook-python"
+    if odd_cache.exists():
+        lines = odd_cache.read_text().splitlines()
+        check("the cached path survives the round trip whole",
+              len(lines) >= 2 and lines[1] == str(odd / "python3"),
+              f"({lines})")
+
+    print("\nthe hook survives a machine with no resolvable home")
+    ninja = dict(os.environ)
+    for k in ("HOME", "CLAUDE_CONFIG_DIR", "USERPROFILE"):
+        ninja.pop(k, None)
+    r = subprocess.run(
+        [sys.executable, "-c",
+         "import importlib.util,sys;"
+         f"spec=importlib.util.spec_from_file_location('g', r'{GATE}');"
+         "m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m);"
+         "print('IMPORTED', m._config_dir() is not None)"],
+        capture_output=True, text=True, env=ninja, timeout=60)
+    check("guardrail-gate.py imports with no HOME at all",
+          "IMPORTED True" in r.stdout,
+          f"(exit {r.returncode}; {r.stderr.strip()[-160:]!r})")
 
     print("\nthe single-flight guard's three awkward cases")
     # Delayed loser: the winner has already finished. The marker is retained

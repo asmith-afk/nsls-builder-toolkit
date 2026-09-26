@@ -427,18 +427,17 @@ def test_session_start_main_calls_bootstrap_last():
             sys.modules["collector_bootstrap"] = saved_mod
 
 
-def test_guardrail_gate_untouched():
-    try:
-        base = subprocess.run(["git", "merge-base", "HEAD", "origin/main"], cwd=HOOKS,
-                              capture_output=True, text=True, timeout=10).stdout.strip()
-    except Exception:
-        base = ""
-    if not base:
-        return
-    diff = subprocess.run(["git", "diff", "--stat", base, "--", "guardrail-gate.py"],
-                          cwd=HOOKS, capture_output=True, text=True,
-                          timeout=10).stdout.strip()
-    assert diff == "", diff
+# test_guardrail_gate_untouched() removed here — the second copy of it.
+#
+# It asserts guardrail-gate.py is byte-identical to the merge base with main.
+# That is a true statement about the collector change that shipped it and a
+# false one about this repository: committed to the suite, it asserts it of
+# every branch from now on, so any PR that legitimately edits the gate fails a
+# test about somebody else's scope. The same assertion arrived in
+# test_collector_evidence.py and is removed there for the same reason.
+#
+# The intent is worth keeping and belongs in the PR, where a reviewer seeing a
+# collector diff touch the gate can ask why.
 
 
 if __name__ == "__main__":
