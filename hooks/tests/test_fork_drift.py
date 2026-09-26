@@ -78,7 +78,7 @@ def seed_repo(path):
     return path
 
 
-def make_world(tmp, nsls_ahead=5):
+def make_world(tmp, nsls_ahead=5, customized=True):
     """NSLS (bare) → fork (bare, frozen at NSLS's first commit) → the builder's
     checkout, cloned from the fork, with one customization of her own. NSLS then
     moves `nsls_ahead` commits on. This is Chelsea's machine in miniature."""
@@ -98,7 +98,11 @@ def make_world(tmp, nsls_ahead=5):
     plugin_dir = config_dir / "local-plugins" / "nsls-personal-toolkit"
     plugin_dir.parent.mkdir(parents=True)
     git(tmp, "clone", "--quiet", str(fork), str(plugin_dir))
-    commit(plugin_dir, "mine.md", "her own customization\n")
+    if customized:
+        commit(plugin_dir, "mine.md", "her own customization\n")
+    else:
+        git(plugin_dir, "config", "user.email", "t@example.com")
+        git(plugin_dir, "config", "user.name", "t")
 
     hook.CONFIG_DIR = config_dir
     hook.PERSONAL_UPSTREAM_STAMP = config_dir / ".nsls-personal-upstream-check"
@@ -424,6 +428,190 @@ if fd is not None:
     # No checkout at all: silent, no crash.
     hook.CONFIG_DIR = Path(tmp) / "nowhere"
     check("no personal toolkit installed: silent", run() == "")
+
+# ------------------------------------------ clean forks catch themselves up
+# A fork with nothing of its own is fast-forwarded onto NSLS and told so once;
+# anything of theirs in the way keeps the offer. Each case is its own world.
+def head(repo):
+    return subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"],
+                          capture_output=True, text=True).stdout.strip()
+
+def upstream(repo):
+    return subprocess.run(["git", "-C", str(repo), "rev-parse", "refs/nsls/upstream-main"],
+                          capture_output=True, text=True).stdout.strip()
+
+with tempfile.TemporaryDirectory() as tmp:
+    plugin_dir, nsls, fork = make_world(tmp, nsls_ahead=5, customized=False)
+    out = run()
+    check("a clean fork on main is caught up: HEAD is now NSLS's main",
+          head(plugin_dir) == upstream(plugin_dir))
+    check("...and it is told so once, with the caught-up line instead of the offer",
+          "just been caught up with NSLS automatically" in out and "5 commit(s) behind" in out
+          and "want me to catch it up" not in out)
+    check("...and the working tree is clean afterwards", git(plugin_dir, "status", "--porcelain") == "")
+    rearm()
+    check("...and the next check has nothing to say", run() == "")
+
+with tempfile.TemporaryDirectory() as tmp:
+    plugin_dir, nsls, fork = make_world(tmp, nsls_ahead=5, customized=True)
+    before = head(plugin_dir)
+    out = run()
+    check("a fork with a commit of its own is NOT moved", head(plugin_dir) == before)
+    check("...and gets the offer instead", "want me to catch it up" in out)
+
+with tempfile.TemporaryDirectory() as tmp:
+    plugin_dir, nsls, fork = make_world(tmp, nsls_ahead=5, customized=False)
+    (plugin_dir / "skill.md").write_text("an edit she has not saved\n")
+    before = head(plugin_dir)
+    out = run()
+    check("a fork with an unsaved edit is NOT moved, and the edit survives",
+          head(plugin_dir) == before and (plugin_dir / "skill.md").read_text() == "an edit she has not saved\n")
+    check("...and gets the offer instead", "want me to catch it up" in out)
+
+with tempfile.TemporaryDirectory() as tmp:
+    plugin_dir, nsls, fork = make_world(tmp, nsls_ahead=5, customized=False)
+    (plugin_dir / "scratch.md").write_text("a new file she has not added\n")
+    before = head(plugin_dir)
+    out = run()
+    check("a fork with an untracked file is NOT moved", head(plugin_dir) == before)
+    check("...and gets the offer instead", "want me to catch it up" in out)
+
+with tempfile.TemporaryDirectory() as tmp:
+    plugin_dir, nsls, fork = make_world(tmp, nsls_ahead=5, customized=False)
+    git(plugin_dir, "checkout", "--quiet", "-b", "pinned")
+    before = head(plugin_dir)
+    out = run()
+    check("a fork on a branch other than main is NOT moved", head(plugin_dir) == before)
+    check("...and gets the offer instead", "want me to catch it up" in out)
+
+with tempfile.TemporaryDirectory() as tmp:
+    plugin_dir, nsls, fork = make_world(tmp, nsls_ahead=5, customized=False)
+    git(plugin_dir, "checkout", "--quiet", "--detach")
+    before = head(plugin_dir)
+    out = run()
+    check("a detached checkout is NOT moved", head(plugin_dir) == before)
+    check("...and gets the offer instead", "want me to catch it up" in out)
+
+with tempfile.TemporaryDirectory() as tmp:
+    # The one way a fast-forward loses work: NSLS starts tracking a path the
+    # builder keeps as an IGNORED local file. Plain git overwrites it silently.
+    plugin_dir, nsls, fork = make_world(tmp, nsls_ahead=0, customized=False)
+    work = Path(tmp) / "seed"
+    (plugin_dir / ".git" / "info").mkdir(exist_ok=True)
+    (plugin_dir / ".git" / "info" / "exclude").write_text("local-notes.md\n")
+    (plugin_dir / "local-notes.md").write_text("HER PRIVATE NOTES\n")
+    commit(work, "local-notes.md", "nsls's version\n")
+    git(work, "push", "--quiet", str(nsls), "main")
+    before = head(plugin_dir)
+    out = run()
+    check("an ignored file NSLS starts tracking is NOT overwritten",
+          (plugin_dir / "local-notes.md").read_text() == "HER PRIVATE NOTES\n")
+    check("...the checkout is left where it was", head(plugin_dir) == before)
+    check("...and it gets the offer instead of a false 'caught up'",
+          "want me to catch it up" in out and "caught up with NSLS automatically" not in out)
+
+with tempfile.TemporaryDirectory() as tmp:
+    # A write we might have to abandon is never begun: with the deadline already
+    # inside the margin, the merge must not even be started.
+    plugin_dir, nsls, fork = make_world(tmp, nsls_ahead=5, customized=False)
+    before = head(plugin_dir)
+    real_merge, merge_calls = hook._ff_merge, []
+    hook._ff_merge = lambda *a, **k: merge_calls.append(a) or real_merge(*a, **k)
+    out = run(deadline=time.monotonic() + hook.PERSONAL_FF_MIN_LEFT_S - 2)
+    hook._ff_merge = real_merge
+    check("with too little time left, the merge is never started", merge_calls == [])
+    check("...the checkout is left where it was, and gets the offer",
+          head(plugin_dir) == before and "want me to catch it up" in out)
+
+with tempfile.TemporaryDirectory() as tmp:
+    # A merge that succeeds as the caller's deadline runs out must still be
+    # reported: the state check does not go through the expired deadline.
+    plugin_dir, nsls, fork = make_world(tmp, nsls_ahead=5, customized=False)
+    real_merge = hook._ff_merge
+    deadline = time.monotonic() + hook.PERSONAL_FF_MIN_LEFT_S + 3
+    def slow_merge(*a, **k):
+        time.sleep(max(0, deadline - time.monotonic()) + 1)   # finish after the deadline
+        return real_merge(*a, **k)
+    hook._ff_merge = slow_merge
+    out = run(deadline=deadline)
+    hook._ff_merge = real_merge
+    check("a merge that finishes after the deadline is still reported as caught up",
+          head(plugin_dir) == upstream(plugin_dir) and "caught up with NSLS automatically" in out)
+
+with tempfile.TemporaryDirectory() as tmp:
+    # branch.main.mergeOptions=--squash turns a plain fast-forward into "stage
+    # NSLS's tree, leave the branch where it is". The merge must neutralise it.
+    plugin_dir, nsls, fork = make_world(tmp, nsls_ahead=5, customized=False)
+    git(plugin_dir, "config", "branch.main.mergeOptions", "--squash")
+    out = run()
+    check("with mergeOptions=--squash configured, it is still a clean fast-forward",
+          head(plugin_dir) == upstream(plugin_dir) and git(plugin_dir, "status", "--porcelain") == "")
+    check("...and reports caught up, not the offer over a staged tree", "caught up with NSLS automatically" in out)
+
+with tempfile.TemporaryDirectory() as tmp:
+    # Mid-bisect a checkout can be clean and on main; moving main changes the bisect.
+    plugin_dir, nsls, fork = make_world(tmp, nsls_ahead=5, customized=False)
+    git(plugin_dir, "bisect", "start")
+    before = head(plugin_dir)
+    out = run()
+    check("a checkout mid-bisect is NOT moved", head(plugin_dir) == before)
+    check("...and gets the offer instead", "want me to catch it up" in out)
+
+with tempfile.TemporaryDirectory() as tmp:
+    # A post-merge hook runs after the branch has moved, and can hang.
+    plugin_dir, nsls, fork = make_world(tmp, nsls_ahead=5, customized=False)
+    marker = Path(tmp) / "hook-ran"
+    # Installed through the repo's LOCAL core.hooksPath. This suite's isolated
+    # global config points core.hooksPath at an empty folder, so a hook in
+    # .git/hooks would never run here whatever the hook does; local config beats
+    # that, and only the command-line override in _ff_merge beats local. It is
+    # also the shape a builder with their own hooks directory would have.
+    hooks_dir = Path(tmp) / "builder-hooks"
+    hooks_dir.mkdir()
+    hook_file = hooks_dir / "post-merge"
+    hook_file.write_text(f"#!/bin/sh\ntouch '{marker}'\nsleep 30\n")
+    hook_file.chmod(0o755)
+    git(plugin_dir, "config", "core.hooksPath", str(hooks_dir))
+    t0 = time.monotonic()
+    out = run()
+    took = time.monotonic() - t0
+    check("a hanging post-merge hook is never run", not marker.exists())
+    check(f"...so the catch-up completes promptly ({took:.1f}s) and is reported",
+          took < 15 and head(plugin_dir) == upstream(plugin_dir) and "caught up with NSLS automatically" in out)
+
+with tempfile.TemporaryDirectory() as tmp:
+    # status.showUntrackedFiles=no hides an untracked file from plain porcelain.
+    plugin_dir, nsls, fork = make_world(tmp, nsls_ahead=5, customized=False)
+    git(plugin_dir, "config", "status.showUntrackedFiles", "no")
+    (plugin_dir / "scratch.md").write_text("a new file she has not added\n")
+    before = head(plugin_dir)
+    out = run()
+    check("an untracked file is seen even with status.showUntrackedFiles=no, and nothing moves",
+          head(plugin_dir) == before and "want me to catch it up" in out)
+
+with tempfile.TemporaryDirectory() as tmp:
+    # A merge still running after the wait is left alone and reported honestly.
+    plugin_dir, nsls, fork = make_world(tmp, nsls_ahead=5, customized=False)
+    real_merge = hook._ff_merge
+    hook._ff_merge = lambda *a, **k: None
+    out = run()
+    hook._ff_merge = real_merge
+    check("a merge still running is reported as needing a look, not as the offer",
+          "did not finish cleanly" in out and "want me to catch it up" not in out)
+
+with tempfile.TemporaryDirectory() as tmp:
+    # Any state other than exactly-before or exactly-after is reported, never masked.
+    plugin_dir, nsls, fork = make_world(tmp, nsls_ahead=5, customized=False)
+    real_merge = hook._ff_merge
+    def half_merge(*a, **k):
+        (plugin_dir / "skill.md").write_text("half-written by a merge that died\n")
+        return 128
+    hook._ff_merge = half_merge
+    out = run()
+    hook._ff_merge = real_merge
+    check("a half-updated checkout is reported as needing a look, not offered or called caught up",
+          "did not finish cleanly" in out and "want me to catch it up" not in out
+          and "caught up with NSLS automatically" not in out)
 
 print()
 if failures:
