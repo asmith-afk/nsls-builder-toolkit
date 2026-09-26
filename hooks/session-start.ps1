@@ -22,6 +22,19 @@ $Marker      = 'local-plugins\nsls-'
 #        A pull refused by the checkout's own state (divergence, dirty tree) is
 #        announced on stdout - SessionStart stdout reaches the model's context -
 #        so a frozen toolkit is never silent. Offline failures stay quiet. ---
+# git reads these ahead of -C, so a session launched from inside a git hook (git
+# exports GIT_DIR and GIT_INDEX_FILE to its hooks) would aim every git call below
+# at that repository instead of the toolkit. git's own list, from
+# `git rev-parse --local-env-vars`. Same reason as _git_env in the .py.
+function Clear-GitRepoEnv {
+    foreach ($v in @('GIT_ALTERNATE_OBJECT_DIRECTORIES', 'GIT_CONFIG', 'GIT_CONFIG_PARAMETERS', 'GIT_CONFIG_COUNT',
+                     'GIT_OBJECT_DIRECTORY', 'GIT_DIR', 'GIT_WORK_TREE', 'GIT_IMPLICIT_WORK_TREE', 'GIT_GRAFT_FILE',
+                     'GIT_INDEX_FILE', 'GIT_NO_REPLACE_OBJECTS', 'GIT_REPLACE_REF_BASE', 'GIT_PREFIX',
+                     'GIT_INTERNAL_SUPER_PREFIX', 'GIT_SHALLOW_FILE', 'GIT_COMMON_DIR')) {
+        Remove-Item -Path "Env:$v" -ErrorAction SilentlyContinue
+    }
+}
+Clear-GitRepoEnv
 $env:GIT_TERMINAL_PROMPT = '0'   # credentialed remotes fail fast, never prompt-hang the hook
 foreach ($dir in @($BuilderDir, $PersonalDir)) {
     if (-not (Test-Path $dir)) { continue }
@@ -338,11 +351,14 @@ function Invoke-ForkCatchUp {
     # 'caught_up'; 'untouched' (conditions not met, too late, or git refused
     # cleanly: the builder gets the offer); 'unfinished'; or 'broken'.
     if (-not (Test-CleanToFastForward -Dir $Dir)) { return 'untouched' }
-    if ($Clock.Elapsed.TotalSeconds -gt 10) { return 'untouched' }   # a write we might abandon is not begun
     $b = Invoke-GitBounded -Dir $Dir -GitArgs @('rev-parse', 'HEAD')
     $t = Invoke-GitBounded -Dir $Dir -GitArgs @('rev-parse', $PersonalUpstreamRef)
     if ($b.Code -ne 0 -or $t.Code -ne 0) { return 'untouched' }
-    $code = Invoke-FastForwardDetached -Dir $Dir -WaitMs 20000
+    if ($Clock.Elapsed.TotalSeconds -gt 10) { return 'untouched' }   # a write we might abandon is not begun
+    # The wait ends 15s into this check at the latest, the same envelope the .py
+    # keeps inside the 90s hook budget. A merge still running then finishes on its own.
+    $waitMs = [int][math]::Min(20000, (15 - $Clock.Elapsed.TotalSeconds) * 1000)
+    $code = Invoke-FastForwardDetached -Dir $Dir -WaitMs $waitMs
     if ($null -eq $code) { return 'unfinished' }
     return (Get-CheckoutState -Dir $Dir -Before $b.Out -Target $t.Out)
 }

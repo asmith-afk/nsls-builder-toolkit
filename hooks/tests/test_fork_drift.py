@@ -613,6 +613,44 @@ with tempfile.TemporaryDirectory() as tmp:
           "did not finish cleanly" in out and "want me to catch it up" not in out
           and "caught up with NSLS automatically" not in out)
 
+with tempfile.TemporaryDirectory() as tmp:
+    # git reads GIT_DIR and friends ahead of -C. A session launched from inside a
+    # git hook inherits them, and they must not aim the catch-up at that repository.
+    plugin_dir, nsls, fork = make_world(tmp, nsls_ahead=5, customized=False)
+    decoy = seed_repo(Path(tmp) / "decoy")
+    commit(decoy, "project.md", "someone else's project\n")
+    decoy_head = head(decoy)
+    saved = {k: os.environ.get(k) for k in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE")}
+    os.environ.update(GIT_DIR=str(decoy / ".git"), GIT_WORK_TREE=str(decoy),
+                      GIT_INDEX_FILE=str(decoy / ".git" / "index"))
+    try:
+        out = run()
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+    check("with GIT_DIR aimed at another repository, the toolkit is still the one caught up",
+          head(plugin_dir) == upstream(plugin_dir) and "caught up with NSLS automatically" in out)
+    check("...and that other repository is untouched: same HEAD, no NSLS ref fetched into it",
+          head(decoy) == decoy_head
+          and subprocess.run(["git", "-C", str(decoy), "rev-parse", "--verify", "--quiet",
+                              "refs/nsls/upstream-main"], capture_output=True).returncode != 0)
+
+with tempfile.TemporaryDirectory() as tmp:
+    # The wait never runs past the caller's deadline: that deadline is the 15s pull
+    # envelope the 90s hook budget is built on.
+    plugin_dir, nsls, fork = make_world(tmp, nsls_ahead=5, customized=False)
+    real_merge, waits = hook._ff_merge, []
+    hook._ff_merge = lambda d, wait: waits.append(wait) or real_merge(d, wait)
+    out = run(deadline=time.monotonic() + hook.PERSONAL_FF_MIN_LEFT_S + 6)
+    hook._ff_merge = real_merge
+    check("the merge's wait ends by the caller's deadline, not a fixed 20s after starting",
+          len(waits) == 1 and waits[0] <= hook.PERSONAL_FF_MIN_LEFT_S + 6)
+    check("...and a quick merge inside it is still reported as caught up",
+          head(plugin_dir) == upstream(plugin_dir) and "caught up with NSLS automatically" in out)
+
 print()
 if failures:
     print(f"{len(failures)} FAILED:")

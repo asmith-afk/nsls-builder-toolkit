@@ -33,6 +33,27 @@ SKILLS_DIR = CONFIG_DIR / "skills"
 ENV_FILE = CONFIG_DIR / "local-plugins" / "nsls-personal-toolkit" / ".env"
 PROXY_URL = os.environ.get("NSLS_TRACKER_URL", "https://web-production-6281e.up.railway.app")
 
+# git reads these ahead of `-C`: with GIT_DIR or GIT_WORK_TREE set, `git -C <toolkit>`
+# still works on the repository they name. Claude launched from inside a git hook
+# inherits them (git exports GIT_DIR and GIT_INDEX_FILE to its hooks), so every git
+# call here would read, fetch into, or fast-forward that repository instead of the
+# toolkit. This is git's own list (`git rev-parse --local-env-vars`), the set it
+# clears itself when it moves into another repository.
+_GIT_REPO_ENV = (
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_CONFIG", "GIT_CONFIG_PARAMETERS",
+    "GIT_CONFIG_COUNT", "GIT_OBJECT_DIRECTORY", "GIT_DIR", "GIT_WORK_TREE",
+    "GIT_IMPLICIT_WORK_TREE", "GIT_GRAFT_FILE", "GIT_INDEX_FILE",
+    "GIT_NO_REPLACE_OBJECTS", "GIT_REPLACE_REF_BASE", "GIT_PREFIX",
+    "GIT_INTERNAL_SUPER_PREFIX", "GIT_SHALLOW_FILE", "GIT_COMMON_DIR",
+)
+
+
+def _git_env():
+    """The environment for every git call aimed at a toolkit checkout."""
+    env = {k: v for k, v in os.environ.items() if k not in _GIT_REPO_ENV}
+    env["GIT_TERMINAL_PROMPT"] = "0"
+    return env
+
 # When a session-ping can't be delivered (timeout / network / proxy down), we
 # stash the payload here and replay it at the start of the next session so a
 # queued announcement or credit isn't lost. Deleted once delivery succeeds.
@@ -150,7 +171,7 @@ def _checkout_blocks_update(plugin_dir):
             ["git", "-C", str(plugin_dir), *args],
             capture_output=True, text=True, timeout=5,
             stdin=subprocess.DEVNULL,
-            env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+            env=_git_env(),
         )
         return r.returncode, (r.stdout or "").strip()
 
@@ -240,7 +261,7 @@ def _git_out(plugin_dir, *args, deadline=None):
         r = subprocess.run(
             ["git", "-C", str(plugin_dir), *args],
             capture_output=True, text=True, timeout=timeout,
-            stdin=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL, env=_git_env(),
         )
         return r.stdout.strip() if r.returncode == 0 else ""
     except Exception:
@@ -410,15 +431,15 @@ PERSONAL_UPSTREAM_LEGACY_LOCK = CONFIG_DIR / ".nsls-personal-upstream-check.lock
 PERSONAL_UPSTREAM_CHECK_EVERY_H = 12
 PERSONAL_FETCH_TIMEOUT = 6
 # The fast-forward that catches up a fork with nothing of its own. It is a local
-# write, so it is never started without this much of the deadline left, and once
-# started it gets its own generous limit instead of whatever the deadline has
-# left: git killed half-way through a checkout leaves a half-updated folder and a
-# stale index.lock that blocks every git command after it. A write we might have
-# to kill is a write we should not begin.
+# write, so it is never started without this much of the deadline left: git
+# killed half-way through a checkout leaves a half-updated folder and a stale
+# index.lock that blocks every git command after it. A write we might have to
+# kill is a write we should not begin.
 PERSONAL_FF_MIN_LEFT_S = 5
-# How long session start waits for the fast-forward to report. It is never killed:
-# a merge still running after this is left to finish on its own, and the builder
-# is told it may still be completing. A local fast-forward takes well under a
+# The longest session start waits for the fast-forward to report, and never past
+# the caller's deadline: that is the 15s pull envelope the 90s hook budget is
+# built on. It is never killed: a merge still running when the wait ends is left
+# to finish on its own, and the builder is told it may still be completing. A local fast-forward takes well under a
 # second, with hooks and background maintenance switched off for it.
 PERSONAL_FF_WAIT_S = 20
 # git's markers for an operation in progress. A checkout mid-bisect, mid-rebase,
@@ -489,7 +510,7 @@ def _git_rc(plugin_dir, *args, timeout=3):
             ["git", "-C", str(plugin_dir), *args],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.DEVNULL,
             text=True, start_new_session=True,
-            env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+            env=_git_env(),
         )
     except Exception:
         return -1, ""
@@ -770,7 +791,7 @@ def _ff_merge(plugin_dir, wait):
              "merge", "--ff-only", "--no-squash", "--no-autostash",
              "--no-overwrite-ignore", "--quiet", PERSONAL_UPSTREAM_REF],
             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            start_new_session=True, env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+            start_new_session=True, env=_git_env(),
         )
     except Exception:
         return -1
@@ -807,19 +828,20 @@ def _fast_forward_clean_fork(git, plugin_dir, remaining):
 
     Returns 'caught_up'; 'untouched' when the conditions were not met, time was
     short, or git refused cleanly (the builder gets the offer); 'unfinished' when
-    the merge is still running after PERSONAL_FF_WAIT_S; or 'broken' when the
+    the merge is still running when the wait ends; or 'broken' when the
     checkout is in any state other than before or after.
     """
     if not _clean_to_fast_forward(git, plugin_dir):
         return "untouched"
-    left = remaining()
-    if left is not None and left < PERSONAL_FF_MIN_LEFT_S:
-        return "untouched"   # a write we might have to abandon is a write we do not begin
     rc_b, before = git("rev-parse", "HEAD")
     rc_t, target = git("rev-parse", PERSONAL_UPSTREAM_REF)
     if rc_b != 0 or rc_t != 0:
         return "untouched"
-    if _ff_merge(plugin_dir, PERSONAL_FF_WAIT_S) is None:
+    left = remaining()
+    if left is not None and left < PERSONAL_FF_MIN_LEFT_S:
+        return "untouched"   # a write we might have to abandon is a write we do not begin
+    wait = PERSONAL_FF_WAIT_S if left is None else min(PERSONAL_FF_WAIT_S, left)
+    if _ff_merge(plugin_dir, wait) is None:
         return "unfinished"
     return _checkout_state(plugin_dir, before, target)
 
@@ -957,7 +979,7 @@ def git_pull():
                 ["git", "-C", str(plugin_dir), "pull", "--ff-only", "--quiet"],
                 capture_output=True, text=True, timeout=min(10, remaining),
                 stdin=subprocess.DEVNULL,
-                env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+                env=_git_env(),
             )
             if r.returncode != 0:
                 _warn_if_frozen(plugin, plugin_dir, (r.stderr or "") + (r.stdout or ""))
