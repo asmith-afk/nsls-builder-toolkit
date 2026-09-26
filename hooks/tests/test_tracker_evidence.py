@@ -32,6 +32,7 @@ import json
 import os
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 HOOKS = Path(__file__).resolve().parents[1]
@@ -68,7 +69,7 @@ print("a reply has to support the answer before a gate acts on it")
 rows = [{"name": "other-thing"}, {"name": "another"}]
 
 check("a match is found",
-      lookup({"success": True, "count": 2,
+      lookup({"success": True, "count": 3,
               "records": rows + [{"name": "my-service"}]}) == "found")
 check("a complete page with no match is a real absence",
       lookup({"success": True, "count": 2, "records": rows}) == "absent")
@@ -192,6 +193,84 @@ with tempfile.TemporaryDirectory() as tmp:
 check("a name sent as an Airtable object still matches",
       lookup({"count": 1, "records": [
           {"name": {"id": "f1", "name": "my-service", "color": "grey"}}]}) == "found")
+
+print("\nan explicit failure flag is honoured whatever type it arrives as")
+check("success:false (boolean) is unknown",
+      lookup({"success": False, "count": 1, "records": [{"name": "my-service"}]}) == "unknown")
+check('success:"false" (string) is unknown too, not a match',
+      lookup({"success": "false", "count": 1, "records": [{"name": "my-service"}]}) == "unknown")
+check('success:"true" is still not a boolean and stays unknown',
+      lookup({"success": "true", "count": 1, "records": [{"name": "my-service"}]}) == "unknown")
+check("success:1 is not the boolean either",
+      lookup({"success": 1, "count": 1, "records": [{"name": "my-service"}]}) == "unknown")
+check("a real boolean success still works",
+      lookup({"success": True, "count": 1, "records": [{"name": "my-service"}]}) == "found")
+
+print("\na reply fetched before a block does not land after it")
+# block() clears the cache so the builder who fixes the tracker record is not
+# blocked again for complying. A sibling hook already mid-request would
+# otherwise write its pre-clear answer straight back in.
+with tempfile.TemporaryDirectory() as tmp:
+    gate = load_gate(Path(tmp))
+    page = {"records": [{"name": "my-service"}], "total": 1}
+    gate._tracker_store("/automations?name=my-service", page, fetched_at=time.time())
+    check("a normal write lands",
+          gate._tracker_cached("/automations?name=my-service") is not None)
+    gate._tracker_cache_clear()
+    check("the clear removes it",
+          gate._tracker_cached("/automations?name=my-service") is None)
+    stale = time.time() - 30          # request began well before the clear
+    gate._tracker_store("/automations?name=my-service", page, fetched_at=stale)
+    check("a reply whose request predates the clear is refused",
+          gate._tracker_cached("/automations?name=my-service") is None)
+    gate._tracker_store("/automations?name=my-service", page, fetched_at=time.time())
+    check("a reply fetched after the clear is accepted",
+          gate._tracker_cached("/automations?name=my-service") is not None)
+
+    # A reader that started before the clear must not return the page either:
+    # an unlinked file stays readable to whoever already has it open.
+    real_clear = gate._tracker_cleared_at
+    seen = {"n": 0}
+
+    def clear_lands_mid_read():
+        seen["n"] += 1
+        return real_clear() + (0 if seen["n"] == 1 else 60)
+
+    gate._tracker_cleared_at = clear_lands_mid_read
+    check("a page cleared while it was being read is discarded",
+          gate._tracker_cached("/automations?name=my-service") is None)
+    gate._tracker_cleared_at = real_clear
+
+print("\na reply that contradicts itself is not evidence either way")
+check("count 0 carrying a matching row does not count as found",
+      lookup({"success": True, "count": 0,
+              "records": [{"name": "my-service"}]}) == "unknown")
+check("count 1 carrying two rows is unknown",
+      lookup({"success": True, "count": 1,
+              "records": [{"name": "a"}, {"name": "my-service"}]}) == "unknown")
+check("a consistent count still matches",
+      lookup({"success": True, "count": 1,
+              "records": [{"name": "my-service"}]}) == "found")
+
+print("\nthe cache never writes through a planted symlink")
+with tempfile.TemporaryDirectory() as tmp:
+    gate = load_gate(Path(tmp))
+    target = Path(tmp) / "victim.txt"
+    target.write_text("do not overwrite me")
+    key_path = "/automations?name=my-service"
+    gate._TRACKER_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    planted = gate._TRACKER_CACHE_DIR / (gate._cache_key(key_path).rsplit(".", 1)[0] + ".tmp")
+    try:
+        planted.symlink_to(target)
+    except OSError:
+        planted = None
+    gate._tracker_store(key_path, {"records": [{"name": "my-service"}], "total": 1},
+                        fetched_at=time.time())
+    check("a pre-planted .tmp symlink is not written through",
+          target.read_text() == "do not overwrite me",
+          f"({target.read_text()[:60]!r})")
+    check("and the real cache entry still landed",
+          gate._tracker_cached(key_path) is not None)
 
 print()
 if failures:

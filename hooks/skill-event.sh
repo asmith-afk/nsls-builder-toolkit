@@ -24,9 +24,16 @@ case "${BASH_SOURCE[0]:-$0}" in
     _nsls_root=$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." 2>/dev/null && pwd) || _nsls_root=""
     if [ -n "$_nsls_root" ]; then
       _nsls_beacons="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/.nsls-plugin-beacons"
+      # Escape before interpolating. A root path containing a quote, a
+      # backslash or a control character produced a file that is not JSON, so
+      # plugin_beacon.fired() could never parse it — and this hook could then
+      # never present the evidence that retires its own shim, on exactly the
+      # platform whose paths are full of backslashes.
+      _nsls_esc=$(printf '%s' "$_nsls_root" | tr -d '\000-\037' | sed 's/\\/\\\\/g; s/"/\\"/g')
+      _nsls_ver=$(printf '%s' "${_nsls_root##*/}" | tr -d '\000-\037' | sed 's/\\/\\\\/g; s/"/\\"/g')
       mkdir -p "$_nsls_beacons" 2>/dev/null &&
         printf '{"hook":"skill-event","root":"%s","version":"%s","last":%s}\n' \
-          "$_nsls_root" "$(basename "$_nsls_root")" "$(date +%s)" \
+          "$_nsls_esc" "$_nsls_ver" "$(date +%s)" \
           > "$_nsls_beacons/skill-event.json" 2>/dev/null
     fi
     ;;

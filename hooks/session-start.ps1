@@ -606,7 +606,7 @@ if (Test-Path $bootstrapScript) {
 # section-extraction and path-resolution logic, not two that can drift.
 # The same Python entry point also runs ensure_plugin_fresh(): the daily
 # `claude plugin update` plus the commit-level drift check and self-heal. THIS
-# script is the only place that fires on Windows — but not for the reason this
+# script is the only place that fires on Windows  -  but not for the reason this
 # comment used to give. It said the plugin's hooks.json hook dies on the
 # `python3` Store alias; in fact no PC has the plugin at all, so nothing on
 # Windows loads hooks.json in the first place. (The interpreter problem was

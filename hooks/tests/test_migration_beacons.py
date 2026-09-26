@@ -25,6 +25,8 @@ Three failures this exists to prevent:
 import importlib.util
 import json
 import os
+import shutil
+import subprocess
 import sys
 import tempfile
 import time
@@ -213,6 +215,70 @@ with tempfile.TemporaryDirectory() as tmp:
         os.environ["NSLS_NO_PLUGIN_MIGRATION"] = "1"
     check("the re-entry pass removes the user-scope signal server",
           signal_calls == [1], f"(called {len(signal_calls)}x)")
+
+print("\nWindows shims are seen and removed, and permissions.allow is not a shim")
+# _HOOK_MARKER is spelled with forward slashes; install.ps1 writes every path
+# with backslashes. Matching the raw text meant Windows shims were invisible —
+# stage B called the machine clean and wrote the PERMANENT done marker while
+# both hook copies stayed live. And matching the WHOLE file meant a leftover
+# permissions.allow entry read as a shim forever, so the marker was never
+# written at all. Opposite failures, one cause: text-matching a JSON document.
+with tempfile.TemporaryDirectory() as tmp:
+    cfg = Path(tmp) / "claude"
+    cfg.mkdir()
+    win = ('powershell -NoProfile -ExecutionPolicy Bypass -File '
+           r'"C:\Users\x\.claude\local-plugins\nsls-builder-toolkit\hooks\session-start.ps1"')
+    (cfg / "settings.json").write_text(json.dumps({
+        "hooks": {"SessionStart": [{"matcher": "startup", "hooks": [
+            {"type": "command", "command": win}]}]}}))
+    mig = load(HOOKS / "migrate_to_plugin.py", cfg)
+    check("a backslash-spelled Windows shim is detected", mig._shims_present())
+    check("and it is actually removed", mig._remove_settings_hooks() == 1)
+    check("after removal the machine reads clean", not mig._shims_present())
+
+with tempfile.TemporaryDirectory() as tmp:
+    cfg = Path(tmp) / "claude"
+    cfg.mkdir()
+    (cfg / "settings.json").write_text(json.dumps({
+        "hooks": {},
+        "permissions": {"allow": [
+            "Bash(python3 /Users/x/.claude/local-plugins/nsls-builder-toolkit/hooks/ping.py)"]}}))
+    mig = load(HOOKS / "migrate_to_plugin.py", cfg)
+    check("a permissions.allow rule is not a shim", not mig._shims_present())
+
+with tempfile.TemporaryDirectory() as tmp:
+    cfg = Path(tmp) / "claude"
+    cfg.mkdir()
+    (cfg / "settings.json").write_text("{ not json at all\n")
+    mig = load(HOOKS / "migrate_to_plugin.py", cfg)
+    check("an unreadable settings.json fails closed, not clean",
+          mig._shims_present())
+
+print("\nthe skill-event beacon stays JSON whatever the path contains")
+with tempfile.TemporaryDirectory() as tmp:
+    cfg = Path(tmp) / "claude"
+    cfg.mkdir()
+    # a plugin-cache-shaped root carrying a quote and a backslash
+    root = Path(tmp) / "plugins" / "cache" / 'ns"ls' / "nsls-builder-toolkit" / "3.0.0"
+    (root / "hooks").mkdir(parents=True)
+    shutil.copy2(HOOKS / "skill-event.sh", root / "hooks" / "skill-event.sh")
+    env = dict(os.environ)
+    env["CLAUDE_CONFIG_DIR"] = str(cfg)
+    env["NSLS_SKILL_EVENT_DRYRUN"] = "1"
+    subprocess.run(["bash", str(root / "hooks" / "skill-event.sh")],
+                   input="{}", capture_output=True, text=True, env=env, timeout=30)
+    beacon = cfg / ".nsls-plugin-beacons" / "skill-event.json"
+    if beacon.exists():
+        try:
+            parsed = json.loads(beacon.read_text())
+            ok = parsed.get("hook") == "skill-event"
+        except Exception as exc:
+            parsed, ok = None, False
+            print(f"       (unparseable: {exc})")
+        check("a root containing a quote still produces valid JSON", ok,
+              f"({beacon.read_text()[:120]!r})")
+    else:
+        check("the beacon was written at all", False, "(no file)")
 
 print("\nthe inert @local key")
 

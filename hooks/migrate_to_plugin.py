@@ -53,9 +53,25 @@ import shutil
 import subprocess
 import sys
 import time
+import tempfile
 from pathlib import Path
 
-_CONFIG_DIR = Path(os.environ.get("CLAUDE_CONFIG_DIR") or (Path.home() / ".claude"))
+def _config_dir() -> Path:
+    """The Claude config directory, resolved without ever raising.
+
+    `Path.home()` raises when neither HOME nor a password-database entry
+    resolves, and at module scope that stops session start dead.
+    """
+    raw = os.environ.get("CLAUDE_CONFIG_DIR")
+    if raw:
+        return Path(raw)
+    try:
+        return Path.home() / ".claude"
+    except Exception:
+        return Path(tempfile.gettempdir()) / "nsls-claude-config"
+
+
+_CONFIG_DIR = _config_dir()
 _PLUGIN_DIR = _CONFIG_DIR / "local-plugins" / "nsls-builder-toolkit"
 _SKILLS_DIR = _CONFIG_DIR / "skills"
 _SETTINGS = _CONFIG_DIR / "settings.json"
@@ -67,6 +83,50 @@ _REPO_URL = os.environ.get(
 )
 # Matches the shim hook commands install.sh/.ps1 wrote into settings.json.
 _HOOK_MARKER = "nsls-builder-toolkit/hooks/"
+
+
+def _norm(text) -> str:
+    """Compare paths the way BOTH installers write them.
+
+    install.sh writes POSIX separators. install.ps1 builds every path with
+    Join-Path, so a Windows shim command reads
+    `...\\nsls-builder-toolkit\\hooks\\session-start.ps1`. A marker spelled with
+    forward slashes matched none of it: _shims_present() answered False,
+    _remove_settings_hooks() removed nothing, and stage B therefore concluded
+    the machine was clean and wrote the PERMANENT done marker — leaving every
+    PC running the shim AND the plugin copy of every hook, for good, behind a
+    marker saying the migration had finished.
+    """
+    return str(text).replace("\\", "/")
+
+
+def _is_shim_command(command) -> bool:
+    return _HOOK_MARKER in _norm(command)
+
+
+def _iter_hook_commands(settings):
+    """Every hook entry's command, and nothing else.
+
+    _shims_present() used to substring-search the whole settings.json as raw
+    text, so any mention of this repo anywhere in the file counted — a
+    leftover `permissions.allow` rule most of all. After an otherwise clean
+    stage B that left the machine reading as dirty permanently: `clean` never
+    became True, the done marker was never written, and stage B re-ran every
+    session for the life of the install.
+    """
+    hooks = settings.get("hooks")
+    if not isinstance(hooks, dict):
+        return
+    for groups in hooks.values():
+        if not isinstance(groups, list):
+            continue
+        for group in groups:
+            entries = group.get("hooks", []) if isinstance(group, dict) else []
+            if not isinstance(entries, list):
+                continue
+            for h in entries:
+                if isinstance(h, dict):
+                    yield str(h.get("command", ""))
 # Matches ONLY org-toolkit pointer stubs. Personal-toolkit stubs also mention
 # nsls-builder-toolkit (their credit-logging command calls this repo's
 # skill-event.sh), so the discriminator must be the skills path, not the repo
@@ -222,10 +282,25 @@ def _plugin_disabled_by_user():
 
 
 def _shims_present():
+    """True if a settings.json HOOK entry still points at this repo.
+
+    Fail-CLOSED when the file cannot be read or parsed, for the same reason
+    _org_stubs_exist() does: this gates the permanent done marker, and one
+    extra retry next session is far cheaper than a machine wired twice forever.
+    """
     try:
-        return _HOOK_MARKER in _SETTINGS.read_text(encoding="utf-8-sig")
+        raw = _SETTINGS.read_text(encoding="utf-8-sig")
+    except FileNotFoundError:
+        return False  # no settings file at all — nothing to retire
     except Exception:
-        return False
+        return True
+    try:
+        settings = json.loads(raw)
+    except Exception:
+        return True
+    if not isinstance(settings, dict):
+        return True
+    return any(_is_shim_command(c) for c in _iter_hook_commands(settings))
 
 
 def _org_stubs_exist():
@@ -249,7 +324,8 @@ def _org_stubs_exist():
         stub = entry / "SKILL.md"
         try:
             if (entry.is_dir() and not entry.is_symlink() and stub.exists()
-                    and _STUB_MARKER in stub.read_text(encoding="utf-8-sig")):
+                    and _STUB_MARKER in _norm(
+                        stub.read_text(encoding="utf-8-sig"))):
                 return True
         except Exception:
             return True  # undetermined — assume not clean, retry next session
@@ -315,7 +391,7 @@ def _remove_settings_hooks():
             entries = group.get("hooks", []) if isinstance(group, dict) else []
             kept = [
                 h for h in entries
-                if _HOOK_MARKER not in str(h.get("command", ""))
+                if not _is_shim_command(h.get("command", ""))
             ]
             removed += len(entries) - len(kept)
             if kept:
@@ -346,7 +422,10 @@ def _remove_org_stubs():
         try:
             if not (entry.is_dir() and not entry.is_symlink() and stub.exists()):
                 continue
-            if _STUB_MARKER not in stub.read_text(encoding="utf-8-sig"):
+            # _norm here too: detection (_org_stubs_exist) and removal must
+            # agree, or a Windows stub is seen but never deleted and stage B
+            # retries every session forever.
+            if _STUB_MARKER not in _norm(stub.read_text(encoding="utf-8-sig")):
                 continue
             shutil.rmtree(entry)
             removed += 1

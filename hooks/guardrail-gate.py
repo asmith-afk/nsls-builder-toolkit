@@ -304,9 +304,7 @@ MAX_BODY = 1 << 20  # 1 MiB — a tracker reply is a few KB; anything else is wr
 # lookups were measured and deliberately left alone — 25 ms does not justify
 # a staleness window on the answer to "whose repo is this".
 _TRACKER_CACHE_TTL = 120
-_TRACKER_CACHE_DIR = Path(
-    os.environ.get("CLAUDE_CONFIG_DIR") or (Path.home() / ".claude")
-) / ".nsls-gate-tracker-cache"
+_TRACKER_CACHE_DIR = _config_dir() / ".nsls-gate-tracker-cache"
 
 
 def _cache_key(path: str) -> str:
@@ -318,10 +316,18 @@ def _cache_key(path: str) -> str:
 def _tracker_cached(path: str):
     """A recent page for this path, or None. Only ever caches a real answer."""
     try:
+        # Read the clear stamp either side of the read. An unlinked file stays
+        # readable to whoever already opened it, so a reader that started
+        # before block() cleared the cache still gets the page block just threw
+        # away — and blocks the builder again for having complied. Comparing
+        # the stamp afterwards catches exactly that overlap.
+        cleared_before = _tracker_cleared_at()
         f = _TRACKER_CACHE_DIR / _cache_key(path)
         if time.time() - f.stat().st_mtime > _TRACKER_CACHE_TTL:
             return None
         page = json.loads(f.read_text(encoding="utf-8"))
+        if _tracker_cleared_at() != cleared_before:
+            return None
         if isinstance(page, dict) and isinstance(page.get("records"), list):
             return page
         return None
@@ -352,6 +358,16 @@ def _text(value) -> str:
     return ""
 
 
+_TRACKER_CLEAR_STAMP = ".cleared-at"
+
+
+def _tracker_cleared_at() -> float:
+    try:
+        return (_TRACKER_CACHE_DIR / _TRACKER_CLEAR_STAMP).stat().st_mtime
+    except Exception:
+        return 0.0
+
+
 def _tracker_cache_clear():
     """Drop EVERY cached page. Best-effort, and deliberately unbounded.
 
@@ -364,18 +380,37 @@ def _tracker_cache_clear():
     """
     try:
         for entry in _TRACKER_CACHE_DIR.iterdir():
+            if entry.name == _TRACKER_CLEAR_STAMP:
+                continue
             try:
                 entry.unlink()
             except OSError:
                 continue
     except Exception:
         pass
+    # Record WHEN the clear happened. A sibling process can be mid-request
+    # right now; without this its reply lands after the clear and the next
+    # hook reads evidence the block just invalidated, so a builder who fixed
+    # the tracker record is blocked again for up to the whole TTL.
+    try:
+        _TRACKER_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        (_TRACKER_CACHE_DIR / _TRACKER_CLEAR_STAMP).touch()
+    except Exception:
+        pass
 
 
-def _tracker_store(path: str, page):
+def _tracker_store(path: str, page, fetched_at: float = 0.0):
     # None means "I don't know" and must never be cached: it would turn one
     # tracker hiccup into two minutes of blind spots.
     if not isinstance(page, dict) or not isinstance(page.get("records"), list):
+        return
+    # A reply whose request began before the last clear is already stale, even
+    # though it arrived after it. block() clears the cache precisely so the
+    # builder who fixes the tracker record is not blocked again for complying;
+    # letting a pre-clear reply land would reinstate the evidence the block
+    # just threw away, for the rest of the TTL. Cheap and lock-free: the clear
+    # leaves a timestamp, and a request older than it does not get to write.
+    if fetched_at and fetched_at < _tracker_cleared_at():
         return
     try:
         _TRACKER_CACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -384,9 +419,22 @@ def _tracker_store(path: str, page):
         except OSError:
             pass
         f = _TRACKER_CACHE_DIR / _cache_key(path)
-        tmp = f.with_suffix(".tmp")
-        tmp.write_text(json.dumps(page), encoding="utf-8")
-        os.replace(tmp, f)
+        # mkstemp, not a predictable name. write_text() on a fixed ".tmp" path
+        # follows a symlink planted there first, so anything this process can
+        # write becomes a target — and the 0700 on the directory lands after
+        # the attacker's file already exists. mkstemp creates O_EXCL with 0600
+        # and cannot follow a link.
+        fd, tmp_name = tempfile.mkstemp(dir=str(_TRACKER_CACHE_DIR), suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                fh.write(json.dumps(page))
+            os.replace(tmp_name, f)
+        except Exception:
+            try:
+                os.unlink(tmp_name)
+            except OSError:
+                pass
+            raise
     except Exception:
         pass
 
@@ -421,6 +469,7 @@ def tracker_page(path: str):
     if cached is not None:
         return cached
 
+    started = time.time()
     raw = _http_get(f"{TRACKER_URL}{path}")
     if raw is None:
         return None
@@ -434,7 +483,13 @@ def tracker_page(path: str):
         recs = data
     elif isinstance(data, dict):
         # An explicit failure flag outranks whatever else the body carries.
-        if "success" in data and not data.get("success"):
+        # `is not True`, not `not ...`. The string "false" is truthy, so the
+        # old test read {"success": "false"} as a success, tracker_lookup
+        # returned "absent", and gate 4 blocked a deploy on a malformed reply.
+        # Same class as the scope/name coercion below: a field's TYPE is part
+        # of the answer, and anything that is not the expected type means "I
+        # cannot read this", which for this gate is fail-open.
+        if "success" in data and data.get("success") is not True:
             return None
         # The tracker answers {"count": N, "records": [...], "success": true}.
         # This client only ever accepted an "automations" key, so every reply
@@ -466,7 +521,7 @@ def tracker_page(path: str):
             return None
 
     page = {"records": recs, "total": total}
-    _tracker_store(path, page)
+    _tracker_store(path, page, fetched_at=started)
     return page
 
 
@@ -493,10 +548,18 @@ def tracker_lookup(name: str):
     if page is None:
         return "unknown", None
     recs = page["records"]
+    total = page.get("total")
+    # Check the reply is self-consistent BEFORE matching anything in it. A page
+    # declaring fewer records than it carries — count 0 with a row in it — is
+    # garbled, and "found" from a garbled page is enough to block a deploy. The
+    # count is checked after the match below for the opposite reason: a page
+    # smaller than the table cannot prove ABSENCE. Consistency has to be
+    # established first, because it undermines both answers.
+    if isinstance(total, int) and total < len(recs):
+        return "unknown", None
     for r in recs:
         if _text(r.get("name")).lower() == name.lower():
             return "found", r
-    total = page.get("total")
     if total is not None and total > len(recs):
         return "unknown", None  # the reply is one page of a larger table
     if len(recs) >= _TRACKER_PAGE_CAP:

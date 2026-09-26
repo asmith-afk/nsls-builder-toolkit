@@ -26,9 +26,27 @@ plugin hook fired" are genuinely different claims.
 import json
 import os
 import time
+import tempfile
 from pathlib import Path
 
-_CONFIG_DIR = Path(os.environ.get("CLAUDE_CONFIG_DIR") or (Path.home() / ".claude"))
+def _config_dir() -> Path:
+    """The Claude config directory, resolved without ever raising.
+
+    `Path.home()` raises when neither HOME nor a password-database entry
+    resolves. At module scope that kills the importer — and this module is
+    imported by the gate and by the migration, so one unresolvable home took
+    all three down before any of their fail-open handlers existed.
+    """
+    raw = os.environ.get("CLAUDE_CONFIG_DIR")
+    if raw:
+        return Path(raw)
+    try:
+        return Path.home() / ".claude"
+    except Exception:
+        return Path(tempfile.gettempdir()) / "nsls-claude-config"
+
+
+_CONFIG_DIR = _config_dir()
 BEACON_DIR = _CONFIG_DIR / ".nsls-plugin-beacons"
 _MARKETPLACE = "nsls-toolkit"
 _PLUGIN = "nsls-builder-toolkit"
