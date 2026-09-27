@@ -22,6 +22,19 @@ $Marker      = 'local-plugins\nsls-'
 #        A pull refused by the checkout's own state (divergence, dirty tree) is
 #        announced on stdout - SessionStart stdout reaches the model's context -
 #        so a frozen toolkit is never silent. Offline failures stay quiet. ---
+# git reads these ahead of -C, so a session launched from inside a git hook (git
+# exports GIT_DIR and GIT_INDEX_FILE to its hooks) would aim every git call below
+# at that repository instead of the toolkit. git's own list, from
+# `git rev-parse --local-env-vars`. Same reason as _git_env in the .py.
+function Clear-GitRepoEnv {
+    foreach ($v in @('GIT_ALTERNATE_OBJECT_DIRECTORIES', 'GIT_CONFIG', 'GIT_CONFIG_PARAMETERS', 'GIT_CONFIG_COUNT',
+                     'GIT_OBJECT_DIRECTORY', 'GIT_DIR', 'GIT_WORK_TREE', 'GIT_IMPLICIT_WORK_TREE', 'GIT_GRAFT_FILE',
+                     'GIT_INDEX_FILE', 'GIT_NO_REPLACE_OBJECTS', 'GIT_REPLACE_REF_BASE', 'GIT_PREFIX',
+                     'GIT_INTERNAL_SUPER_PREFIX', 'GIT_SHALLOW_FILE', 'GIT_COMMON_DIR')) {
+        Remove-Item -Path "Env:$v" -ErrorAction SilentlyContinue
+    }
+}
+Clear-GitRepoEnv
 $env:GIT_TERMINAL_PROMPT = '0'   # credentialed remotes fail fast, never prompt-hang the hook
 foreach ($dir in @($BuilderDir, $PersonalDir)) {
     if (-not (Test-Path $dir)) { continue }
@@ -75,6 +88,12 @@ $PersonalUpstreamStamp   = Join-Path $ClaudeDir '.nsls-personal-upstream-check'
 $PersonalUpstreamLock    = Join-Path $ClaudeDir '.nsls-personal-upstream-check.flock'
 $PersonalLegacyLock      = Join-Path $ClaudeDir '.nsls-personal-upstream-check.lock'   # the previous protocol's file: shadow-claimed (empty) while ours is held
 $PersonalCheckEveryH     = 12
+# git's markers for an operation in progress: mid-bisect, -rebase, -am or -revert a
+# checkout can look clean and sit on main, and moving main changes that operation.
+$PersonalOpState    = @('MERGE_HEAD', 'CHERRY_PICK_HEAD', 'REVERT_HEAD', 'BISECT_START', 'BISECT_LOG', 'rebase-merge', 'rebase-apply', 'sequencer')
+# The status that counts everything: untracked files even where
+# status.showUntrackedFiles=no hides them, and submodules even where configured away.
+$PersonalStatusArgs = @('status', '--porcelain=v1', '--untracked-files=all', '--ignore-submodules=none')
 
 function Test-CanonicalOrigin {
     param([string]$Url)
@@ -260,6 +279,94 @@ function Release-Lock {
     try { if ($null -ne $Handle) { $Handle.Dispose() } } catch { }
 }
 
+function Test-GitPath {
+    param([string]$Dir, [string]$Rel)
+    # rev-parse --git-path answers relative to the checkout, or absolute.
+    if (-not $Rel) { return $false }
+    $p = if ([System.IO.Path]::IsPathRooted($Rel)) { $Rel } else { Join-Path $Dir $Rel }
+    return (Test-Path -LiteralPath $p)
+}
+
+function Test-CleanToFastForward {
+    param([string]$Dir)
+    # Every condition under which a fast-forward can only add NSLS's commits.
+    # Same list as _clean_to_fast_forward in the .py; see there for why each one.
+    $r = Invoke-GitBounded -Dir $Dir -GitArgs @('symbolic-ref', '--short', '-q', 'HEAD')
+    if ($r.Code -ne 0 -or $r.Out -cne 'main') { return $false }   # -cne: branch names are case-sensitive
+    $gitArgs = @('rev-parse')
+    foreach ($n in $PersonalOpState) { $gitArgs += @('--git-path', $n) }
+    $r = Invoke-GitBounded -Dir $Dir -GitArgs $gitArgs
+    if ($r.Code -ne 0) { return $false }
+    foreach ($rel in ($r.Out -split "`r?`n")) { if (Test-GitPath -Dir $Dir -Rel $rel.Trim()) { return $false } }
+    if (Test-Path -LiteralPath (Join-Path $Dir '.gitmodules')) { return $false }
+    $r = Invoke-GitBounded -Dir $Dir -GitArgs @('config', '--bool', '--get', 'core.sparseCheckout')
+    if ($r.Out -ceq 'true') { return $false }
+    $r = Invoke-GitBounded -Dir $Dir -GitArgs @('rev-list', '--count', "$PersonalUpstreamRef..HEAD")
+    if ($r.Code -ne 0 -or $r.Out -cne '0') { return $false }
+    $r = Invoke-GitBounded -Dir $Dir -GitArgs $PersonalStatusArgs
+    return ($r.Code -eq 0 -and -not $r.Out)
+}
+
+function Invoke-FastForwardDetached {
+    param([string]$Dir, [int]$WaitMs)
+    # The fast-forward itself. Returns its exit code, or $null if still running.
+    # Never killed: git stopped mid-checkout leaves a half-updated folder and a
+    # stale index.lock. Output goes to files, not pipes, so git can outlive this
+    # hook without ever writing into a closed pipe. Switched off for this one
+    # call, exactly as in the .py: branch.main.mergeOptions (with --no-squash and
+    # --no-autostash stated outright), hooks (via a hooks directory that does not
+    # exist), background maintenance and auto-gc, and overwriting an ignored file.
+    # Forward slashes: a backslash path here would hand git the characters '\n'.
+    $noHooks = (Join-Path $Dir '.git/nsls-no-hooks') -replace '\\', '/'   # deliberately never created
+    $parts = @('-C', $Dir, '-c', "core.hooksPath=$noHooks", '-c', 'maintenance.auto=false', '-c', 'gc.auto=0',
+               '-c', 'branch.main.mergeOptions=', 'merge', '--ff-only', '--no-squash', '--no-autostash',
+               '--no-overwrite-ignore', '--quiet', $PersonalUpstreamRef)
+    $argLine = (($parts | ForEach-Object { if ($_ -match '[\s"]') { '"' + ($_ -replace '"', '\"') + '"' } else { $_ } }) -join ' ')
+    $tmpOut = [System.IO.Path]::GetTempFileName()
+    $tmpErr = [System.IO.Path]::GetTempFileName()
+    try {
+        $p = Start-Process -FilePath 'git' -ArgumentList $argLine -NoNewWindow -PassThru -RedirectStandardOutput $tmpOut -RedirectStandardError $tmpErr
+        $null = $p.Handle   # without touching Handle first, ExitCode can come back empty after the wait
+    } catch { return -1 }
+    if (-not $p.WaitForExit($WaitMs)) { return $null }   # still running: left to finish on its own
+    $code = $p.ExitCode
+    Remove-Item -LiteralPath $tmpOut, $tmpErr -ErrorAction SilentlyContinue
+    return $code
+}
+
+function Get-CheckoutState {
+    param([string]$Dir, [string]$Before, [string]$Target)
+    # 'caught_up', 'untouched' or 'broken', read fresh after the attempt.
+    $h = Invoke-GitBounded -Dir $Dir -GitArgs @('rev-parse', 'HEAD') -TimeoutMs 5000
+    $s = Invoke-GitBounded -Dir $Dir -GitArgs $PersonalStatusArgs -TimeoutMs 10000
+    $l = Invoke-GitBounded -Dir $Dir -GitArgs @('rev-parse', '--git-path', 'index.lock') -TimeoutMs 5000
+    # Still on main: a checkout moved to another branch between the checks and the
+    # merge would have had THAT branch moved. Reported for a look, never caught up.
+    $br = Invoke-GitBounded -Dir $Dir -GitArgs @('symbolic-ref', '-q', 'HEAD') -TimeoutMs 5000
+    if ($h.Code -ne 0 -or $s.Code -ne 0 -or $l.Code -ne 0 -or $s.Out -or (Test-GitPath -Dir $Dir -Rel $l.Out)) { return 'broken' }
+    if ($br.Code -ne 0 -or $br.Out -cne 'refs/heads/main') { return 'broken' }
+    if ($h.Out -ceq $Target) { return 'caught_up' }
+    if ($h.Out -ceq $Before) { return 'untouched' }
+    return 'broken'
+}
+
+function Invoke-ForkCatchUp {
+    param([string]$Dir, $Clock)
+    # 'caught_up'; 'untouched' (conditions not met, too late, or git refused
+    # cleanly: the builder gets the offer); 'unfinished'; or 'broken'.
+    if (-not (Test-CleanToFastForward -Dir $Dir)) { return 'untouched' }
+    $b = Invoke-GitBounded -Dir $Dir -GitArgs @('rev-parse', 'HEAD')
+    $t = Invoke-GitBounded -Dir $Dir -GitArgs @('rev-parse', $PersonalUpstreamRef)
+    if ($b.Code -ne 0 -or $t.Code -ne 0) { return 'untouched' }
+    if ($Clock.Elapsed.TotalSeconds -gt 10) { return 'untouched' }   # a write we might abandon is not begun
+    # The wait ends 15s into this check at the latest, the same envelope the .py
+    # keeps inside the 90s hook budget. A merge still running then finishes on its own.
+    $waitMs = [int][math]::Min(20000, (15 - $Clock.Elapsed.TotalSeconds) * 1000)
+    $code = Invoke-FastForwardDetached -Dir $Dir -WaitMs $waitMs
+    if ($null -eq $code) { return 'unfinished' }
+    return (Get-CheckoutState -Dir $Dir -Before $b.Out -Target $t.Out)
+}
+
 function Report-PersonalForkDrift {
     param([string]$Dir)
     if (-not (Test-Path (Join-Path $Dir '.git'))) { return }
@@ -267,6 +374,11 @@ function Report-PersonalForkDrift {
     if (-not $url) { return }                        # nothing to measure against
     if (Test-CanonicalOrigin $url) { return }        # NSLS's own repo: the freeze check above owns it
     if (Test-StampFresh) { return }
+    # The catch-up below is a local write. It is only ever begun early in this
+    # check, and it is never killed once begun: git stopped half-way through a
+    # checkout leaves a half-updated folder and a stale index.lock that blocks
+    # every git command after it. Same rules as the .py.
+    $clock = [System.Diagnostics.Stopwatch]::StartNew()
     $lock = Claim-Lock -Path $PersonalUpstreamLock -LegacyPath $PersonalLegacyLock
     if ($null -eq $lock) { return }                  # another hook is mid-check this very second; it will speak
     try {
@@ -288,9 +400,21 @@ function Report-PersonalForkDrift {
         if ($r.Code -ne 0 -or $r.Out -notmatch '^\d+$') { return }
         $behind = [int]$r.Out
         if ($behind -eq 0) { return }
+        # Nothing of theirs in the way: catch it up and say so once. Anything of
+        # theirs in the way keeps the offer, because only they can decide what
+        # happens to it.
+        $outcome = Invoke-ForkCatchUp -Dir $Dir -Clock $clock
         # The path is text someone else can choose: printable ASCII only, bounded.
         $safeDir = ($Dir -replace '[^\x20-\x7e]', '?')
         if ($safeDir.Length -gt 200) { $safeDir = $safeDir.Substring(0, 200) }
+        if ($outcome -ceq 'caught_up') {
+            Write-Output ("[NSLS Personal Toolkit] This builder's toolkit was their OWN FORK, $behind commit(s) behind NSLS, with no commits or unsaved edits of their own, so it has just been caught up with NSLS automatically. Tell them in ONE plain sentence at the start of your first reply - e.g. `"Your toolkit was your own copy, so NSLS updates hadn't been reaching you; I've caught it up.`" - then offer to show them what's new: read and follow skills/update-personal-productivity/SKILL.md in $safeDir (the slash command itself appears after their next restart). NEVER hand them a git command.")
+            return
+        }
+        if ($outcome -ceq 'unfinished' -or $outcome -ceq 'broken') {
+            Write-Output ("[NSLS Personal Toolkit] An automatic catch-up of this builder's toolkit (their own fork, $behind commit(s) behind NSLS) did not finish cleanly, so the folder at $safeDir may be part-way through an update. Nothing of theirs was at risk: it only starts on a clean checkout with no commits of their own. Tell them in ONE plain sentence at the start of your first reply that their toolkit needs a quick look, and offer to sort it out. If they agree, inspect before changing anything - whether a git process is still running, whether .git/index.lock exists, git status, and where HEAD sits relative to $PersonalUpstreamRef - then finish the fast-forward or put it back. NEVER hand them a git command.")
+            return
+        }
         # Same prefix and wording as the personal toolkit's own hook, so Claude
         # sees one identical line whichever of the two spoke first.
         Write-Output ("[NSLS Personal Toolkit] This builder's toolkit is their OWN FORK and is $behind commit(s) behind NSLS - nothing shipped upstream has reached them, and their auto-update never will, because it follows their fork. Tell them in ONE plain sentence at the start of your first reply - e.g. `"Your toolkit is your own copy, so NSLS updates haven't been reaching you - want me to catch it up?`" - and if they agree: run /update-personal-productivity if this machine has it; otherwise, in $safeDir, merge $PersonalUpstreamRef (NSLS's main, fetched from $PersonalUpstreamUrl moments ago) yourself, preserving their own commits and setting aside any uncommitted edits first, then read and follow skills/update-personal-productivity/SKILL.md from the freshly merged checkout to walk them through what's new (the slash command itself appears after their next restart). NEVER hand them a git command.")

@@ -33,6 +33,27 @@ SKILLS_DIR = CONFIG_DIR / "skills"
 ENV_FILE = CONFIG_DIR / "local-plugins" / "nsls-personal-toolkit" / ".env"
 PROXY_URL = os.environ.get("NSLS_TRACKER_URL", "https://web-production-6281e.up.railway.app")
 
+# git reads these ahead of `-C`: with GIT_DIR or GIT_WORK_TREE set, `git -C <toolkit>`
+# still works on the repository they name. Claude launched from inside a git hook
+# inherits them (git exports GIT_DIR and GIT_INDEX_FILE to its hooks), so every git
+# call here would read, fetch into, or fast-forward that repository instead of the
+# toolkit. This is git's own list (`git rev-parse --local-env-vars`), the set it
+# clears itself when it moves into another repository.
+_GIT_REPO_ENV = (
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_CONFIG", "GIT_CONFIG_PARAMETERS",
+    "GIT_CONFIG_COUNT", "GIT_OBJECT_DIRECTORY", "GIT_DIR", "GIT_WORK_TREE",
+    "GIT_IMPLICIT_WORK_TREE", "GIT_GRAFT_FILE", "GIT_INDEX_FILE",
+    "GIT_NO_REPLACE_OBJECTS", "GIT_REPLACE_REF_BASE", "GIT_PREFIX",
+    "GIT_INTERNAL_SUPER_PREFIX", "GIT_SHALLOW_FILE", "GIT_COMMON_DIR",
+)
+
+
+def _git_env():
+    """The environment for every git call aimed at a toolkit checkout."""
+    env = {k: v for k, v in os.environ.items() if k not in _GIT_REPO_ENV}
+    env["GIT_TERMINAL_PROMPT"] = "0"
+    return env
+
 # When a session-ping can't be delivered (timeout / network / proxy down), we
 # stash the payload here and replay it at the start of the next session so a
 # queued announcement or credit isn't lost. Deleted once delivery succeeds.
@@ -150,7 +171,7 @@ def _checkout_blocks_update(plugin_dir):
             ["git", "-C", str(plugin_dir), *args],
             capture_output=True, text=True, timeout=5,
             stdin=subprocess.DEVNULL,
-            env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+            env=_git_env(),
         )
         return r.returncode, (r.stdout or "").strip()
 
@@ -240,7 +261,7 @@ def _git_out(plugin_dir, *args, deadline=None):
         r = subprocess.run(
             ["git", "-C", str(plugin_dir), *args],
             capture_output=True, text=True, timeout=timeout,
-            stdin=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL, env=_git_env(),
         )
         return r.stdout.strip() if r.returncode == 0 else ""
     except Exception:
@@ -409,6 +430,26 @@ PERSONAL_UPSTREAM_LOCK = CONFIG_DIR / ".nsls-personal-upstream-check.flock"
 PERSONAL_UPSTREAM_LEGACY_LOCK = CONFIG_DIR / ".nsls-personal-upstream-check.lock"
 PERSONAL_UPSTREAM_CHECK_EVERY_H = 12
 PERSONAL_FETCH_TIMEOUT = 6
+# The fast-forward that catches up a fork with nothing of its own. It is a local
+# write, so it is never started without this much of the deadline left: git
+# killed half-way through a checkout leaves a half-updated folder and a stale
+# index.lock that blocks every git command after it. A write we might have to
+# kill is a write we should not begin.
+PERSONAL_FF_MIN_LEFT_S = 5
+# The longest session start waits for the fast-forward to report, and never past
+# the caller's deadline: that is the 15s pull envelope the 90s hook budget is
+# built on. It is never killed: a merge still running when the wait ends is left
+# to finish on its own, and the builder is told it may still be completing. A local fast-forward takes well under a
+# second, with hooks and background maintenance switched off for it.
+PERSONAL_FF_WAIT_S = 20
+# git's markers for an operation in progress. A checkout mid-bisect, mid-rebase,
+# mid-am or mid-revert can look clean and sit on main, and moving main under it
+# changes what that operation does. git merge itself only refuses some of these.
+PERSONAL_OP_STATE = ("MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "BISECT_START",
+                     "BISECT_LOG", "rebase-merge", "rebase-apply", "sequencer")
+# The one status that counts everything: untracked files even where
+# status.showUntrackedFiles=no hides them, and submodules even where configured away.
+PERSONAL_STATUS_ARGS = ("status", "--porcelain=v1", "--untracked-files=all", "--ignore-submodules=none")
 
 # NSLS's own repository, in any spelling git accepts — compared as host + path,
 # never as a substring: a mirror on another host, or a longer-named repo under
@@ -469,7 +510,7 @@ def _git_rc(plugin_dir, *args, timeout=3):
             ["git", "-C", str(plugin_dir), *args],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.DEVNULL,
             text=True, start_new_session=True,
-            env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+            env=_git_env(),
         )
     except Exception:
         return -1, ""
@@ -665,6 +706,152 @@ def _fork_notice(behind, plugin_dir):
     )
 
 
+def _fork_caught_up_notice(behind, plugin_dir):
+    # Same prefix as the offer, so either hook's line reads as one voice.
+    return (
+        f"[NSLS Personal Toolkit] This builder's toolkit was their OWN FORK, "
+        f"{behind} commit(s) behind NSLS, with no commits or unsaved edits of "
+        f"their own, so it has just been caught up with NSLS automatically. "
+        f"Tell them in ONE plain sentence at the start of your first reply — "
+        f"e.g. \"Your toolkit was your own copy, so NSLS updates hadn't been "
+        f"reaching you; I've caught it up.\" — then offer to show them what's "
+        f"new: read and follow skills/update-personal-productivity/SKILL.md in "
+        f"{_safe_text(plugin_dir)} (the slash command itself appears after "
+        f"their next restart). NEVER hand them a git command."
+    )
+
+
+def _fork_catch_up_unfinished_notice(behind, plugin_dir):
+    return (
+        f"[NSLS Personal Toolkit] An automatic catch-up of this builder's toolkit "
+        f"(their own fork, {behind} commit(s) behind NSLS) did not finish cleanly, "
+        f"so the folder at {_safe_text(plugin_dir)} may be part-way through an update. "
+        f"Nothing of theirs was at risk: it only starts on a clean checkout with no "
+        f"commits of their own. Tell them in ONE plain sentence at the start of your "
+        f"first reply that their toolkit needs a quick look, and offer to sort it "
+        f"out. If they agree, inspect before changing anything — whether a git "
+        f"process is still running, whether .git/index.lock exists, git status, and "
+        f"where HEAD sits relative to {PERSONAL_UPSTREAM_REF} — then finish the "
+        f"fast-forward or put it back. NEVER hand them a git command."
+    )
+
+
+def _git_path_exists(plugin_dir, rel):
+    # rev-parse --git-path answers relative to the checkout, or absolute; Path
+    # joining handles both (an absolute right-hand side wins).
+    return bool(rel) and (plugin_dir / rel).exists()
+
+
+def _clean_to_fast_forward(git, plugin_dir):
+    """Every condition under which a fast-forward can only add NSLS's commits.
+
+    On the branch `main` (any other branch, or detached, is somewhere its owner
+    put it on purpose; NSLS_PERSONAL_BRANCH is a supported setup). No operation
+    in progress. No submodules and no sparse checkout, neither of which is proven
+    here. No commits NSLS lacks. Nothing unsaved, untracked, or in a submodule.
+    """
+    rc, branch = git("symbolic-ref", "--short", "-q", "HEAD")
+    if rc != 0 or branch != "main":
+        return False
+    rc, paths = git("rev-parse", *[a for name in PERSONAL_OP_STATE for a in ("--git-path", name)])
+    if rc != 0 or any(_git_path_exists(plugin_dir, rel) for rel in paths.splitlines()):
+        return False
+    if (plugin_dir / ".gitmodules").exists():
+        return False
+    rc, sparse = git("config", "--bool", "--get", "core.sparseCheckout")
+    if sparse == "true":
+        return False
+    rc, ahead = git("rev-list", "--count", f"{PERSONAL_UPSTREAM_REF}..HEAD")
+    if rc != 0 or ahead != "0":
+        return False
+    rc, dirty = git(*PERSONAL_STATUS_ARGS)
+    return rc == 0 and not dirty
+
+
+def _ff_merge(plugin_dir, wait):
+    """The fast-forward itself. Returns its exit code, or None if still running.
+
+    Never killed: git stopped mid-checkout leaves a half-updated folder and a
+    stale index.lock. It runs in its own session with its output discarded, so
+    it can outlive this hook and finish on its own. Everything that could turn
+    it into something else is switched off for this one call:
+      * branch.main.mergeOptions (e.g. --squash stages NSLS's tree without
+        moving the branch), with --no-squash and --no-autostash stated outright;
+      * hooks, via a hooks directory that does not exist — a post-merge hook
+        runs after the branch has already moved, and can hang;
+      * background maintenance and auto-gc, which also run after the move;
+      * overwriting an ignored local file NSLS starts tracking (--no-overwrite-ignore).
+    """
+    no_hooks = plugin_dir / ".git" / "nsls-no-hooks"   # deliberately never created
+    try:
+        proc = subprocess.Popen(
+            ["git", "-C", str(plugin_dir),
+             "-c", f"core.hooksPath={no_hooks.as_posix()}", "-c", "maintenance.auto=false",
+             "-c", "gc.auto=0", "-c", "branch.main.mergeOptions=",
+             "merge", "--ff-only", "--no-squash", "--no-autostash",
+             "--no-overwrite-ignore", "--quiet", PERSONAL_UPSTREAM_REF],
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            start_new_session=True, env=_git_env(),
+        )
+    except Exception:
+        return -1
+    try:
+        return proc.wait(timeout=wait)
+    except subprocess.TimeoutExpired:
+        return None
+
+
+def _checkout_state(plugin_dir, head_before, target):
+    """'caught_up', 'untouched' or 'broken', read fresh after the attempt.
+
+    Deliberately NOT through the caller's deadline: a merge that succeeded as the
+    deadline ran out must still be reported, never left as a silent move.
+    """
+    rc_h, head = _git_rc(plugin_dir, "rev-parse", "HEAD", timeout=5)
+    rc_s, dirty = _git_rc(plugin_dir, *PERSONAL_STATUS_ARGS, timeout=10)
+    rc_l, lock = _git_rc(plugin_dir, "rev-parse", "--git-path", "index.lock", timeout=5)
+    # Still on main: git has no "merge only into main", so a checkout moved to
+    # another branch in the moment between the checks and the merge would have
+    # had THAT branch moved. It is reported for a look, never called caught up.
+    rc_b, branch = _git_rc(plugin_dir, "symbolic-ref", "-q", "HEAD", timeout=5)
+    if rc_h != 0 or rc_s != 0 or rc_l != 0 or dirty or _git_path_exists(plugin_dir, lock):
+        return "broken"
+    if rc_b != 0 or branch != "refs/heads/main":
+        return "broken"
+    if head == target:
+        return "caught_up"
+    if head == head_before:
+        return "untouched"
+    return "broken"
+
+
+def _fast_forward_clean_fork(git, plugin_dir, remaining):
+    """Catch up a fork that has nothing of its own onto NSLS's main.
+
+    A fork's own remote never receives NSLS's changes, so the offer came back
+    with every release and depended on the builder noticing one sentence. When
+    there is nothing of theirs to protect there is nothing to ask about.
+
+    Returns 'caught_up'; 'untouched' when the conditions were not met, time was
+    short, or git refused cleanly (the builder gets the offer); 'unfinished' when
+    the merge is still running when the wait ends; or 'broken' when the
+    checkout is in any state other than before or after.
+    """
+    if not _clean_to_fast_forward(git, plugin_dir):
+        return "untouched"
+    rc_b, before = git("rev-parse", "HEAD")
+    rc_t, target = git("rev-parse", PERSONAL_UPSTREAM_REF)
+    if rc_b != 0 or rc_t != 0:
+        return "untouched"
+    left = remaining()
+    if left is not None and left < PERSONAL_FF_MIN_LEFT_S:
+        return "untouched"   # a write we might have to abandon is a write we do not begin
+    wait = PERSONAL_FF_WAIT_S if left is None else min(PERSONAL_FF_WAIT_S, left)
+    if _ff_merge(plugin_dir, wait) is None:
+        return "unfinished"
+    return _checkout_state(plugin_dir, before, target)
+
+
 def report_personal_fork_drift(deadline=None):
     """Say so when a personal-toolkit FORK has fallen behind NSLS.
 
@@ -674,7 +861,8 @@ def report_personal_fork_drift(deadline=None):
     surfaced — only our own literal and a verified integer — because
     SessionStart stdout is the model's context and git echoes server-controlled
     text. Reads and writes no remote: NSLS is fetched by URL into
-    PERSONAL_UPSTREAM_REF; the update skill owns the named remote it needs.
+    PERSONAL_UPSTREAM_REF. A fork with nothing of its own is fast-forwarded
+    onto it (see _fast_forward_clean_fork); any other fork gets the offer.
     """
     plugin_dir = CONFIG_DIR / "local-plugins" / PERSONAL_PLUGIN
     if not (plugin_dir / ".git").exists():
@@ -733,7 +921,17 @@ def report_personal_fork_drift(deadline=None):
             rc, count = git("rev-list", "--count", f"HEAD..{PERSONAL_UPSTREAM_REF}")
             if rc != 0 or not count.isdigit() or int(count) == 0:
                 return
-            print(_fork_notice(int(count), plugin_dir))
+            behind = int(count)
+            # Nothing of theirs in the way: catch it up and say so once. Anything
+            # of theirs in the way keeps the offer, because only they can decide
+            # what happens to it.
+            outcome = _fast_forward_clean_fork(git, plugin_dir, remaining)
+            if outcome == "caught_up":
+                print(_fork_caught_up_notice(behind, plugin_dir))
+            elif outcome in ("unfinished", "broken"):
+                print(_fork_catch_up_unfinished_notice(behind, plugin_dir))
+            else:
+                print(_fork_notice(behind, plugin_dir))
         finally:
             _release_lock(lock)
     except TimeoutError:
@@ -787,7 +985,7 @@ def git_pull():
                 ["git", "-C", str(plugin_dir), "pull", "--ff-only", "--quiet"],
                 capture_output=True, text=True, timeout=min(10, remaining),
                 stdin=subprocess.DEVNULL,
-                env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+                env=_git_env(),
             )
             if r.returncode != 0:
                 _warn_if_frozen(plugin, plugin_dir, (r.stderr or "") + (r.stdout or ""))
