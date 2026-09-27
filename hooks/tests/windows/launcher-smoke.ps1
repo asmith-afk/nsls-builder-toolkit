@@ -1,4 +1,4 @@
-# launcher-smoke.ps1 — prove run-hook.sh works on a real Windows machine.
+# launcher-smoke.ps1  -  prove run-hook.sh works on a real Windows machine.
 #
 # Add to the windows-latest hooks job (the one that parses the .ps1 files) as:
 #     - name: Hook launcher resolves a Python and decides
@@ -6,8 +6,8 @@
 #
 # What this is for. hooks.json has no OS conditional, so every hook entry names
 # one launch shape for every machine. The last time that was decided from a Mac,
-# the entry named `python3` — a Store alias on Windows that exits without
-# running — the error notice it produced got the gate deleted from hooks.json,
+# the entry named `python3`  -  a Store alias on Windows that exits without
+# running  -  the error notice it produced got the gate deleted from hooks.json,
 # and every migrated Mac then went unguarded for two weeks. The replacement
 # resolves the interpreter inside a bash launcher. This is the check that it
 # does so on Windows, rather than on the assumption of someone without a PC.

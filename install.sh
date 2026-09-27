@@ -334,21 +334,71 @@ if [ -z "$CLAUDE_BIN" ]; then
   done
 fi
 
+# Set when a plugin the toolkit cannot work without fails to install, and
+# reported again at the end. Nothing else reads it.
+INSTALL_FAILED=""
+
 install_plugin() {
   local name="$1"
   local install_cmd="$2"
   local marketplace_url="$3"
+  local required="${4:-}"
 
-  if "$CLAUDE_BIN" plugin list 2>/dev/null | grep -q "$name"; then
-    echo "  $name: already installed"
-  else
-    if [ -n "$marketplace_url" ]; then
-      echo "  Adding $name marketplace..."
-      "$CLAUDE_BIN" plugin marketplace add "$marketplace_url" 2>&1 | tail -1 || true
+  # A bare-name match is satisfied by a plugin of the same name from a
+  # DIFFERENT marketplace, which would leave the machine with somebody else's
+  # copy and none of this org's hooks or agents. When the caller names the
+  # marketplace-qualified spec, confirm THAT key is the one registered; the
+  # registry file is the only place the marketplace is recorded.
+  if [ -n "$required" ]; then
+    # For a plugin we cannot work without, ONLY the marketplace-qualified key
+    # counts, and only from the registry, which is the single place the
+    # marketplace is recorded. A bare-name match in `plugin list` is satisfied
+    # by a same-named plugin from somebody else's marketplace, which leaves the
+    # machine with their copy and none of this org's hooks or agents. No
+    # fallback: if the registry cannot be read, the plugin is not proven
+    # present, and installing again is harmless.
+    if [ -r "${CONFIG_DIR:-}/plugins/installed_plugins.json" ] &&
+       grep -q "\"$install_cmd\"" "${CONFIG_DIR:-}/plugins/installed_plugins.json"; then
+      echo "  $name: already installed"
+      return 0
     fi
-    echo "  Installing $name..."
-    "$CLAUDE_BIN" plugin install "$install_cmd" 2>&1 | tail -1 || true
+  elif "$CLAUDE_BIN" plugin list 2>/dev/null | grep -q "$name"; then
+    echo "  $name: already installed"
+    return 0
   fi
+
+  if [ -n "$marketplace_url" ]; then
+    echo "  Adding $name marketplace..."
+    "$CLAUDE_BIN" plugin marketplace add "$marketplace_url" 2>&1 | tail -1 || true
+  fi
+  echo "  Installing $name..."
+  "$CLAUDE_BIN" plugin install "$install_cmd" 2>&1 | tail -1 || true
+
+  # Verify instead of trusting. Piping to `tail -1` discards the install's exit
+  # status, and `|| true` discarded what was left, so a marketplace that could
+  # not be reached and an install that failed both printed the same line a
+  # success prints. For the org toolkit that is the entire product silently
+  # absent — no gates, no hooks, no agents — behind an installer that said it
+  # worked. Ask the CLI what it actually has.
+  if [ -n "$required" ]; then
+    if [ -r "${CONFIG_DIR:-}/plugins/installed_plugins.json" ] &&
+       grep -q "\"$install_cmd\"" "${CONFIG_DIR:-}/plugins/installed_plugins.json"; then
+      return 0
+    fi
+  elif "$CLAUDE_BIN" plugin list 2>/dev/null | grep -q "$name"; then
+    return 0
+  fi
+
+  if [ -n "$required" ]; then
+    echo "  [!] $name did NOT install."
+    echo "      The toolkit's hooks, guardrails and agents will be missing"
+    echo "      until it does. Run this, then restart Claude Code:"
+    echo "        claude plugin install $install_cmd"
+    INSTALL_FAILED="${INSTALL_FAILED:+$INSTALL_FAILED }$name"
+  else
+    echo "  [warn] $name did not install; continuing without it."
+  fi
+  return 0
 }
 
 # Every renamed their marketplace from "every-marketplace" to
@@ -396,8 +446,11 @@ if [ -n "$CLAUDE_BIN" ]; then
   # three agents, or its bundled hooks. Installing it here makes both platforms
   # arrive in the same state on day one, and leaves the migration as the path
   # for machines installed before this change.
+  # $REPO_URL, not the hard-coded production URL: NSLS_TOOLKIT_REPO exists so a
+  # fork can be tested end to end, and cloning the fork while installing the
+  # plugin from upstream tests two different revisions at once.
   install_plugin "nsls-builder-toolkit" "nsls-builder-toolkit@nsls-toolkit" \
-    "https://github.com/thensls/nsls-builder-toolkit.git"
+    "$REPO_URL" required
 
   install_plugin "superpowers" "superpowers@superpowers-marketplace" \
     "https://github.com/obra/superpowers-marketplace.git"
@@ -864,6 +917,13 @@ if [ "$TEST_MODE" = "1" ]; then
   echo "     Then re-run this installer with --test to start clean again."
   echo ""
 else
+  if [ -n "$INSTALL_FAILED" ]; then
+    echo "=== SOMETHING DID NOT INSTALL ==="
+    echo ""
+    echo "  Missing: $INSTALL_FAILED"
+    echo "  Fix that first — the steps below assume the toolkit is present."
+    echo ""
+  fi
   echo "=== NEXT STEP ==="
   echo ""
   echo "  1. Restart Claude Code"

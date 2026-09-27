@@ -99,6 +99,79 @@ with tempfile.TemporaryDirectory() as tmp:
             check(f"{'session-start' if 'session-start' in c else 'skill-event'}"
                   " command is well formed", "os.path.join" not in c, f"({c[:90]})")
 
+print("\na plugin that did not install is not reported as installed")
+# `claude plugin install ... | tail -1 || true` threw the exit status away
+# twice over, so an unreachable marketplace and a failed install printed the
+# same line a success prints. For the org toolkit that is the whole product
+# silently absent behind an installer that said it worked.
+ROOT_SH = Path(__file__).resolve().parents[2] / "install.sh"
+src = ROOT_SH.read_text()
+start = src.index("install_plugin() {")
+end = src.index("\n}\n", start) + 3
+func = src[start:end]
+
+def run_install_plugin(stub_body, args, registry=None):
+    with tempfile.TemporaryDirectory() as tmp:
+        stub = Path(tmp) / "claude"
+        stub.write_text(stub_body)
+        stub.chmod(0o755)
+        if registry is not None:
+            reg = Path(tmp) / "claude-cfg" / "plugins"
+            reg.mkdir(parents=True)
+            (reg / "installed_plugins.json").write_text(registry)
+        script = (
+            'set -uo pipefail\n'
+            f'CLAUDE_BIN="{stub}"\n'
+            f'CONFIG_DIR="{tmp}/claude-cfg"\n'
+            'INSTALL_FAILED=""\n'
+            f'{func}\n'
+            f'install_plugin {args}\n'
+            'echo "FAILED_LIST=[$INSTALL_FAILED]"\n'
+        )
+        return subprocess.run(["bash", "-c", script], capture_output=True,
+                              text=True, timeout=30)
+
+# invoked as `claude plugin list` / `claude plugin install ...`, so the verb is $2
+never = '#!/bin/sh\ncase "$2" in list) exit 0;; *) exit 1;; esac\n'
+# a same-named plugin from SOMEBODY ELSE's marketplace must not satisfy the
+# check: the machine would end up with their copy and none of our hooks.
+other = ('#!/bin/sh\ncase "$2" in list) echo nsls-builder-toolkit; exit 0;;'
+         ' *) exit 1;; esac\n')
+r = run_install_plugin(never, '"nsls-builder-toolkit" "nsls-builder-toolkit@nsls-toolkit" "" required')
+check("a required plugin that never appears is called out",
+      "did NOT install" in r.stdout, f"({r.stdout.strip()[:140]!r})")
+check("and it is recorded for the end-of-run summary",
+      "FAILED_LIST=[nsls-builder-toolkit]" in r.stdout,
+      f"({r.stdout.strip()[-60:]!r})")
+check("the installer does not abort on it",
+      r.returncode == 0, f"(exit {r.returncode}: {r.stderr[:120]})")
+
+optional = run_install_plugin(never, '"superpowers" "superpowers@x" "" ')
+check("an optional plugin only warns",
+      "[warn]" in optional.stdout and "did NOT install" not in optional.stdout,
+      f"({optional.stdout.strip()[:120]!r})")
+check("and is not recorded as a blocker",
+      "FAILED_LIST=[]" in optional.stdout, f"({optional.stdout.strip()[-40:]!r})")
+
+r = run_install_plugin(other, '"nsls-builder-toolkit" "nsls-builder-toolkit@nsls-toolkit" "" required')
+check("a same-named plugin from another marketplace does not satisfy the check",
+      "already installed" not in r.stdout, f"({r.stdout.strip()[:120]!r})")
+check("and the missing org plugin is still reported",
+      "did NOT install" in r.stdout, f"({r.stdout.strip()[:120]!r})")
+
+check("the org plugin install uses REPO_URL, not a hard-coded upstream",
+      '"$REPO_URL" required' in ROOT_SH.read_text(),
+      "(fork testing would install the wrong revision)")
+
+works = ('#!/bin/sh\ncase "$2" in list) echo nsls-builder-toolkit; exit 0;;'
+         ' *) exit 0;; esac\n')
+ok = run_install_plugin(
+    works, '"nsls-builder-toolkit" "nsls-builder-toolkit@nsls-toolkit" "" required',
+    registry='{"plugins": {"nsls-builder-toolkit@nsls-toolkit": {}}}')
+check("a plugin that is present is reported as installed, with no alarm",
+      "already installed" in ok.stdout and "did NOT install" not in ok.stdout,
+      f"({ok.stdout.strip()[:120]!r})")
+
 print()
 if failures:
     print(f"FAILED: {len(failures)} check(s): {', '.join(failures)}")
