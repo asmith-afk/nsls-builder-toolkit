@@ -340,7 +340,11 @@ function Get-CheckoutState {
     $h = Invoke-GitBounded -Dir $Dir -GitArgs @('rev-parse', 'HEAD') -TimeoutMs 5000
     $s = Invoke-GitBounded -Dir $Dir -GitArgs $PersonalStatusArgs -TimeoutMs 10000
     $l = Invoke-GitBounded -Dir $Dir -GitArgs @('rev-parse', '--git-path', 'index.lock') -TimeoutMs 5000
+    # Still on main: a checkout moved to another branch between the checks and the
+    # merge would have had THAT branch moved. Reported for a look, never caught up.
+    $br = Invoke-GitBounded -Dir $Dir -GitArgs @('symbolic-ref', '-q', 'HEAD') -TimeoutMs 5000
     if ($h.Code -ne 0 -or $s.Code -ne 0 -or $l.Code -ne 0 -or $s.Out -or (Test-GitPath -Dir $Dir -Rel $l.Out)) { return 'broken' }
+    if ($br.Code -ne 0 -or $br.Out -cne 'refs/heads/main') { return 'broken' }
     if ($h.Out -ceq $Target) { return 'caught_up' }
     if ($h.Out -ceq $Before) { return 'untouched' }
     return 'broken'

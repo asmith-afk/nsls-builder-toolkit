@@ -651,6 +651,20 @@ with tempfile.TemporaryDirectory() as tmp:
     check("...and a quick merge inside it is still reported as caught up",
           head(plugin_dir) == upstream(plugin_dir) and "caught up with NSLS automatically" in out)
 
+with tempfile.TemporaryDirectory() as tmp:
+    # Moved off main between the checks and the merge: whatever the merge then did
+    # is reported for a look, never called caught up.
+    plugin_dir, nsls, fork = make_world(tmp, nsls_ahead=5, customized=False)
+    real_merge = hook._ff_merge
+    def switch_then_merge(d, wait):
+        git(plugin_dir, "checkout", "--quiet", "-b", "hers")
+        return real_merge(d, wait)
+    hook._ff_merge = switch_then_merge
+    out = run()
+    hook._ff_merge = real_merge
+    check("a checkout moved off main just before the merge is reported for a look, never called caught up",
+          "did not finish cleanly" in out and "caught up with NSLS automatically" not in out)
+
 print()
 if failures:
     print(f"{len(failures)} FAILED:")

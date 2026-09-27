@@ -810,7 +810,13 @@ def _checkout_state(plugin_dir, head_before, target):
     rc_h, head = _git_rc(plugin_dir, "rev-parse", "HEAD", timeout=5)
     rc_s, dirty = _git_rc(plugin_dir, *PERSONAL_STATUS_ARGS, timeout=10)
     rc_l, lock = _git_rc(plugin_dir, "rev-parse", "--git-path", "index.lock", timeout=5)
+    # Still on main: git has no "merge only into main", so a checkout moved to
+    # another branch in the moment between the checks and the merge would have
+    # had THAT branch moved. It is reported for a look, never called caught up.
+    rc_b, branch = _git_rc(plugin_dir, "symbolic-ref", "-q", "HEAD", timeout=5)
     if rc_h != 0 or rc_s != 0 or rc_l != 0 or dirty or _git_path_exists(plugin_dir, lock):
+        return "broken"
+    if rc_b != 0 or branch != "refs/heads/main":
         return "broken"
     if head == target:
         return "caught_up"

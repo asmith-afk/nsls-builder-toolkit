@@ -169,5 +169,14 @@ $out = Run $w
 Check 'with GIT_DIR aimed at another repository, the toolkit is still the one caught up' (((Head $w) -eq (Upstream $w)) -and ($out -match 'caught up with NSLS automatically')) $out
 Check '...and that other repository is untouched' ((TGit $decoy rev-parse HEAD) -eq $decoyHead)
 
+# 10. Moved off main between the checks and the merge: reported for a look, never
+#     called caught up. The merge is wrapped to switch branch first.
+$w = New-World $false
+$script:origFF = ${function:Invoke-FastForwardDetached}
+${function:Invoke-FastForwardDetached} = { param($Dir, $WaitMs) TGit $Dir checkout --quiet -b hers | Out-Null; & $script:origFF -Dir $Dir -WaitMs $WaitMs }
+$out = Run $w
+${function:Invoke-FastForwardDetached} = $script:origFF
+Check 'a checkout moved off main just before the merge is reported for a look, never called caught up' (($out -match 'did not finish cleanly') -and ($out -notmatch 'caught up with NSLS automatically')) $out
+
 if ($script:failures -gt 0) { Write-Host "$($script:failures) FAILED"; exit 1 }
 Write-Host 'all fork catch-up checks passed'
