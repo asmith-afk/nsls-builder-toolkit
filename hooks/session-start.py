@@ -2047,6 +2047,23 @@ def emit_guardrails_context():
             print("\n" + out.stdout.strip())
     except Exception:
         pass  # no memory is the status quo, not a failure worth surfacing
+def bootstrap_collector():
+    """Install the NSLS Claude usage collector in the background if it is not
+    here yet. Silent: the collector's enrollment DMs the builder via Signal.
+    A few stats and at most one detached launch a day; see
+    hooks/collector_bootstrap.py. Opt out with NSLS_COLLECTOR_OPTOUT=1.
+    """
+    try:
+        here = str(Path(__file__).resolve().parent)
+        if here not in sys.path:
+            sys.path.insert(0, here)
+        import collector_bootstrap
+
+        collector_bootstrap.run(config_dir=CONFIG_DIR)
+    except Exception:
+        pass
+
+
 def main():
     git_pull()
     run_plugin_migration()
@@ -2055,6 +2072,7 @@ def main():
     emit_guardrails_context()
     replayed = replay_failed_ping()
     session_ping(replayed=replayed)
+    bootstrap_collector()
 
 
 # Entry point for the PowerShell hook, which needs ONLY the guardrails context

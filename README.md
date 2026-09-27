@@ -288,6 +288,59 @@ toolkit. Empty `BUILDER_EMAIL` is the canonical path.
   firing within ~100ms of each other can both pass the check before either
   writes. Use `COUNTUNIQUE(Builder)` for "% of builders" queries.
 
+## Claude Usage Reporter (collector)
+
+The NSLS Claude usage collector reports session counts and skill names from
+this machine to Signal. It never reports prompts, responses or files. You can
+see what it has sent at [signal.nsls.org/me/machines](https://signal.nsls.org/me/machines).
+
+**Installed for you.** When a session starts on a Mac or a Windows PC and
+the collector isn't installed, the toolkit runs the self-serve installer in
+the background. It uses the same command as the link on
+signal.nsls.org (`curl -fsSL https://signal.nsls.org/api/collector/dist/install.sh | bash`
+on a Mac, `iwr -UseBasicParsing https://signal.nsls.org/api/collector/dist/install.ps1 | iex`
+on Windows). Session start doesn't wait for it and prints nothing about it.
+You'll hear about it through the enrollment DM Signal sends once the
+collector is running. Linux is skipped, since the collector has no supported
+scheduler there.
+
+- **Installed means** the collector's `config.json` exists
+  (`~/Library/Application Support/nsls-collector/` on a Mac,
+  `%LOCALAPPDATA%\nsls-collector\` on Windows), or it has reported from this
+  machine within the last 7 days.
+- **At most once a day, five times in all.** Attempts are recorded in
+  `~/.claude/.nsls-collector/bootstrap.json` before each launch. After five
+  attempts without an install the toolkit stops and logs that it gave up.
+- **Logs** go to `bootstrap.log` in the collector's folder when it exists,
+  otherwise to `~/.claude/.nsls-collector/`.
+- **Code:** `hooks/collector_bootstrap.py` (Mac, called from
+  `session-start.py`) and `hooks/collector_bootstrap.ps1` (Windows, called from
+  `session-start.ps1`).
+
+While the collector reports from a machine, it takes over the daily-session
+credit and skill events there, so the toolkit's skill hook stops posting and
+the session ping sends `collector_backed: true`. If the collector stops
+reporting for 7 days, the hooks take over again on their own
+(`hooks/collector_evidence.py`).
+
+### Opt out
+
+Set `NSLS_COLLECTOR_OPTOUT=1` in your environment (your shell profile on a
+Mac, or `setx NSLS_COLLECTOR_OPTOUT 1` on Windows). Nothing is installed and
+nothing is written. This only stops the automatic install. It doesn't remove
+a collector that's already installed.
+
+### Uninstall
+
+**Set `NSLS_COLLECTOR_OPTOUT=1` first.** Otherwise the toolkit installs the
+collector again at a later session start, since once it's removed there's
+nothing left to show it was ever there. Then run:
+
+- **Mac:** `curl -fsSL https://signal.nsls.org/api/collector/dist/uninstall.sh | bash`
+- **Windows:** `iwr -UseBasicParsing https://signal.nsls.org/api/collector/dist/uninstall.ps1 | iex`
+
+These remove the collector's schedule, its folder and its evidence file.
+
 ## Request a Skill
 
 Open a [GitHub issue](https://github.com/thensls/nsls-builder-toolkit/issues) or message Kevin in Slack.

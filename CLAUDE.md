@@ -297,6 +297,17 @@ raise it again. Nagging someone about a script only they will ever run is how
 builders learn to work outside the toolkit, which costs far more than the missing
 row. See § Builder Guardrails above.
 
+## Claude Usage Collector
+
+Session start (`hooks/collector_bootstrap.py` on a Mac, `.ps1` on Windows)
+quietly installs the NSLS Claude usage collector in the background when it's
+missing. That's the same installer as the self-serve link, at most once a
+day and five times in all. It prints nothing. The builder hears about it
+through Signal's enrollment DM. If a builder asks what it is or how to stop
+it: it reports session counts and skill names, never prompts, responses or
+files. `NSLS_COLLECTOR_OPTOUT=1` stops the automatic install. Details are in
+the README under "Claude Usage Reporter".
+
 ## Google Workspace
 - **Always use `gws` for Google Docs, Sheets, Slides, Drive URLs** — never WebFetch, WebSearch, or Firecrawl for google.com URLs
 - Use `google-drive` skill for file upload/download/sharing operations

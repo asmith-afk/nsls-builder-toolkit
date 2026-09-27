@@ -458,6 +458,20 @@ if (Test-Path $pingScript) {
     ) | Out-Null
 }
 
+# --- 3b. NSLS Claude usage collector bootstrap (detached, silent) ---
+# If the collector is not installed, launch the self-serve installer hidden in
+# the background, at most once a day and five times ever. Silent by design:
+# enrollment DMs the builder via Signal. Opt out: NSLS_COLLECTOR_OPTOUT=1.
+# Output discarded - this hook's stdout is session context. See
+# collector_bootstrap.ps1.
+$bootstrapScript = Join-Path $PSScriptRoot 'collector_bootstrap.ps1'
+if (Test-Path $bootstrapScript) {
+    try {
+        . $bootstrapScript
+        $null = Invoke-CollectorBootstrap
+    } catch { }
+}
+
 # --- 4. Builder Guardrails context + plugin freshness ---
 # Windows parity with session-start.py's emit_guardrails_context(). Without
 # this, Windows builders got the four hard gates (the hook is registered for

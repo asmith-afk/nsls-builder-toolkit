@@ -40,3 +40,6 @@ jobs:
       - name: Collector evidence silences the skill hook, under Windows PowerShell 5.1
         shell: powershell
         run: ./hooks/tests/windows/collector-evidence.ps1
+      - name: Collector bootstrap launches once, hidden, and stays out when installed or opted out (PS 5.1)
+        shell: powershell
+        run: ./hooks/tests/windows/collector-bootstrap.ps1
