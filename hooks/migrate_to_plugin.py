@@ -237,17 +237,33 @@ def _read_json(path):
 
 
 def _find_claude():
-    """Locate the claude CLI. None means retry next session."""
+    """argv prefix that runs the claude CLI, or None (retry next session).
+
+    Prefers the finder session-start.py injects as _NSLS_FIND_CLAUDE, which
+    knows every Windows location: the npm shim, the profile installs, and the
+    desktop app's bundled CLI including where a Microsoft Store install really
+    keeps it. This file's own copy knew none of them, so on a PC stage A found
+    nothing and the plugin never installed, silently. The local fallback below
+    only serves a direct run of this script.
+    """
+    injected = globals().get("_NSLS_FIND_CLAUDE")
+    if callable(injected):
+        try:
+            found = injected()
+        except Exception:
+            found = None
+        if found:
+            return list(found)
     found = shutil.which("claude")
     if found:
-        return found
+        return [found]
     for candidate in (
         _CONFIG_DIR / "local" / "claude",
         Path("/usr/local/bin/claude"),
         Path("/opt/homebrew/bin/claude"),
     ):
         if candidate.exists():
-            return str(candidate)
+            return [str(candidate)]
     return None
 
 
@@ -285,13 +301,20 @@ def _claude(args, timeout):
     remaining = _budget_left()
     if remaining <= 1:
         # Don't start work we can't finish; next session picks up here.
-        return False, "migration budget exhausted; will retry next session"
+        return False, _BUDGET_EXHAUSTED
+    effective = min(timeout, remaining)
     try:
         result = subprocess.run(
-            [claude, *args], capture_output=True, text=True,
-            timeout=min(timeout, remaining),
+            [*claude, *args], capture_output=True, text=True, timeout=effective,
         )
         return result.returncode == 0, (result.stdout or "") + (result.stderr or "")
+    except subprocess.TimeoutExpired:
+        # If the run's budget, not the call's own limit, cut it short, this is
+        # the ordinary slow first session: stage A resumes next session. Only a
+        # call that outlived its OWN limit is a real hang worth reporting.
+        if effective < timeout:
+            return False, _BUDGET_EXHAUSTED
+        return False, _TIMED_OUT
     except Exception as e:
         return False, str(e)
 
@@ -381,24 +404,94 @@ def _announce(text):
     )
 
 
+_STATUS = _CONFIG_DIR / ".nsls-plugin-migration-status"
+_NOTICE_EVERY = 24 * 3600
+_BUDGET_EXHAUSTED = "migration budget exhausted; will retry next session"
+_TIMED_OUT = "a plugin command timed out"
+_NOT_FOUND = "claude CLI not found"
+_REASONS = {
+    _NOT_FOUND: "the claude command could not be found",
+    _TIMED_OUT: "a plugin command timed out",
+}
+
+
+def _clean_detail(out):
+    """CLI output, made safe to keep on disk: one line, printable, bounded."""
+    text = "".join(c if c.isprintable() else " " for c in str(out))
+    return " ".join(text.split())[:200]
+
+
+def _report_stuck(out):
+    """Say once a day that setup is stuck, and always record why.
+
+    Stage A used to return without a word when its first CLI call failed; both
+    callers swallow exceptions; and the Windows hook throws away stderr, so the
+    later failures that did print went nowhere either. A PC that could never
+    install the plugin therefore looked exactly like one that had: no gates, no
+    beacons, and nothing said. The status file is what a test or a health check
+    reads; the stdout line is what reaches Claude's context on both platforms.
+
+    Only toolkit-authored words go to stdout. SessionStart output is injected
+    into the model's context, so interpolating raw CLI text there would let an
+    error message add lines, instructions or private paths of its own. The raw
+    detail, cleaned, stays in the local status file.
+
+    Running out of the run's time budget is not being stuck: that is a normal
+    slow first session, and stage A resumes next session.
+    """
+    if out == _BUDGET_EXHAUSTED:
+        return
+    reason = _REASONS.get(out, "a plugin command failed")
+    now = int(time.time())
+    noticed = 0
+    try:
+        noticed = int(json.loads(_STATUS.read_text(encoding="utf-8")).get("noticed", 0))
+    except Exception:
+        pass
+    if noticed > now:
+        noticed = 0  # a future stamp (clock change) must not silence it for good
+    speak = now - noticed >= _NOTICE_EVERY
+    record = {"at": now, "stage": "a", "reason": reason,
+              "detail": _clean_detail(out), "noticed": now if speak else noticed}
+    try:
+        tmp = _STATUS.with_suffix(".tmp")
+        tmp.write_text(json.dumps(record) + "\n", encoding="utf-8")
+        os.replace(tmp, _STATUS)
+    except Exception:
+        pass
+    if speak:
+        print("[NSLS Builder Toolkit] Setup could not finish on this machine: "
+              f"{reason}, so the toolkit plugin and its guardrails are not "
+              "installed here yet. It retries every session. Mention this to "
+              "the user once, in one plain sentence, and suggest they tell the "
+              "NSLS AI team if it keeps happening.")
+
+
+def _clear_stuck():
+    try:
+        _STATUS.unlink()
+    except OSError:
+        pass
+
+
 def _stage_a():
     """Install the plugin. The running session stays on shims."""
     ok, out = _claude(["plugin", "marketplace", "list"], timeout=30)
     if not ok:
+        _report_stuck(out)
         return
     if _MARKETPLACE not in out:
         ok, out = _claude(["plugin", "marketplace", "add", _REPO_URL], timeout=60)
         if not ok:
-            print(f"toolkit migration: marketplace add failed ({out.strip()[:200]}); "
-                  "will retry next session", file=sys.stderr)
+            _report_stuck(out)
             return
     # 60s, not more: the SessionStart hook budget is 90s total and a killed
     # install is safe — stage A is idempotent and retries next session.
     ok, out = _claude(["plugin", "install", _PLUGIN_ID], timeout=60)
     if not ok:
-        print(f"toolkit migration: plugin install failed ({out.strip()[:200]}); "
-              "will retry next session", file=sys.stderr)
+        _report_stuck(out)
         return
+    _clear_stuck()  # unstuck: nothing left to report
     _announce(
         "The NSLS Builder Toolkit installed itself as a Claude Code plugin "
         "(step 1 of 2). Starting next session, the toolkit's agents "
@@ -647,11 +740,12 @@ def run_migration():
         return
     try:
         if not _plugin_installed():
-            _stage_a()
-        elif _plugin_disabled_by_user():
-            return
+            _stage_a()  # stage B never follows in the same session
         else:
-            if _stage_b_reason():
+            # However it got here — an earlier session, or by hand — an
+            # installed plugin means nothing is stuck any more.
+            _clear_stuck()
+            if not _plugin_disabled_by_user() and _stage_b_reason():
                 _stage_b()
     except Exception:
         pass  # fail-open: shims still work; retry next session

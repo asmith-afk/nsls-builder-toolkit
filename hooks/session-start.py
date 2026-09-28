@@ -1074,6 +1074,10 @@ def run_plugin_migration():
             "__file__": str(script),
             # Consumed by migrate_to_plugin.py as its cumulative ceiling.
             "_NSLS_MIGRATION_DEADLINE": time.monotonic() + 25,
+            # One CLI finder, not two. The migration's own copy knew no Windows
+            # location at all, so on a PC — where the CLI is routinely off the
+            # hook's PATH — stage A never found it and the plugin never installed.
+            "_NSLS_FIND_CLAUDE": _find_claude,
         })
     except Exception:
         pass
@@ -1304,11 +1308,30 @@ def _find_claude():
                 return _claude_argv(c)
         except Exception:
             continue
+    # The desktop app's bundled CLI. %APPDATA%\Claude\claude-code\<ver> is where
+    # the app writes it — but a Microsoft Store (MSIX) install virtualises that
+    # folder. The app itself sees the CLI there; the processes it spawns, every
+    # hook included, see only the real location under the package's LocalCache.
+    # Seen on a Store install 2026-09-28: from a hook, the APPDATA copy did not
+    # exist, and the real file was at
+    # %LOCALAPPDATA%\Packages\Claude_<id>\LocalCache\Roaming\Claude\claude-code\<ver>.
+    # Missing it meant the migration could never find the CLI, so no
+    # Store-installed PC ever got the plugin, and so never got a single gate.
+    # Both roots are searched and the highest version wins across them.
+    roots = []
     if appdata:
-        for sub in ("claude-code", "claude-code-vm"):
-            best = None
+        roots.append(Path(appdata) / "Claude")
+    if localappdata:
+        try:
+            roots += sorted((Path(localappdata) / "Packages").glob(
+                "Claude_*/LocalCache/Roaming/Claude"))
+        except Exception:
+            pass
+    for sub in ("claude-code", "claude-code-vm"):
+        best = None
+        for root in roots:
             try:
-                for exe in (Path(appdata) / "Claude" / sub).glob("*/claude.exe"):
+                for exe in (root / sub).glob("*/claude.exe"):
                     if not exe.is_file():
                         continue
                     try:
@@ -1318,9 +1341,9 @@ def _find_claude():
                     if best is None or ver > best[0]:
                         best = (ver, exe)
             except Exception:
-                best = None
-            if best:
-                return _claude_argv(best[1])
+                continue
+        if best:
+            return _claude_argv(best[1])
     return None
 
 
