@@ -2245,6 +2245,8 @@ def emit_guardrails_context():
             print("\n" + out.stdout.strip())
     except Exception:
         pass  # no memory is the status quo, not a failure worth surfacing
+
+
 def bootstrap_collector():
     """Install the NSLS Claude usage collector in the background if it is not
     here yet. Silent: the collector's enrollment DMs the builder via Signal.
@@ -2262,7 +2264,25 @@ def bootstrap_collector():
         pass
 
 
+def _record_beacon():
+    """Note that the PLUGIN copy of this hook ran here (no-op from a clone).
+
+    Stage B retires the installer's shims, and on Windows it has never been
+    allowed to, because nobody could prove the plugin's hooks fire there. This
+    is that proof, recorded per hook rather than per plugin: SessionStart
+    running says nothing about whether PreToolUse does.
+    """
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import plugin_beacon
+
+        plugin_beacon.record("session-start", __file__)
+    except Exception:
+        pass
+
+
 def main():
+    _record_beacon()
     git_pull()
     run_plugin_migration()
     ensure_plugin_fresh()
@@ -2277,6 +2297,11 @@ def main():
 # (its own script already handles pulls, pointers and the ping). Keeping this in
 # the Python emitter means the section extraction and path resolution exist once.
 if __name__ == "__guardrails__":
+    # Deliberately NOT a beacon. This run_name is how session-start.ps1 — the
+    # SHIM — calls into this file, so recording here would let the shim certify
+    # its own retirement. Only the plugin runtime's own invocation counts, and
+    # plugin_beacon.record() checks the path it is running from for exactly
+    # this reason.
     try:
         emit_guardrails_context()
     except Exception:

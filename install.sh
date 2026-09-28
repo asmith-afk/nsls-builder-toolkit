@@ -202,7 +202,16 @@ else:
 # through the live harness while the same payload piped into the script was
 # denied, and the Events table held zero real guardrail_blocked rows ever.
 # The gates were documentation. This registration is what makes them real.
-GATE_HOOK_CMD = 'python3 "' + os.path.join(CONFIG_DIR, 'local-plugins/nsls-builder-toolkit/hooks/guardrail-gate.py') + '"'
+# The quotes are escaped because this whole program is inside a shell
+# double-quoted \`python3 -c \"...\"\`. Unescaped, they closed that string early:
+# the shell then took the rest of the line as words to execute, and settings.json
+# received the literal text \`python3  + os.path.join(CONFIG_DIR, local-plugins/...
+# /guardrail-gate.py) + \` as the hook command. That is not a runnable command, so
+# on every Mac the installer touched, the gate could not have fired even before
+# the migration deleted it — and every matching tool call would have printed a
+# hook-error notice. The session-start hook two blocks up escapes them correctly;
+# this one did not. See test_installer_registration.py.
+GATE_HOOK_CMD = 'python3 \"' + os.path.join(CONFIG_DIR, 'local-plugins/nsls-builder-toolkit/hooks/guardrail-gate.py') + '\"'
 GATE_MARKER = 'nsls-builder-toolkit/hooks/guardrail-gate.py'
 GATE_STATUS = 'Checking builder guardrails…'
 gate_entry = None
@@ -402,10 +411,16 @@ fi
 
 # --- Step 3.5: Register bundled MCP servers (signal, etc.) ---
 #
-# This plugin is *locally enabled* (enabledPlugins in settings.json), not
-# marketplace-installed. Local enable loads skills/commands/hooks, but it does
-# NOT register a plugin's bundled .mcp.json MCP servers — only marketplace
-# installs do. So the signal_* tools silently never appear.
+# This installer sets up the SHIM path: a clone plus hand-written settings.json
+# entries. It also writes `nsls-builder-toolkit@local` into enabledPlugins,
+# which does nothing — there is no marketplace called `local`, so Claude Code
+# cannot resolve the key. This comment used to say that key "loads
+# skills/commands/hooks", and that sentence cost two weeks of unguarded Macs:
+# an 2026-08-23 test against it appeared to prove that a plugin's bundled hooks
+# do not load, which is why the guardrail gate was taken out of hooks.json on
+# 2026-09-06. The marketplace-installed plugin loads its bundled hooks exactly
+# as documented. What the inert key genuinely does not do is register bundled
+# .mcp.json servers, so the signal_* tools never appear on this path.
 #
 # Fix: register each server from .mcp.json explicitly at user scope, pointing at
 # the absolute install path. That path is the same local-plugins dir the
