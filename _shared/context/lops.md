@@ -1,5 +1,5 @@
 # Lines of Priority (LOPs)
-_Last synced: 2026-09-21_
+_Last synced: 2026-09-28_
 
 ## L1: Simplification/Efficiency
 **Owner**: Anish Patel | **Health**: On Track
@@ -71,11 +71,11 @@ _Last synced: 2026-09-21_
 
 ### L2: Develop brand tracking score & launch 10 B2B/B2C brand improvement initiatives
 **Owner**: Michael O'Brien | **Health**: On Track | **Deadline**: 2026-12-31
-> Goal progressing but DRI acknowledges need for dedicated focus time. Has scheduled focus session for next week to maintain momentum.
+> Brand tracking score development and 10 B2B/B2C initiatives remain on track for end of year completion. Currently bandwidth-constrained due to response rate priorities, but this becomes the focus entering Q4.
 
 ### L2: Increase ARPM1 to $140
-**Owner**: Michael O'Brien | **Health**: At Risk
-> Multiple dependencies blocking progress: need to track A&E purchases for existing members, update lifecycle communications post speaker broadcast and SNTs, and migrate post-induction emails to Customer.io (delayed until July). These blockers may impact timeline for reaching $140 ARPM target.
+**Owner**: Michael O'Brien | **Health**: On Track | **Deadline**: 2026-12-31
+> Currently at $140.51 YTD (pending finance confirmation). DRI anticipates fall ARPM decline and is planning mitigation through increased A&E and Shop sales to maintain the target.
 
 ### L2: Enrollment Funnel Completion Rate (MOFU)
 **Owner**: Adam Stone | **Health**: On Track | **Deadline**: 2026-12-31

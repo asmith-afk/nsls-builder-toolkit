@@ -192,6 +192,7 @@
     "department": "Client Services",
     "manages": [
       "Chris Higbee",
+      "Devin Lasker",
       "Melvin Rosal"
     ]
   },
@@ -311,6 +312,7 @@
     "slack": "U02FSV479GC",
     "department": "Marketing",
     "manages": [
+      "Angel Gonzalez",
       "Elizabeth Garretson",
       "Stefani Stout"
     ]
@@ -343,9 +345,7 @@
     "slack": "U08EVP8CF8A",
     "department": "Marketing",
     "manages": [
-      "Boris Savoie Doyer (DUPLICATE - merged into the bdoyer@nsls.org record)",
       "Collin Wood",
-      "Devin Lasker",
       "Dylan Blaty",
       "Jordyn Tannenbaum",
       "Joseph Cupka",
@@ -372,15 +372,6 @@
       "Rachel Porter",
       "Tatiana McGrath"
     ]
-  },
-  {
-    "name": "Boris Savoie Doyer (DUPLICATE - merged into the bdoyer@nsls.org record)",
-    "title": "",
-    "manager": "Adam Stone",
-    "email": "bsavoiedoyer@nsls.org",
-    "slack": "",
-    "department": "Marketing",
-    "manages": []
   },
   {
     "name": "Rachel Porter",
@@ -414,7 +405,7 @@
   },
   {
     "name": "Leila McAvoy",
-    "title": "",
+    "title": "Contractor",
     "manager": "",
     "email": "",
     "slack": "",
@@ -432,7 +423,7 @@
   },
   {
     "name": "Luis Fernando Yupanqui Taco",
-    "title": "",
+    "title": "Contractor",
     "manager": "",
     "email": "",
     "slack": "",
@@ -585,7 +576,7 @@
   },
   {
     "name": "David Weber ",
-    "title": "",
+    "title": "Contractor",
     "manager": "",
     "email": "dweber@nsls.org",
     "slack": "U086Y4L1ZED",
@@ -613,7 +604,7 @@
   {
     "name": "Angel Gonzalez",
     "title": "Contractor",
-    "manager": "Noah Camenker",
+    "manager": "Tatiana McGrath",
     "email": "agonzalez@nsls.org",
     "slack": "U0BPJ1E73PY",
     "department": "Unknown",
@@ -1018,15 +1009,6 @@
     ]
   },
   {
-    "name": "Danielle Mariani",
-    "title": "Senior Culture and Organizational Strategist",
-    "manager": "Heather Darnell",
-    "email": "dmariani@nsls.org",
-    "slack": "UHXFN781L",
-    "department": "Human Resources",
-    "manages": []
-  },
-  {
     "name": "Heather Darnell",
     "title": "Senior Director, Human Resources",
     "manager": "Cory Capoccia",
@@ -1034,7 +1016,6 @@
     "slack": "U03D1HK963E",
     "department": "Human Resources",
     "manages": [
-      "Danielle Mariani",
       "Jenna Fontanez"
     ]
   },
@@ -1044,6 +1025,15 @@
     "manager": "Jordan Perry",
     "email": "fhobbs@nsls.org",
     "slack": "U06QJ0XDH0E",
+    "department": "Operations",
+    "manages": []
+  },
+  {
+    "name": "Danielle Mariani",
+    "title": "Senior Strategic Operations Lead",
+    "manager": "Chelsea Byers",
+    "email": "dmariani@nsls.org",
+    "slack": "UHXFN781L",
     "department": "Operations",
     "manages": []
   },
@@ -1109,6 +1099,7 @@
     "slack": "U0AT9R3DAT1",
     "department": "Operations",
     "manages": [
+      "Danielle Mariani",
       "Jordan Perry",
       "Kimberly Campbell",
       "LaShaundra Randolph",
@@ -1257,7 +1248,7 @@
   {
     "name": "Devin Lasker",
     "title": "Vice President of Strategic Partnerships",
-    "manager": "Adam Stone",
+    "manager": "Ashleigh Smith",
     "email": "dlasker@nsls.org",
     "slack": "UA1JFKPUP",
     "department": "Sales",

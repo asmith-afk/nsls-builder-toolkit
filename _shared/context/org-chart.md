@@ -1,5 +1,5 @@
 # NSLS Org Chart
-_Last synced: 2026-09-21_
+_Last synced: 2026-09-28_
 
 ## Business Intelligence
 
@@ -78,7 +78,6 @@ _Last synced: 2026-09-21_
 
 | Name | Title | Manager | Email | Slack |
 |------|-------|---------|-------|-------|
-| Danielle Mariani | Senior Culture and Organizational Strategist | Heather Darnell | dmariani@nsls.org | UHXFN781L |
 | Heather Darnell | Senior Director, Human Resources | Cory Capoccia | hdarnell@nsls.org | U03D1HK963E |
 | Jenna Fontanez | Director, Talent Management | Heather Darnell | jfontanez@nsls.org | U03RR8TKEDA |
 | Joanne Sandoval | Early Talent Acquisition Specialist | Jenna Fontanez | jsandoval@nsls.org | U04UQR9SBFH |
@@ -89,7 +88,6 @@ _Last synced: 2026-09-21_
 |------|-------|---------|-------|-------|
 | Adam Stone | Digital Marketing | Gary Tuerack | astone@nsls.org | U08EVP8CF8A |
 | Andrew Hesse | Email Marketing Manager | Michael O'Brien | ahesse@nsls.org | U04LPUT7WT1 |
-| Boris Savoie Doyer (DUPLICATE - merged into the bdoyer@nsls.org record) |  | Adam Stone | bsavoiedoyer@nsls.org |  |
 | Dylan Blaty | Design Lead, Product & Growth | Adam Stone | dblaty@nsls.org | U0ANJR7P66S |
 | Eric Gerbehy | Sr Logistics Coordinator | Rachel Porter | egerbehy@nsls.org | U02CHG5GJCV |
 | Joshua Hrala | Senior Demand Generation Manager | Michael O'Brien | jhrala@nsls.org | U02EG6LTV4P |
@@ -130,6 +128,7 @@ _Last synced: 2026-09-21_
 | Name | Title | Manager | Email | Slack |
 |------|-------|---------|-------|-------|
 | Chelsea Byers | Head of Operations | Kevin Prentiss | cbyers@nsls.org | U0AT9R3DAT1 |
+| Danielle Mariani | Senior Strategic Operations Lead | Chelsea Byers | dmariani@nsls.org | UHXFN781L |
 | Dasha Cherkasov | Chapter Event Manager | Jordan Perry | dcherkasov@nsls.org | U02A8NJN1QF |
 | Derald Dryman | Senior Manager of Brand and Community Engagement | Joseph Cupka | ddryman@nsls.org | UCG6HQQ05 |
 | Freda Hobbs | Chapter Events Manager | Jordan Perry | fhobbs@nsls.org | U06QJ0XDH0E |
@@ -168,7 +167,7 @@ _Last synced: 2026-09-21_
 
 | Name | Title | Manager | Email | Slack |
 |------|-------|---------|-------|-------|
-| Devin Lasker | Vice President of Strategic Partnerships | Adam Stone | dlasker@nsls.org | UA1JFKPUP |
+| Devin Lasker | Vice President of Strategic Partnerships | Ashleigh Smith | dlasker@nsls.org | UA1JFKPUP |
 
 ## Unknown
 
@@ -176,7 +175,7 @@ _Last synced: 2026-09-21_
 |------|-------|---------|-------|-------|
 | Adam Carpenter | Contractor | Kevin Prentiss | acarpenter@nsls.org | U0BPDNUNQD9 |
 | Aicel Tavares | Contractor | Alejandro Gabriel | atavares@nsls.org | U0A3A57KSB1 |
-| Angel Gonzalez | Contractor | Noah Camenker | agonzalez@nsls.org | U0BPJ1E73PY |
+| Angel Gonzalez | Contractor | Tatiana McGrath | agonzalez@nsls.org | U0BPJ1E73PY |
 | Angelyn Kempe | Contractor | Kevin Prentiss | akempe@nsls.org | U0B6JBUSKF0 |
 | Bogdan Tarbujaru | Contractor | Juan Maggi | tbogdan@nsls.org | U08DNV4U0CE |
 | Boris Doyer | Contractor | Michael O'Brien | bdoyer@nsls.org | U096X7F82MP |
@@ -184,7 +183,7 @@ _Last synced: 2026-09-21_
 | Christophre Munns | Contractor | Kevin Prentiss | mmunns@nsls.org | U0BPDNT2Q8K |
 | Collin Wood | Contractor | Adam Stone | cwood@nsls.org | U08RLLMFJTU |
 | Colorado Coberly | Contractor | Kevin Prentiss | kcoberly@nsls.org | U0B286J7NUE |
-| David Weber  |  |  | dweber@nsls.org | U086Y4L1ZED |
+| David Weber  | Contractor |  | dweber@nsls.org | U086Y4L1ZED |
 | Elizabeth Garretson | Contractor | Tatiana McGrath | egarretson@nsls.org | U07SRF50VGD |
 | Gabriela Cordeiro | Contractor | Michael O'Brien | gcordeiro@nsls.org | U0AF9KUEVAM |
 | Ionut Mutascu | Contractor | Juan Maggi | imutascu@nsls.org | U08EJFSTVPS |
@@ -192,8 +191,8 @@ _Last synced: 2026-09-21_
 | Janine Walsh | Contractor | Jordan Perry | jwalsh@nsls.org | U0ADTNZUB8D |
 | Jasmine Artis | Contractor | Jordan Perry | jartis@nsls.org | U0ABXMAAVEU |
 | Jose Perdomo | Contractor | Alejandro Gabriel | jperdomo@nsls.org | U0BELDDRV60 |
-| Leila McAvoy |  |  |  |  |
-| Luis Fernando Yupanqui Taco |  |  |  |  |
+| Leila McAvoy | Contractor |  |  |  |
+| Luis Fernando Yupanqui Taco | Contractor |  |  |  |
 | Malvin Vital | Contractor | Alejandro Gabriel | mvital@nsls.org | U0ASU1LFNKU |
 | Matthew Schuman | Contractor | Jordan Perry | mschuman@nsls.org | U0AAX0KFAR1 |
 | Pascal Zamprelli | Contractor | Michael O'Brien | pzamprelli@nsls.org | U08T2KEUB0Q |
