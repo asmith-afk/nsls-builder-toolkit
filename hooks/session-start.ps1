@@ -12,7 +12,6 @@ $SkillsDir   = Join-Path $ClaudeDir 'skills'
 $LocalDir    = Join-Path $ClaudeDir 'local-plugins'
 $BuilderDir  = Join-Path $LocalDir  'nsls-builder-toolkit'
 $PersonalDir = Join-Path $LocalDir  'nsls-personal-toolkit'
-$Marker      = 'local-plugins\nsls-'
 
 # --- 1. git pull (direct call; the prior Start-Process form failed silently on
 #        Windows, freezing toolkits weeks behind). ff-only never merges.
@@ -523,12 +522,24 @@ function Sync-Pointers {
         $desc = if ($fm.desc) { $fm.desc } else { "NSLS toolkit skill: $($skillFolder.Name)" }
         $destDir = Join-Path $SkillsDir $skillFolder.Name
         $destMd  = Join-Path $destDir   'SKILL.md'
+        # Refresh an existing file only if it is OUR pointer to THIS skill: it
+        # must name this skill's own path, local-plugins/<plugin>/skills/<name>/
+        # SKILL.md. That is the only ownership check before an overwrite, so it
+        # has to be exact. The old check looked for 'local-plugins\nsls-' with a
+        # backslash, while the pointers written here use forward slashes - so it
+        # never matched, no pointer was ever refreshed, and changed descriptions
+        # never reached Windows builders. A looser 'local-plugins/nsls-' would
+        # have matched any builder skill that merely mentions a toolkit path
+        # (personal-toolkit stubs do, to log credit) and overwritten it.
+        # Backslashes are turned forward first, so a pointer written with a
+        # Windows path is still recognised, and [string] makes an empty file safe.
+        $ownPath = "local-plugins/$pluginName/skills/$($skillFolder.Name)/SKILL.md"
         if (Test-Path $destMd) {
-            $existing = Get-Content $destMd -Raw -Encoding UTF8
-            if ($existing -notmatch [regex]::Escape($Marker)) { continue }
+            $existing = [string](Get-Content $destMd -Raw -Encoding UTF8)
+            if (-not ($existing -replace '\\', '/').Contains($ownPath)) { continue }
         }
         if (-not (Test-Path $destDir)) { New-Item -ItemType Directory -Path $destDir | Out-Null }
-        $pointerPath = "~/.claude/local-plugins/$pluginName/skills/$($skillFolder.Name)/SKILL.md"
+        $pointerPath = "~/.claude/$ownPath"
         $pointer = @"
 ---
 name: $($fm.name)
