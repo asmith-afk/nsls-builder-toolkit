@@ -94,6 +94,22 @@ with tempfile.TemporaryDirectory() as tmp:
               "can't open file" not in out.stderr and "No such file" not in out.stderr,
               f"({out.stderr[:160]})")
 
+    # The whole class, not just the instance. Everything between those quotes
+    # is expanded by the shell before Python sees it -- including comments. A
+    # backtick in a comment in this block once ran `claude plugin install` as a
+    # command substitution during the install.
+    import re as _re
+    offenders = []
+    for i in range(start + 1, end):
+        line = lines[i]
+        for kind, pat in (("backtick", r"(?<!\\)`"), ("quote", r'(?<!\\)"'),
+                          ("expansion", r"(?<!\\)\$[({A-Za-z_]")):
+            if _re.search(pat, line):
+                offenders.append((i + 1, kind, line.strip()[:70]))
+                break
+    check("no unescaped shell metacharacters in the embedded program",
+          not offenders, f"({offenders[:3]})")
+
     for c in commands:
         if "session-start" in c or "skill-event" in c:
             check(f"{'session-start' if 'session-start' in c else 'skill-event'}"

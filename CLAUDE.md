@@ -80,6 +80,50 @@ Sitting above the whole field means nothing landing ahead of you knocks your PR
 back to a failing gate. Whoever merges after you bumps again — one of the two
 always has to, and it may as well be the PR that is not ready yet.
 
+## Hooks are registered in `hooks/hooks.json`. Nowhere else.
+
+The plugin's own `hooks/hooks.json` is the only place a toolkit hook may be
+registered. Not `settings.json`, not from an installer, not "as well as" —
+**only** there.
+
+Why this is a rule and not a preference. A hook written into a builder's
+`settings.json` can only be changed by that builder re-running the installer,
+and they don't: there were no install events on any platform for the three
+weeks after the gate shipped. A hook in `hooks/hooks.json` ships with the
+version and reaches every machine within a day. Worse, `settings.json` is the
+surface migration stage B deletes — so a hook registered only there is a hook
+with a delete date. That is not hypothetical: #168 registered the four hard
+gates through the installers on 2026-09-05, 13a9630 removed the `hooks.json`
+copy the next day, and every Mac that had finished migrating ran no gate at all
+until 2026-09-20. Nobody noticed, because "no blocks" and "no gate" produce the
+same empty table.
+
+Three things follow, and each has already been got wrong once:
+
+- **One entry per hook, through `hooks/run-hook.sh`.** `hooks.json` has no OS
+  conditional. A bare `python3` command errors on stock Windows (a Store alias
+  that exits without running) and registering the hook twice, `python3` and
+  `py -3`, makes the absent twin print a hook-error notice on every matching
+  tool call. The launcher resolves the interpreter and names
+  `"shell": "bash"` explicitly.
+- **Anchor the matcher, and keep every tool that can run a command in it.**
+  `"Bash|PowerShell|Write|Edit"` is a substring match: it admits `BashOutput`
+  and `KillBash`, and reaches `MultiEdit` by accident while the gates read
+  fields a MultiEdit payload does not carry. Write
+  `^(Bash|PowerShell|Write|Edit|MultiEdit|NotebookEdit)$` and normalise the
+  payload. PowerShell belongs there: Claude Code enables it automatically on
+  Windows and it carries its command in the same field Bash does. Admitting it
+  is only half the job — the command gates open with `if tool != "Bash"`, so
+  `normalize_call` presents it as Bash or the matcher looks fixed while
+  nothing judges the call.
+- **Never retire a shim you cannot prove you replaced.** `hooks/plugin_beacon.py`
+  records, per hook, that the plugin's copy ran on this machine, and stage B
+  retires that hook's `settings.json` entry only then. Per hook, not per plugin
+  and never per platform: SessionStart firing says nothing about PreToolUse.
+
+If a change here would leave a hook registered in `settings.json` only, it is
+wrong. Add the test to `hooks/tests/test_gate_registration.py`.
+
 ## PR Review — Macroscope
 
 Macroscope is a code review tool — it pays off when the PR contains claims about APIs, SDKs, query syntax, data system behavior, or other technical facts it can verify against documentation patterns. It has a per-review cost. Use it where it earns its keep.
