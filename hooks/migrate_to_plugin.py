@@ -127,6 +127,44 @@ def _iter_hook_commands(settings):
             for h in entries:
                 if isinstance(h, dict):
                     yield str(h.get("command", ""))
+
+
+# ...and which shim belongs to which hook. Stage B used to strip every entry
+# carrying the marker in one go, which is only safe if the plugin has replaced
+# ALL of them. It has not, per hook and per machine: on Windows nothing had
+# replaced any of them, and "SessionStart fired" is not evidence that PreToolUse
+# does. Retiring a shim is now decided one hook at a time, against that hook's
+# own beacon. The cost of getting this wrong is not abstract — skill-event is
+# the credit logger, and losing it silently costs builders the record of their
+# work, which is the thing NSLS measures them by.
+_HOOK_SCRIPTS = {
+    "session-start": ("session-start.py", "session-start.ps1"),
+    "skill-event": ("skill-event.sh", "skill-event.ps1"),
+    "guardrail-gate": ("guardrail-gate.py",),
+}
+
+
+def _beacon_fired(hook: str) -> bool:
+    """Has the PLUGIN copy of this hook been seen running on this machine?"""
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import plugin_beacon
+
+        return plugin_beacon.fired(hook)
+    except Exception:
+        return False  # no evidence is not evidence of parity
+
+
+def _proven_hooks():
+    return {h for h in _HOOK_SCRIPTS if _beacon_fired(h)}
+
+
+def _hook_for_command(command: str):
+    normalised = _norm(command)
+    for hook, scripts in _HOOK_SCRIPTS.items():
+        if any(s in normalised for s in scripts):
+            return hook
+    return None
 # Matches ONLY org-toolkit pointer stubs. Personal-toolkit stubs also mention
 # nsls-builder-toolkit (their credit-logging command calls this repo's
 # skill-event.sh), so the discriminator must be the skills path, not the repo
@@ -370,8 +408,14 @@ def _stage_a():
     )
 
 
-def _remove_settings_hooks():
-    """Drop hook entries whose command references this repo. Returns count."""
+def _remove_settings_hooks(only=None):
+    """Drop shim hook entries for the named hooks. Returns count.
+
+    `only` is the set of hooks whose plugin copy has been PROVEN to run here.
+    An entry for a hook outside that set is left alone, however old it is.
+    """
+    if only is not None and not only:
+        return 0
     settings = _read_json(_SETTINGS)
     hooks = settings.get("hooks")
     if not isinstance(hooks, dict):
@@ -389,10 +433,16 @@ def _remove_settings_hooks():
         kept_groups = []
         for group in groups:
             entries = group.get("hooks", []) if isinstance(group, dict) else []
-            kept = [
-                h for h in entries
-                if not _is_shim_command(h.get("command", ""))
-            ]
+            kept = []
+            for h in entries:
+                command = str(h.get("command", ""))
+                if not _is_shim_command(command):
+                    kept.append(h)
+                    continue
+                hook = _hook_for_command(command)
+                if only is not None and hook not in only:
+                    kept.append(h)  # nothing has replaced this one yet
+            
             removed += len(entries) - len(kept)
             if kept:
                 group["hooks"] = kept
@@ -411,10 +461,17 @@ def _remove_settings_hooks():
     return removed
 
 
-def _remove_org_stubs():
+def _remove_org_stubs(allowed=True):
     """Delete org-toolkit pointer stubs. Returns count. Never touches
-    personal-toolkit stubs or user-authored skills (marker check)."""
+    personal-toolkit stubs or user-authored skills (marker check).
+
+    `allowed` is False until the plugin has been seen running here: the stubs
+    are how skills reach a machine that has no plugin, and on Windows that has
+    been every machine.
+    """
     removed = 0
+    if not allowed:
+        return 0
     if not _SKILLS_DIR.is_dir():
         return 0
     for entry in sorted(_SKILLS_DIR.iterdir()):
@@ -457,11 +514,21 @@ def _stage_b():
     delete, a timed-out mcp remove) retry instead of being orphaned once the
     settings hooks are gone.
     """
-    if sys.platform == "win32":
-        # The plugin's hooks.json invokes python3/bash, which is unverified on
-        # Windows. Until parity is proven, Windows keeps the settings-based
-        # shims (its plugin hooks fail silently, so nothing double-fires).
-        return
+    # Windows is no longer excluded wholesale. It was, because the plugin's
+    # hooks.json named `python3` — a Store alias there — and nobody could prove
+    # any of it ran. Both halves of that have changed: hooks.json now goes
+    # through run-hook.sh, which resolves the interpreter, and the beacons below
+    # replace the guess with per-hook evidence from this machine. A hook whose
+    # plugin copy has not been observed running keeps its shim, on every
+    # platform, for as long as that stays true.
+    #
+    # Until all three are proven, a machine runs both copies of the proven ones.
+    # That overlap is bounded and deliberate: the tracker dedupes session points
+    # per builder per day, the gate single-flights on tool_use_id, and a second
+    # git pull loses a race on index.lock and gives up. It ends on its own, one
+    # hook at a time, as each beacon lands.
+    proven = _proven_hooks()
+
     # CLI calls first: the claude CLI may normalize/rewrite settings.json as a
     # side effect (observed live: it rewrote a model alias during `mcp get`),
     # so our own settings edit must come after every CLI invocation.
@@ -472,11 +539,14 @@ def _stage_b():
     # this run goes on to write the done marker, so nothing ever comes back
     # for it.
     signal_moved, signal_clean = _remove_user_scope_signal()
-    hooks_removed = _remove_settings_hooks()
-    stubs_removed = _remove_org_stubs()
+    hooks_removed = _remove_settings_hooks(only=proven)
+    stubs_removed = _remove_org_stubs(allowed="session-start" in proven)
 
     local_key_removed = _remove_inert_local_enablement()
 
+    # The done-marker is permanent, so it is withheld until every shim is gone.
+    # An unproven hook therefore keeps stage B coming back each session, which
+    # is exactly the retry this needs: the beacon may be one Skill call away.
     clean = signal_clean and not _shims_present() and not _org_stubs_exist()
     if clean:
         _DONE.write_text(
