@@ -69,6 +69,21 @@ $Tracker   = if ($env:NSLS_TRACKER_URL) { $env:NSLS_TRACKER_URL } else { 'https:
 # consumer of settings.json (confirmed live). Route every JSON/text write
 # through this so nothing we write ever carries a BOM.
 $Utf8NoBom = New-Object System.Text.UTF8Encoding $false
+# True only if $Text is exactly a pointer this toolkit writes: front matter,
+# then a single "Read and follow" line naming this skill's own path. This is the
+# only ownership check before an overwrite. Merely CONTAINING the path is not
+# enough: a builder's own skill that credits or links the toolkit skill would
+# match that and be overwritten, and so would a pointer the builder extended
+# with notes of their own. Backslashes are turned forward first, so a pointer
+# naming a Windows path still counts.
+function Test-OwnPointer {
+    param([string]$Text, [string]$OwnPath)
+    $t = (($Text -replace '\\', '/') -replace "`r`n", "`n").TrimStart([char]0xFEFF)
+    $pattern = '\A---\n(?:[^\n]*\n)*?---\n\s*Read and follow the full skill at `(?:[^`\n]*/)?' +
+        [regex]::Escape($OwnPath) + '`\.\s*\z'
+    return [regex]::IsMatch($t, $pattern)
+}
+
 function Write-TextNoBom {
     param([string]$Path, [string]$Content)
     [System.IO.File]::WriteAllText($Path, $Content, $Utf8NoBom)
@@ -574,12 +589,15 @@ foreach ($skillFolder in Get-ChildItem (Join-Path $PluginDir 'skills') -Director
     $name = $fmName.Groups[1].Value.Trim()
     $destDir = Join-Path $SkillsDir $skillFolder.Name
     $destMd  = Join-Path $destDir 'SKILL.md'
+    # Same exact-ownership rule as session-start.ps1: a file that merely
+    # mentions a toolkit path may be a skill the builder wrote.
+    $ownPath = "local-plugins/nsls-builder-toolkit/skills/$($skillFolder.Name)/SKILL.md"
     if (Test-Path $destMd) {
-        $existing = Get-Content $destMd -Raw -Encoding UTF8
-        if ($existing -notmatch 'local-plugins[\\/]nsls-builder-toolkit') { continue }
+        $existing = [string](Get-Content $destMd -Raw -Encoding UTF8)
+        if (-not (Test-OwnPointer -Text $existing -OwnPath $ownPath)) { continue }
     }
     if (-not (Test-Path $destDir)) { New-Item -ItemType Directory -Path $destDir | Out-Null }
-    $ptr = "~/.claude/local-plugins/nsls-builder-toolkit/skills/$($skillFolder.Name)/SKILL.md"
+    $ptr = "~/.claude/$ownPath"
     $pointer = @"
 ---
 name: $name
