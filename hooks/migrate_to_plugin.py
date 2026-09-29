@@ -413,6 +413,10 @@ _REASONS = {
     _NOT_FOUND: "the claude command could not be found",
     _TIMED_OUT: "a plugin command timed out",
 }
+# A budget cut once is a slow session. The same cut session after session is a
+# step that can never finish in the time it is given: stuck by another name.
+_OUT_OF_TIME = "each attempt runs out of time"
+_CUTS_BEFORE_STUCK = 3
 
 
 def _clean_detail(out):
@@ -436,22 +440,40 @@ def _report_stuck(out):
     error message add lines, instructions or private paths of its own. The raw
     detail, cleaned, stays in the local status file.
 
-    Running out of the run's time budget is not being stuck: that is a normal
-    slow first session, and stage A resumes next session.
+    Running out of the run's time budget once is not being stuck: that is a
+    normal slow first session, and stage A resumes next session. But a machine
+    where some step always needs longer than the budget allows would never
+    install and never say so, which is the silent failure this exists to end.
+    So budget cuts are counted, recorded every time, and said out loud once
+    they have happened _CUTS_BEFORE_STUCK sessions in a row.
     """
-    if out == _BUDGET_EXHAUSTED:
-        return
-    reason = _REASONS.get(out, "a plugin command failed")
-    now = int(time.time())
-    noticed = 0
+    prev = {}
     try:
-        noticed = int(json.loads(_STATUS.read_text(encoding="utf-8")).get("noticed", 0))
+        prev = json.loads(_STATUS.read_text(encoding="utf-8"))
+        if not isinstance(prev, dict):
+            prev = {}
     except Exception:
         pass
+    now = int(time.time())
+    try:
+        noticed = int(prev.get("noticed", 0))
+    except (TypeError, ValueError):
+        noticed = 0
     if noticed > now:
         noticed = 0  # a future stamp (clock change) must not silence it for good
-    speak = now - noticed >= _NOTICE_EVERY
-    record = {"at": now, "stage": "a", "reason": reason,
+    if out == _BUDGET_EXHAUSTED:
+        reason = _OUT_OF_TIME
+        try:
+            cuts = int(prev.get("cuts", 0)) + 1 if prev.get("reason") == _OUT_OF_TIME else 1
+        except (TypeError, ValueError):
+            cuts = 1
+        loud = cuts >= _CUTS_BEFORE_STUCK
+    else:
+        reason = _REASONS.get(out, "a plugin command failed")
+        cuts = 0
+        loud = True
+    speak = loud and now - noticed >= _NOTICE_EVERY
+    record = {"at": now, "stage": "a", "reason": reason, "cuts": cuts,
               "detail": _clean_detail(out), "noticed": now if speak else noticed}
     try:
         tmp = _STATUS.with_suffix(".tmp")

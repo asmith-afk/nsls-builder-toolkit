@@ -1063,17 +1063,27 @@ def run_plugin_migration():
     sync_pointers and keeps the common path well inside budget. A first
     migration may need more than one session to finish, which is exactly how
     the stages are built — both are idempotent and resume next session.
+
+    Stage A gets 45s. It only runs where the plugin is not installed, and there
+    ensure_plugin_fresh has nothing to check — the caller skips it for the
+    rest of the session (the return value says so), because a plugin stage A
+    has just installed is fresh by definition. At 25s a step that routinely
+    needs longer, such as `plugin install` on a slow machine, was cut at the
+    same point every session and never finished.
+
+    Returns True when this session belonged to stage A.
     """
     script = PLUGIN_DIR / "hooks" / "migrate_to_plugin.py"
     if not script.exists():
-        return
+        return False
+    stage_a = not org_plugin_installed()
     try:
         code = compile(script.read_text(encoding="utf-8"), str(script), "exec")
         exec(code, {
             "__name__": "nsls_migrate",
             "__file__": str(script),
             # Consumed by migrate_to_plugin.py as its cumulative ceiling.
-            "_NSLS_MIGRATION_DEADLINE": time.monotonic() + 25,
+            "_NSLS_MIGRATION_DEADLINE": time.monotonic() + (45 if stage_a else 25),
             # One CLI finder, not two. The migration's own copy knew no Windows
             # location at all, so on a PC — where the CLI is routinely off the
             # hook's PATH — stage A never found it and the plugin never installed.
@@ -1081,6 +1091,7 @@ def run_plugin_migration():
         })
     except Exception:
         pass
+    return stage_a
 
 
 ORG_PLUGIN_KEY = "nsls-builder-toolkit@nsls-toolkit"
@@ -2307,8 +2318,9 @@ def _record_beacon():
 def main():
     _record_beacon()
     git_pull()
-    run_plugin_migration()
-    ensure_plugin_fresh()
+    stage_a = run_plugin_migration()
+    if not stage_a:  # stage A spent this session's freshness budget
+        ensure_plugin_fresh()
     sync_pointers()
     emit_guardrails_context()
     replayed = replay_failed_ping()
@@ -2351,8 +2363,9 @@ if __name__ == "__guardrails__":
     # docstring in migrate_to_plugin.py claimed stage A "runs" here; it did not.
     # Installing the plugin is also what starts the beacons that let stage B
     # retire this machine's shims, one hook at a time, once each is replaced.
+    stage_a = False
     try:
-        run_plugin_migration()
+        stage_a = run_plugin_migration()
     except Exception:
         pass
 
@@ -2366,7 +2379,8 @@ if __name__ == "__guardrails__":
     # machine is a designed no-op; where both hook paths fire, the daily
     # marker and the heal lock make the second run harmless.
     try:
-        ensure_plugin_fresh()
+        if not stage_a:  # stage A spent this session's freshness budget
+            ensure_plugin_fresh()
     except Exception:
         pass
 

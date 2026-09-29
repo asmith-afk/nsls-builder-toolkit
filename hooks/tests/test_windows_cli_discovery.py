@@ -187,9 +187,9 @@ with tempfile.TemporaryDirectory() as tmp:
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
         g["_stage_a"]()
-    check("running out of time is not reported as being stuck",
-          buf.getvalue() == "" and not (cfg / ".nsls-plugin-migration-status").exists(),
-          f"({buf.getvalue()[:80]!r})")
+    rec = json.loads((cfg / ".nsls-plugin-migration-status").read_text())
+    check("running out of time once is not said out loud, only counted",
+          buf.getvalue() == "" and rec.get("cuts") == 1, f"({buf.getvalue()[:80]!r} {rec})")
 
 with tempfile.TemporaryDirectory() as tmp:
     cfg = Path(tmp)
@@ -248,9 +248,18 @@ with tempfile.TemporaryDirectory() as tmp:
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
         g["_stage_a"]()                        # asks for 30s, budget clamps to ~25
-    check("a call cut short by the run's budget is not reported",
-          buf.getvalue() == "" and not (cfg / ".nsls-plugin-migration-status").exists(),
-          f"({buf.getvalue()[:80]!r})")
+    check("a call cut short by the run's budget is not said out loud",
+          buf.getvalue() == "", f"({buf.getvalue()[:80]!r})")
+    for _ in range(2):                          # the same cut, two more sessions
+        g["_DEADLINE"] = time.monotonic() + 25
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            g["_stage_a"]()
+    rec = json.loads((cfg / ".nsls-plugin-migration-status").read_text())
+    check("the same budget cut three sessions running is reported as stuck",
+          "each attempt runs out of time" in buf.getvalue() and rec.get("cuts") == 3,
+          f"({buf.getvalue()[:100]!r} {rec})")
+    (cfg / ".nsls-plugin-migration-status").unlink()
 
     g["_DEADLINE"] = time.monotonic() + 500    # the call's OWN limit is the one hit
     buf = io.StringIO()
@@ -258,6 +267,51 @@ with tempfile.TemporaryDirectory() as tmp:
         g["_stage_a"]()
     check("a call that outlives its own limit is reported as timed out",
           "a plugin command timed out" in buf.getvalue(), f"({buf.getvalue()[:100]!r})")
+    rec = json.loads((cfg / ".nsls-plugin-migration-status").read_text())
+    check("a different failure resets the budget-cut count", rec.get("cuts") == 0, f"({rec})")
+
+print("\nstage A gets the time a freshness check would have used, and nothing more")
+for installed in (False, True):
+    with tempfile.TemporaryDirectory() as tmp:
+        t_ = Path(tmp)
+        cfg = t_ / "cfg"; (cfg / "plugins").mkdir(parents=True)
+        if installed:
+            (cfg / "plugins" / "installed_plugins.json").write_text(
+                json.dumps({"plugins": {"nsls-builder-toolkit@nsls-toolkit": []}}))
+        fake_plugin = t_ / "plugin"; (fake_plugin / "hooks").mkdir(parents=True)
+        probe_out = t_ / "probe.json"
+        (fake_plugin / "hooks" / "migrate_to_plugin.py").write_text(
+            "import json, time\n"
+            f"open({str(probe_out)!r}, 'w').write(json.dumps("
+            "_NSLS_MIGRATION_DEADLINE - time.monotonic()))\n")
+        ss = load_session_start(cfg)
+        ss.PLUGIN_DIR = fake_plugin
+        ss.CONFIG_DIR = cfg
+        ran_a = ss.run_plugin_migration()
+        left = json.loads(probe_out.read_text()) if probe_out.exists() else 0
+        if installed:
+            check("with the plugin installed the migration keeps its 25s",
+                  ran_a is False and 23 < left <= 25, f"({ran_a}, {left:.1f})")
+        else:
+            check("before the plugin is installed, stage A gets 45s",
+                  ran_a is True and 43 < left <= 45, f"({ran_a}, {left:.1f})")
+
+        calls = []
+        for name in ("_record_beacon", "git_pull", "sync_pointers", "emit_guardrails_context",
+                     "session_ping", "bootstrap_collector"):
+            setattr(ss, name, lambda *a, **k: None)
+        ss.replay_failed_ping = lambda: False
+        ss.run_plugin_migration = lambda: not installed
+        ss.ensure_plugin_fresh = lambda: calls.append("fresh")
+        ss.main()
+        if installed:
+            check("an ordinary session still runs the freshness check", calls == ["fresh"], f"({calls})")
+        else:
+            check("a stage-A session skips it, so the hook's total is unchanged", calls == [], f"({calls})")
+
+src = (HOOKS / "session-start.py").read_text(encoding="utf-8")
+check("the Windows entry point skips it after stage A too",
+      src.count("if not stage_a:  # stage A spent this session's freshness budget") == 2)
 
 print("\nonly toolkit-authored words reach Claude's context")
 with tempfile.TemporaryDirectory() as tmp:
