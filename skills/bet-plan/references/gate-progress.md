@@ -34,23 +34,24 @@ quick tell is whether the six research→review checks are green. If any read
 red, route back to `bet-research` with one sentence naming which check
 failed — don't attempt to close research-stage gaps from inside `bet-plan`.
 
-The seven checks, one line each (numbers match `bet-research`'s
-`references/gate-progress.md` exactly):
+The six checks, one line each (numbers match `bet-research`'s
+`references/gate-progress.md` exactly). `econ_complete` is NOT one of them —
+it sits on experiment→planned below, so an empty econ page never sends a
+research-stage bet back:
 
 1. `market_complete` — all 5 `market.*` sections non-empty.
-2. `econ_complete` — all 5 `econ.*` sections non-empty.
-3. `top_assumptions_resolved` — the up-to-3 riskiest (lowest `priority`
+2. `top_assumptions_resolved` — the up-to-3 riskiest (lowest `priority`
    value) assumptions present are `validated` or `invalidated`; denominator
    is `min(3, assumption count)` — a bet with only 1 or 2 assumptions needs
    exactly those resolved, not a padded /3.
-4. `conversations` — ≥5 interview/roadshow evidence rows, ≥4
+3. `conversations` — ≥5 interview/roadshow evidence rows, ≥4
    problem-confirmed, ≥3 distinct institutions.
-5. `demand_signals` — ≥2 linked rows at `exploration`/`commitment`/`payment`.
-6. `sizing_both_ways` — `market.obtainable` has both `data.top_down` and
+4. `demand_signals` — ≥2 linked rows at `exploration`/`commitment`/`payment`.
+5. `sizing_both_ways` — `market.obtainable` has both `data.top_down` and
    `data.bottom_up` as numbers, both DOLLAR figures (obtainable revenue) —
    see `bet-research`'s `references/self-serve-research.md` for how each is
    composed.
-7. `rubric_scored` — all 5 criteria scored, none still `low` confidence.
+6. `rubric_scored` — all 5 criteria scored, none still `low` confidence.
 
 If the checklist reads green but the bet was never advanced (an owner sat on
 a ready bet), say so and offer the advance rather than silently starting
@@ -78,7 +79,12 @@ a ready bet), say so and offer the advance rather than silently starting
 2. **`experiment_tracked`** — among the FULLY SIGNED-OFF experiments, ≥ 1 has
    a verdict other than `running`, or ≥ 1 recorded metric. A reading from an
    unapproved experiment does not count. Also cleared by
-   `attest.no_cheap_experiment`, on the same terms.
+   `attest.no_cheap_experiment`, on the same terms — but the attestation
+   applies to ONE call only. A bet that took the escape into `experiment`
+   has no approved experiment to track, so the experiment→planned advance
+   must carry `attest: { no_cheap_experiment: true }` and a rationale AGAIN,
+   fired by a strategy approver again. Without it this check reads red
+   forever.
 
 ## The planned→live checklist (transcribed from `gates.ts` — keep exact)
 
@@ -90,19 +96,31 @@ a ready bet), say so and offer the advance rather than silently starting
    `threshold_continue`, `threshold_accelerate`, `threshold_stop`.
 
 `experiment_defined` and `sell_first` used to be checks 3 and 4 here. They
-moved UP to review→experiment — by the time a bet reaches live those
-questions were answered two gates ago, and asking again was theatre.
+moved UP to review→experiment — `sell_first` as its own check, and
+`experiment_defined` folded into `cheapest_experiment_approved` (there is no
+separate `experiment_defined` key any more; "no experiment defined" is that
+check's failure detail). By the time a bet reaches live those questions were
+answered two gates ago, and asking again was theatre.
 
 ## Rendering format
 
-Show this after EVERY `exec.*`/`proof.*` write and at the end of every
-session:
+Render the checklist for the gate the bet is currently driving toward. Show
+it after EVERY `add_experiment`, `approve_experiment` or `update_experiment`
+write (review and experiment stages), after EVERY `econ.*`/`exec.*`/`proof.*`
+write, and at the end of every session:
 
 ```
 review → experiment gate
   [✗] cheapest experiment signed off
         Fall roadshow pre-sale awaiting money
   [✓] sell-first: 0 build experiments, nothing to check
+Next cheapest unlock: …
+```
+
+```
+experiment → planned gate
+  [✗] econ page 3/5 (missing: model_2026_2028, cases)
+  [✗] experiment tracked: Fall roadshow pre-sale still running, 0 metrics
 Next cheapest unlock: …
 ```
 

@@ -201,6 +201,13 @@ only after genuinely trying to find a cheap test, and never present it as the
 easy path — it is the one approval every experiment owes, and it lands in the
 bet's permanent stage history.
 
+**The escape is fired twice.** An attestation covers one `advance_stage` call,
+and a bet that took the escape has no approved experiment to track — so the
+later experiment→planned advance needs the same `attest: {
+no_cheap_experiment: true }` and a rationale again, from a strategy approver
+again. Tell the builder this when the first one fires, so the bet doesn't sit
+at `experiment` with `experiment_tracked` red and nobody knowing why.
+
 ### Experiment — track it to a reading
 
 The bet cannot be planned until the **signed-off** experiment carries a

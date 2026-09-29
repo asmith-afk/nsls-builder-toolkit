@@ -61,16 +61,16 @@ by a checklist instead of a rubric score.
 - Checking research→review gate progress, or deciding whether a bet has
   earned the advance.
 - **NOT** for a bet still at Idea stage with no canvas yet — that's
-  `bet-idea`. **NOT** for a bet already `planned`+ — that's `bet-plan` (or
+  `bet-idea`. **NOT** for a bet already `review`+ — that's `bet-plan` (or
   `bet-studio` if unsure which). **NOT** for portfolio-wide review or
-  experiment tracking — those are `bet-review`/`bet-run`.
+  tracking a live bet's experiments — those are `bet-review`/`bet-run`.
 
 ## Quick Start
 
 Research-stage bet → **R1** Load the agenda → **R2** Self-serve sweep →
 **R3** Buyer conversations → **R4** Roadshow sprint (optional) → **R5**
 Resolve and re-rank → **R6** Rubric re-score → **R7** The gate drive → a
-planned-ready bet (or an honest "not yet, here's the cheapest unlock").
+review-ready bet (or an honest "not yet, here's the cheapest unlock").
 
 ## Operating rules
 
@@ -115,7 +115,8 @@ one over with a `bet_id`. Call `get_bet` first.
 - **If `idea`** → route to `bet-idea`. It resumes the bet; if the canvas is
   done and the owner judges it worth a slot, the advance happens THERE, with
   the attestation.
-- **If `planned`+** → route to `bet-plan` (or `bet-studio` if unsure which).
+- **If `review`+** (`review`, `experiment`, `planned` or later) → route to
+  `bet-plan` (or `bet-studio` if unsure which).
 - **If `parked`/`killed`** → say so, offer a confirmed `set_status` revive,
   or stop.
 - **If `handed_off`** → say who has it and the work status (`get_bet`'s
