@@ -1,14 +1,17 @@
 ---
 name: bet-plan
 description: >-
-  Use when a Strategy Studio bet has cleared research and needs its board-memo
-  back half: hardened economics (2026–2028 model, downside/base/upside),
-  execution & risk, and a sell-first proof plan with thresholds and an
-  investment ask — ending in an adversarial review before the planned→live
-  gate. Triggers: "plan the bet", "bet plan", "economics for this bet", "proof
-  plan", "investment ask", "design the experiment", "downside base upside",
-  "get this bet to live", "board memo pages 4 and 5", "adversarial review",
-  "red-team this bet", "stress test the memo".
+  Use when a Strategy Studio bet has cleared research: pick the cheapest
+  experiment that could disprove it and get it signed off, track it to a
+  reading, then build the board-memo back half — hardened economics (2026–2028
+  model, downside/base/upside), execution & risk, and a sell-first proof plan
+  with thresholds and an investment ask — ending in an adversarial review
+  before the planned→live gate. Triggers: "plan the bet", "bet plan",
+  "cheapest experiment", "approve the experiment", "sign off the experiment",
+  "economics for this bet", "proof plan", "investment ask", "design the
+  experiment", "downside base upside", "get this bet to live", "board memo
+  pages 4 and 5", "adversarial review", "red-team this bet", "stress test the
+  memo".
 ---
 
 # bet-plan
@@ -31,8 +34,9 @@ Every write in every tier passes `via: "bet-plan"`.
 ## Purpose
 
 A bet arrives here with a canvas, a thesis, and a first-cut economics page
-drafted honestly enough to clear the research→planned gate — but nobody has
-yet built the model a board would trust, named the top five risks out loud,
+drafted honestly enough to clear the research→review gate — but nobody has
+yet picked the cheapest way to find out it's wrong, and nobody has
+built the model a board would trust, named the top five risks out loud,
 or tried to sell the thing before building more of it. `bet-plan` is pages
 4 and 5 of the memo: it hardens `bet-research`'s estimates into a
 named-assumption model with three honestly-differentiated cases, forces the
@@ -44,6 +48,11 @@ seen it before and owes the author nothing. It ends the way `bet-idea` and
 
 ## When to use
 
+- A bet at `review` stage needs the cheapest experiment that could disprove
+  it designed, declared and signed off (see "The review and experiment
+  stages" below).
+- A bet at `experiment` stage has a signed-off experiment that needs tracking
+  to a reading before it can be planned.
 - A bet already at `planned` stage (handed over by `bet-research` or
   `bet-studio`) needs its economics hardened, execution/risk pages written,
   or a proof plan designed.
@@ -107,9 +116,11 @@ an honest "not board-ready yet, here's what's failing").
 **Trigger:** the user names an existing bet, or `bet-research`/`bet-studio`
 hands one over with a `bet_id`. Call `get_bet` first.
 
-- **Normal path** — stage `planned`, status `active`.
-- **Stage `research`** — check the research→planned summary in
-  `references/gate-progress.md`. If any of the seven checks read red, route
+- **Normal path** — stage `review`, `experiment` or `planned`, status
+  `active`. At `review` and `experiment`, start from "The review and
+  experiment stages" below rather than the economics work.
+- **Stage `research`** — check the research→review summary in
+  `references/gate-progress.md`. If any of the six checks read red, route
   back to `bet-research` with one sentence naming which check failed. If the
   checklist reads green but the bet was never advanced (an owner sat on a
   ready bet), say so, offer the advance for the owner to confirm (`via:
@@ -123,6 +134,82 @@ hands one over with a `bet_id`. Call `get_bet` first.
   entry after every completed round, even when no fixes were accepted; the
   section's prose stays exactly the top five risks). The planned→live
   progress bar IS the resume agenda — don't re-derive a different one.
+
+## The review and experiment stages
+
+Two stages sit between research and planning, and a bet must clear both
+before any of the economics work below applies.
+
+### Review — pick the cheapest test, and get it signed off
+
+The question is **not** "what experiment would prove this works" but "what is
+the smallest thing that could show us we're wrong." Design that, then declare
+what sign-off it needs:
+
+```
+add_experiment(bet_id, name, kind, hypothesis, rationale, investment,
+               needs_money:      <spends budget?>,
+               needs_headcount:  <needs people, or their time reallocated?>,
+               needs_brand:      <puts a new message in front of people?>,
+               needs_operations: <materially changes how the business runs?>)
+```
+
+Every experiment needs **strategy** sign-off, always, no exceptions. The four
+flags each add one more. Granted with:
+
+```
+approve_experiment(experiment_id,
+                   kind: "strategy" | "money" | "headcount" | "brand"
+                       | "operations",
+                   note)
+```
+
+**Declare honestly — all four default to false**, and an experiment that
+quietly skips an approver is the exact failure these fields exist to prevent.
+Three specific traps:
+
+- **Budget and headcount are different questions.** "This costs $40k" and
+  "this needs two people for three weeks" have different answers even when
+  the same person holds both lists. Set both when both are true; do not let
+  one ride through on the other's yes.
+- **Borrowed time is headcount.** An experiment run by people who already
+  have full-time jobs needs the flag — whose work stops is exactly the
+  question being asked.
+- **Brand surface is broader than it looks.** If you are unsure whether
+  something counts, it does — ask for the sign-off.
+
+**`operations` has a deliberately CRITICAL bar.** It is for a test that
+changes how the business runs day to day, or that we could not cleanly
+unwind — not one that changes how a single team works for the duration of
+the experiment. Set it too eagerly and the check stops meaning anything.
+When you genuinely cannot tell, say so out loud to the builder and let them
+decide rather than defaulting either way.
+
+**You cannot grant these and neither can the builder you're working with**,
+unless they happen to be on that kind's allowlist — each kind is restricted
+to its own `STRATEGY_APPROVERS_*` env list and the call throws for anyone
+else. That throw is the feature. Do not retry it, do not route around it, and
+never suggest `force`. Say plainly who still owes a sign-off and let the
+builder go ask them. The gate names them for you.
+
+**When a bet genuinely has no cheap version** — the option only exists at
+full size — that is a real case, not a failure to think hard enough. It takes
+`advance_stage(bet_id, to_stage: "experiment", attest: { no_cheap_experiment:
+true }, rationale: "<why there is no small version>")`. That attestation is
+restricted to the strategy approvers and REQUIRES the rationale. Offer it
+only after genuinely trying to find a cheap test, and never present it as the
+easy path — it is the one approval every experiment owes, and it lands in the
+bet's permanent stage history.
+
+### Experiment — track it to a reading
+
+The bet cannot be planned until the **signed-off** experiment carries a
+reading: a verdict off its `running` default, or at least one metric recorded
+against it. Both land through `update_experiment`. A reading from some other
+experiment nobody approved does not count — that substitution is precisely
+what the review gate exists to prevent.
+
+Only then does the economics work below begin.
 
 ## Step P0 — Size the review to the bet
 
@@ -362,7 +449,7 @@ bet-research ──▶ bet-plan (pages 4-5, adversarial review,
 ```
 
 **Hand-off contracts:** receives bets from `bet-research` (post
-research→planned, `market.*`/`econ.*` first-drafted) or `bet-studio`;
+research→review, `market.*`/`econ.*` first-drafted) or `bet-studio`;
 hands `live` bets to `bet-run` once `advance_stage` returns `moved: true` —
 Phase 5, not built yet, say so plainly rather than improvising a substitute.
 Called by `bet-studio`'s "Plan economics / proof plan" hand-off.
@@ -418,9 +505,10 @@ and point at `/connect` or the README's Strategy Studio setup section
   `add_experiment` recipe, the three thresholds, the investment ask.
 - `references/adversarial-review.md` — the full fresh-subagent review
   protocol: instructions, surfacing, fix rounds, score-floor guidance.
-- `references/gate-progress.md` — the research→planned entry-check summary,
-  the planned→live checklist (transcribed from the engine's `gates.ts`), the
-  never-probe rule, the rendering format.
+- `references/gate-progress.md` — the research→review entry-check summary,
+  then the review→experiment, experiment→planned and planned→live checklists
+  (transcribed from the engine's `gates.ts`), the never-probe rule, the
+  rendering format.
 
 ## Rationalization table
 

@@ -4,7 +4,7 @@ description: >-
   Use when a Strategy Studio bet is at Research stage and its assumption
   chain needs to be worked riskiest-first into evidence — self-serve market
   research, warm-channel buyer interviews, market sizing both directions, and
-  the drive toward the research→planned gate. Triggers: "research a bet",
+  the drive toward the research→review gate. Triggers: "research a bet",
   "bet research", "work the assumptions", "log an interview", "log evidence
   against the bet", "size the market for", "who should we talk to about",
   "target shortlist", "roadshow sprint", "is anyone actually paying for
@@ -58,7 +58,7 @@ by a checklist instead of a rubric score.
   by `bet-studio`) and needs its assumptions worked into evidence.
 - Logging a buyer conversation, a roadshow meeting, a competitor finding, or
   a market-sizing pull against an existing bet.
-- Checking research→planned gate progress, or deciding whether a bet has
+- Checking research→review gate progress, or deciding whether a bet has
   earned the advance.
 - **NOT** for a bet still at Idea stage with no canvas yet — that's
   `bet-idea`. **NOT** for a bet already `planned`+ — that's `bet-plan` (or
@@ -80,7 +80,7 @@ planned-ready bet (or an honest "not yet, here's the cheapest unlock").
 - **Show the gate progress bar** (per `references/gate-progress.md`) after
   EVERY evidence write and at the end of every session.
 - **Never call `advance_stage` as a probe** — the verbatim rule from
-  `references/gate-progress.md`: research→planned has no attestation, so a
+  `references/gate-progress.md`: research→review has no attestation, so a
   passing gate MOVES the bet the instant you call it. Compute progress from
   `get_bet` instead.
 - **Evidence honesty.** Conversations are `data`; AI-drafted section content
@@ -238,14 +238,14 @@ upgrade. Show the new rank position and confidence alongside the score.
 ## Step R7 — The gate drive
 
 End every session with the full checklist (`references/gate-progress.md`)
-and the single next-cheapest unlock. When all 7 checks read green, draft the
+and the single next-cheapest unlock. When all 6 checks read green, draft the
 exact `rationale` text the advance call would carry and put it in front of
-the owner alongside the ask: **advance to planned with this rationale:
+the owner alongside the ask: **advance to review with this rationale:
 "<drafted rationale>"?** This is a Tier 3 write — the confirm has to cover
 the whole call, not just the yes/no on the stage change; `rationale` is
 audit text that lands in the shared system same as `to_stage` does.
 
-- **Yes** → `advance_stage(bet_id, to_stage: "planned", rationale, via:
+- **Yes** → `advance_stage(bet_id, to_stage: "review", rationale, via:
   "bet-research")` using the confirmed rationale text verbatim. Show the
   returned `{ moved, gate: { checks } }` either way.
 - On `moved: true` → hand off to `bet-plan`.
@@ -256,8 +256,10 @@ audit text that lands in the shared system same as `to_stage` does.
 
 ```
 bet-idea ──▶ bet-research (fills market.* + econ.* first drafts,
-                            drives research→planned)
-          ──▶ bet-plan (pages 4-5, drives planned→live)
+                            drives research→review)
+          ──▶ bet-plan (picks up at review: designs and gets sign-off on the
+                        cheapest experiment, tracks it, then pages 3-5 —
+                        drives review→experiment→planned→live)
           ──▶ bet-review / bet-run (Phase 5)
 ```
 
@@ -314,7 +316,7 @@ point at `/connect` or the README's Strategy Studio setup section
   exact tool recipes, where each lands, the `econ.*` first-draft rule, and
   the company-scoped competition recipe (read-before-research, the five memo
   sections, coverage claims, per-side stances).
-- `references/gate-progress.md` — the research→planned checklist
+- `references/gate-progress.md` — the research→review checklist
   (transcribed from the engine's `gates.ts`), the never-probe rule, the
   rendering format.
 - `references/roadshow-sprint.md` — when and how to propose a roadshow

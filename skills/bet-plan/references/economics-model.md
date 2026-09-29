@@ -1,8 +1,9 @@
 # Economics model — hardening the first-cut into the board memo
 
 Used by `bet-plan` Step P1. `bet-research` already drafted all five `econ.*`
-fields to honest-estimate completeness (the research→planned gate requires
-non-empty `content_md` on all five). This reference is how `bet-plan` turns
+fields to honest-estimate completeness (the experiment→planned gate requires
+non-empty `content_md` on all five — it moved off research→planned when the
+review and experiment stages were added, but the work still lands early). This reference is how `bet-plan` turns
 that first cut into the model a board would actually read — sharper numbers,
 named assumptions, three honestly-differentiated cases.
 

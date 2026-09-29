@@ -1,4 +1,4 @@
-# Gate progress — the research→planned checklist, rendered client-side
+# Gate progress — the research→review checklist, rendered client-side
 
 Used by `bet-research` throughout — shown after every evidence write and at
 the end of every session (Step R7). This checklist mirrors the engine's
@@ -8,21 +8,21 @@ exact if the engine ever changes.
 ## The rule (verbatim)
 
 ```
-NEVER call advance_stage to "check progress". research→planned has no
+NEVER call advance_stage to "check progress". research→review has no
 attestation — if the gate happens to pass, the probe MOVES the bet. Compute
 progress from get_bet instead, using the checklist below. advance_stage is
 called exactly once: when the owner says advance.
 ```
 
 Unlike `idea → research` (which requires `attest.worth_researching`),
-`research → planned` has no attestation gate. That means there is no safe
-way to "peek" at the checklist by calling `advance_stage` — if all seven
+`research → review` has no attestation gate. That means there is no safe
+way to "peek" at the checklist by calling `advance_stage` — if all six
 checks already pass, the call moves the bet on the spot. Compute the
 checklist yourself from `get_bet` (sections, assumptions, evidence, scores)
 every time, and reserve `advance_stage` for the one moment the owner actually
 says go.
 
-## Effective weight (applies to checks 4 and 5)
+## Effective weight (applies to checks 3 and 4)
 
 Every evidence row carries `provenance` — `'human'` (the default, including
 every legacy row) or `'auto'` (pipeline-captured) — and may carry an
@@ -39,15 +39,14 @@ below always means effective weight 1.0.
 
 1. **`market_complete`** — all 5 `market.*` sections have non-empty
    `content_md`.
-2. **`econ_complete`** — all 5 `econ.*` sections have non-empty `content_md`.
-3. **`top_assumptions_resolved`** — the engine takes `ranked.slice(0,3)`: the
+2. **`top_assumptions_resolved`** — the engine takes `ranked.slice(0,3)`: the
    up-to-3 riskiest (lowest `priority` value) assumptions present are all
    `validated` or `invalidated`. The denominator is `min(3, assumption
    count)`, not a fixed 3 — a bet with only 1 or 2 assumptions needs exactly
    those resolved, no more. Fails only when zero assumptions exist ("nothing
    has been de-risked"). The client-side bar must never read red when this
    check would already pass.
-4. **`conversations`** — evidence rows of kind `interview` or `roadshow`,
+3. **`conversations`** — evidence rows of kind `interview` or `roadshow`,
    counted per distinct MEETING, not per row: rows sharing a
    `data.fathom_recording_id` collapse into ONE conversation whose weight is
    the max effective weight among its rows; rows without the key (every
@@ -62,19 +61,27 @@ below always means effective weight 1.0.
    - distinct `entity_id` values ≥ 3 (five meetings with one friendly
      school still can't satisfy it);
    - ≥ 1 FULL-WEIGHT conversation — the human floor. A bet can never reach
-     `planned` on unattested auto evidence alone, however much of it exists.
-5. **`demand_signals`** — per ROW, no meeting grouping: the weighted count
+     `review` on unattested auto evidence alone, however much of it exists.
+4. **`demand_signals`** — per ROW, no meeting grouping: the weighted count
    of rows with `signal_strength` ∈ {exploration, commitment, payment} AND
    non-empty `link` is ≥ 2, AND ≥ 1 such row is full weight (same human
    floor). Interest never counts; unlinked grades never count. (A write-time
    rule keeps this check honest: pipeline rows without a recording link are
    capped at `interest`, so they can never enter it.)
-6. **`sizing_both_ways`** — `market.obtainable` section `data.top_down` AND
+5. **`sizing_both_ways`** — `market.obtainable` section `data.top_down` AND
    `data.bottom_up` are both numbers, and both are DOLLAR figures (obtainable
    revenue) — see `references/self-serve-research.md` for how each is
    composed. Raw counts never belong in either field.
-7. **`rubric_scored`** — latest score per criterion exists for all 5 AND none
+6. **`rubric_scored`** — latest score per criterion exists for all 5 AND none
    is still `low` confidence.
+
+## What is NOT on this gate any more
+
+The **economics page** used to sit here, back when this gate was
+`research → planned`. It moved to `experiment → planned` when the review and
+experiment stages were added: economics is a planning input, and asking for it
+before anyone has run the cheapest test was asking for a model built on
+nothing. `bet-plan` owns it now. Do not render an econ row on this checklist.
 
 ## Attestation — how an auto row reaches full weight
 
@@ -93,8 +100,8 @@ distinction, don't flatten it.
 Show this after EVERY evidence write and at the end of every session:
 
 ```
-research → planned gate
-  [✓] market page 5/5        [✗] econ page 3/5 (missing: unit_economics, cases)
+research → review gate
+  [✓] market page 5/5
   [✗] top assumptions 1/3 resolved (denominator = min(3, assumption count))
   [✓] conversations 5.5/5 · confirmed 5.5/4 · institutions 10/3 · human floor ✓ (attested-auto)
   [✗] demand signals 1.5/2 · human floor 0/1

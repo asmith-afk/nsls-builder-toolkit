@@ -243,8 +243,10 @@ re-estimating from zero.
 `bet-research` drafts **all five** `econ.*` fields to honest-estimate
 completeness — `revenue_drivers`, `cost_structure`, `unit_economics`,
 `model_2026_2028`, `cases` (the last two as clearly-labeled first-cut
-estimates) — because the research→planned gate requires the econ page
-non-empty. `bet-plan` hardens these into the full named-assumption model
+estimates) — because the experiment→planned gate requires the econ page
+non-empty. That check now sits two stages later than it used to, which is NOT
+a licence to defer it: drafting it here is what lets `bet-plan` harden a first
+cut instead of starting from nothing. `bet-plan` hardens these into the full named-assumption model
 later; this skill's job is an honest first draft, not a placeholder.
 
 **Never leave an econ field empty "for bet-plan."** The gate checks for

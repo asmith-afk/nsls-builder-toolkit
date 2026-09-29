@@ -88,7 +88,7 @@ Don't average the seven ratings into a composite and call it done. Instead:
 ## This is a prioritizer, not a gate
 
 The stress test never gates a bet's advancement — gates stay evidence-based,
-inside the engine (the `research → planned` gate requiring re-scored rubric
+inside the engine (the `research → review` gate requiring re-scored rubric
 criteria at medium+ confidence, and the demand-signal/commitment-ladder
 thresholds elsewhere). A bet can carry reds into the gate offer in step 7;
 what matters is that the human sees them clearly and the fix-first list

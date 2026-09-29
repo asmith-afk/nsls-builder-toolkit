@@ -96,7 +96,8 @@ this skill doesn't need.
 
 ## Rendering rules
 
-**Group by stage cohort, in lifecycle order:** idea → research → planned →
+**Group by stage cohort, in lifecycle order:** idea → research → review →
+experiment → planned →
 live → running → scaling. Within each cohort, preserve the `rank_score`
 ordering `get_stack_rank` already returned — don't re-rank across cohorts.
 

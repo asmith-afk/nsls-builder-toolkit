@@ -49,8 +49,8 @@ lifecycle question, reads the live portfolio, and hands off — the real work
 | Builder wants to… | Hand off to | Moves the bet |
 |---|---|---|
 | **Add an idea** | `bet-idea` (carry over any concept already stated) | → Idea |
-| **Research a bet** | `bet-research` (works the assumption chain riskiest-first: self-serve market research, warm-channel interviews via Customer Forces, sizing both directions, roadshow sprints — drives the research→planned gate; hand off with `get_bet` context) | Research → Planned |
-| **Plan economics / proof plan** | `bet-plan` (2026–2028 model with downside/base/upside, execution & risk, sell-first channel-aware experiment with three thresholds, adversarial review loop — drives the planned→live gate; hand off with `get_bet` context) | Planned → Live |
+| **Research a bet** | `bet-research` (works the assumption chain riskiest-first: self-serve market research, warm-channel interviews via Customer Forces, sizing both directions, roadshow sprints — drives the research→review gate; hand off with `get_bet` context) | Research → Review |
+| **Pick and approve the cheapest test / plan economics / proof plan** | `bet-plan` (designs the cheapest experiment that could disprove the bet and gets it signed off, tracks it to a reading, then the 2026–2028 model with downside/base/upside, execution & risk, adversarial review loop — drives review→experiment, experiment→planned and planned→live; hand off with `get_bet` context) | Review → Experiment → Planned → Live |
 | **Portfolio review** | *Phase 5 `bet-review` — not built.* Interim: render the stack rank + portfolio overview yourself — `get_stack_rank` plus `list_bets` (see `references/portfolio-views.md`) — then drill into `get_bet` only for the 1–3 bets the human picks, to check that bet's status update and flag invalidated assumptions. Per-bet health across the whole board arrives with the Phase 3 UI / a future bulk endpoint — the engine has no bulk status tool today, so don't loop `get_bet` over the full portfolio. | n/a (cross-cutting) |
 | **Run experiments** | *Phase 5 `bet-run` — not built.* Interim: say plainly it's coming. | Live → Running → Scaling |
 | **"Who are we up against?" / "where's the blue ocean?"** | Cross-bet, not a single bet — call `get_competition_grid` and render `/strategy/competition`: jobs down, companies across (status quo pinned first), with `blue_ocean` computed per job. Read it on one side at a time (`side: "b2b"` \| `"b2c"`) when the market is two-sided — a company can own the institution's budget and barely touch the student experience, and the merged view cannot tell you which. Cell states: `covered` (validated) \| `provisional` (hypothesis only) \| `open-water` (assessed absent) \| `unassessed`. **`unassessed` is not opportunity** — it means nobody looked, and the honest answer is "that's a research gap," not "that's open water." Drill into a company with `get_competitor`; if its `freshness` is `stale` or `never`, say so before anyone leans on it. Competitor pages GROW OUT OF `bet-research` — route there rather than authoring here, and route on three triggers, not one: a company that is **missing**, a page that is **stale/never reviewed**, or — the one the grid makes visible and nobody thinks to look for — a company **covering a job one of your bets delivers with no stance on record**. Read that last one off the row: the bet-overlay chips say which bets deliver the job, the cells say who covers it, and `get_bet`'s `competitors` array says whether a stance exists. A fresh page with no stance is a real gap that looks like nothing. | n/a (cross-cutting) |
@@ -102,9 +102,9 @@ lifecycle question, reads the live portfolio, and hands off — the real work
    `advance_stage(bet_id, to_stage: "research", attest: { worth_researching:
    true })` call for the OWNER to fire (bet-studio stays read-only — it
    drafts the call, the owner fires it), then show the returned gate
-   checklist. A bet at Research goes to `bet-research`; at Planned, to
-   `bet-plan` — each loads `get_bet` context on hand-off. A bet already
-   `planned`+ has nothing left for `bet-idea` to do. A request that duplicates an existing bet (same name/
+   checklist. A bet at Research goes to `bet-research`; at Review,
+   Experiment or Planned, to `bet-plan` — each loads `get_bet` context on
+   hand-off. A bet already `review`+ has nothing left for `bet-idea` to do. A request that duplicates an existing bet (same name/
    one-liner in the listing) surfaces the existing one before anything new
    gets created. When intent and stage don't line up, say so and route to what
    actually fits.
